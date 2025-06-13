@@ -1,0 +1,76 @@
+import os
+import torch
+
+DEVICE = torch.device(
+    'cuda' if torch.cuda.is_available() else 'cpu')
+
+ROOT_DIR = f"/home/mohit/Documents/project/interpolation/ihic"
+DATA_DIR = f"/home/mohit/Documents/project/interpolation/data/frame/norm"
+
+# ROOT_DIR = f"/home/hchowdhu/ap_film"
+# DATA_DIR = f"/mmfs1/home/hchowdhu/data"
+
+# ROOT_DIR = f"/home/mohit/Documents/project/interpolation/film"
+# DATA_DIR = f"/home/mohit/Documents/project/interpolation/frame-interpolation/data"
+
+RECORD_FILE = f"{DATA_DIR}/64/train.txt"
+IMAGE_DIR = f"{DATA_DIR}/64"
+INTERPOLATOR_IMAGES_MAP = {
+    'frame_0': 'img0.npy',
+    'frame_1': 'img1.npy',
+    'frame_2': 'img2.npy',
+}
+
+TRAIN_VAL_RATIO = [0.05, 0.005]
+BATCH_SIZE = 12
+
+INPUT_IMAGE_WIDTH = 240
+INPUT_IMAGE_HEIGHT = 320
+RESIZE_HEIGHT = 240
+RESIZE_WIDTH = 320
+CROP_SIZE = 256
+
+NUM_EPOCHS = 1000
+SAVE_EVERY = 10
+LEARNING_RATE = 0.0001
+DECAY_STEPS = 50
+DECAY_RATE = 0.95
+LEARNING_RATE_STAIRCASE = True
+
+
+
+
+PYRAMID_LEVEL = 4 # Input pyramid level
+EXT_FEATURE_LEVEL = 3 # Features stack goes to optical flow
+UNIQUE_LEVELS = 2
+FUSION_PYRAMID_LEVEL = 3
+INIT_IN_CHANNELS = 1
+INIT_OUT_CHANNELS = 4
+# NUM_OF_CONVS = 3
+
+FLOW_NUM_OF_CONVS = [2, 2, 2, 2]
+FLOW_OUT_CHANNELS = [8, 16, 32, 64] 
+
+
+VGG_MODEL_FILE = f"{DATA_DIR}/models/imagenet-vgg-verydeep-19.mat"
+LOSS_WEIGHT_PARAMETERS = [
+    {'name': 'l1', 'boundaries': [0], 'values': [1.0, 1.0]},
+    {'name': 'vgg', 'boundaries': [500], 'values': [1.0, 0.25]},
+    {'name': 'style', 'boundaries': [500], 'values': [0.0, 40.0]}]
+
+NUM_VISUALIZATION_SAMPLES = 2
+IMG_VAL_PLOT_PATH = os.path.sep.join(
+    [ROOT_DIR, "output"])
+
+MODEL_NAME = 'ap_film'
+MODEL_FILE = os.path.join(ROOT_DIR, "models", f"{MODEL_NAME}.pth")
+TRAIN_VAL_PLOT_FILE = os.path.sep.join(
+    [ROOT_DIR, "output", f"{MODEL_NAME}_vimeo_train_val_plot.png"])
+TEST_PLOT_FILE = os.path.sep.join(
+    [ROOT_DIR, "output", f"{MODEL_NAME}_vimeo_test_plot.png"])
+
+EVAL_METRICS_FILE = os.path.join(ROOT_DIR, "output", "val_metrics.csv")
+PSNR_EVAL_PLOT_FILE = os.path.join(ROOT_DIR, "output", "psnr_plot.png")
+SSIM_EVAL_PLOT_FILE = os.path.join(ROOT_DIR, "output", "ssim_plot.png")
+LR_FILE = os.path.join(ROOT_DIR, "output", "lr_plot.png")
+MODEL_STATE_DIR = f"{ROOT_DIR}/models"

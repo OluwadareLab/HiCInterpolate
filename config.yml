@@ -1,0 +1,67 @@
+# config.yaml
+
+device: "cuda"
+train:
+  paths:
+    root_dir: "/home/mohit/Documents/project/interpolation/film"
+    data_dir: "/home/mohit/Documents/project/interpolation/data/frame/norm"
+    # root_dir: "/home/hchowdhu/ap_film"
+    # data_dir: "/mmfs1/home/hchowdhu/data"
+    # root_dir: "/home/mohit/Documents/project/interpolation/film"
+    # data_dir: "/home/mohit/Documents/project/interpolation/frame-interpolation/data"
+    record_file: ${paths.data_dir}/64/train.txt
+    image_dir: ${paths.data_dir}/64
+    vgg_model_file: ${paths.data_dir}/models/imagenet-vgg-verydeep-19.mat
+    model_name: ihic
+    model_file: ${paths.root_dir}/models/${paths.model_name}.pth
+    img_val_plot_path: ${paths.root_dir}/output
+    train_val_plot_file: ${paths.root_dir}/output/${paths.model_name}_vimeo_train_val_plot.png
+    test_plot_file: ${paths.root_dir}/output/${paths.model_name}_vimeo_test_plot.png
+    eval_metrics_file: ${paths.root_dir}/output/val_metrics.csv
+    psnr_eval_plot_file: ${paths.root_dir}/output/psnr_plot.png
+    ssim_eval_plot_file: ${paths.root_dir}/output/ssim_plot.png
+    lr_file: ${paths.root_dir}/output/lr_plot.png
+    model_state_dir: ${paths.root_dir}/models
+
+  interpolator_images_map:
+    frame_0: im0.npy
+    frame_1: im1.npy
+    frame_2: im2.npy
+
+  training:
+    train_val_ratio: [0.05, 0.005]
+    num_epochs: 1000
+    batch_size: 12
+    save_every: 10
+    learning_rate: 0.0001
+    decay_steps: 50
+    decay_rate: 0.95
+    learning_rate_staircase: true
+    input_image_width: 240
+    input_image_height: 320
+    resize_height: 240
+    resize_width: 320
+    crop_size: 256
+    num_visualization_samples: 2
+
+  model:
+    pyramid_level: 5
+    init_in_channels: 1
+    init_out_channels: 8
+    num_of_convs: 3
+    unique_levels: 3
+    shared_level: 4
+    flow_num_of_convs: [3, 3, 3, 3]
+    flow_out_channels: [32, 64, 128, 256]
+    fusion_pyramid_level: 5
+
+  loss_weights:
+    - name: l1
+      boundaries: [0]
+      values: [1.0, 1.0]
+    - name: vgg
+      boundaries: [500]
+      values: [1.0, 0.25]
+    - name: style
+      boundaries: [500]
+      values: [0.0, 40.0]
