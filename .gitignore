@@ -1,0 +1,42 @@
+# Byte-compiled / cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+
+# VSCode settings
+.vscode/
+
+# Model files and outputs
+models/
+output/
+runs/
+data/
+with_aug/
+without_aug/
+l1/
+style_loss/
+vgg_loss/
+
+# Backup or temp files
+*.bak
+*.tmp
+*.swp
+*~
+
+# If output appears under any subdirectory
+**/output/
+
+# PyTorch Lightning checkpoints/logs (if used)
+*.ckpt
+*.log
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# System files
+.DS_Store
+Thumbs.db
