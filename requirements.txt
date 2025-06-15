@@ -1,0 +1,11 @@
+pytorch=2.1.1
+torchvision=0.16.1
+torchaudio=2.1.1
+pytorch-cuda=11.8
+numpy=1.26.4
+opencv=4.11.0.86
+torchmetrics=1.7.1
+matplotlib=3.9.4
+pandas=2.2.3
+scipy=1.13.1
+tqdm=4.67.1
