@@ -76,15 +76,15 @@ class Trainer:
         print(
             f"[INFO][{self.device}] resuming training from snapshot at epoch {self.epochs_run}")
 
-    def _run_batch(self, x0, x1, x2, time_frame, isValidation=False):
+    def _run_batch(self, x0, y, x1, time_frame, isValidation=False):
         if isValidation:
-            output = self.model(x0, x2, time_frame)
-            loss_fn = self.loss_fn(output, x1, self.epochs_run)
+            output = self.model(x0, x1, time_frame)
+            loss_fn = self.loss_fn(output, y, self.epochs_run)
             loss_val = loss_fn.item()
         else:
             self.optimizer.zero_grad()
-            output = self.model(x0, x2, time_frame)
-            loss_fn = self.loss_fn(output, x1, self.epochs_run)
+            output = self.model(x0, x1, time_frame)
+            loss_fn = self.loss_fn(output, y, self.epochs_run)
             loss_val = loss_fn.item()
             loss_fn.backward()
             self.optimizer.step()
@@ -153,15 +153,15 @@ class Trainer:
             self.train_dl.sampler.set_epoch(epoch)
 
         local_train_loss = 0
-        for idx, (x0, x1, x2, time_frame) in enumerate(tqdm(self.train_dl)):
+        for idx, (x0, y, x1, time_frame) in enumerate(tqdm(self.train_dl)):
             x0 = x0.to(self.device)
+            y = y.to(self.device)
             x1 = x1.to(self.device)
-            x2 = x2.to(self.device)
             time_frame = time_frame.to(self.device)
-            pred, loss = self._run_batch(x0, x1, x2, time_frame)
+            pred, loss = self._run_batch(x0, y, x1, time_frame)
             local_train_loss += loss
 
-            # del x0, x1, x2, time_frame, pred
+            # del x0, y, x1, time_frame, pred
 
         self.scheduler.step()
 
@@ -171,24 +171,24 @@ class Trainer:
         with torch.no_grad():
             self.model.eval()
             drawn = False
-            for _, (x0, x1, x2, time_frame) in enumerate(self.val_dl):
+            for _, (x0, y, x1, time_frame) in enumerate(self.val_dl):
                 x0 = x0.to(self.device)
+                y = y.to(self.device)
                 x1 = x1.to(self.device)
-                x2 = x2.to(self.device)
                 time_frame = time_frame.to(self.device)
-                pred, loss = self._run_batch(x0, x1, x2, time_frame, True)
+                pred, loss = self._run_batch(x0, y, x1, time_frame, True)
                 local_val_loss += loss
                 if not drawn:
                     draw_real_in_out_images(
-                        x0=x0, x1=x1, x2=x2, pred=pred, epoch=epoch)
+                        x0=x0, y=y, x1=x1, pred=pred, epoch=epoch)
                     drawn = True
 
-                psnr_val = calculate_psnr(pred, x1)
-                ssim_val = calculate_ssim(pred, x1)
+                psnr_val = calculate_psnr(pred, y)
+                ssim_val = calculate_ssim(pred, y)
                 local_val_psnr += psnr_val.item()
                 local_val_ssim += ssim_val.item()
 
-                # del x0, x1, x2, time_frame, pred
+                # del x0, y, x1, time_frame, pred
 
         if self.isDistributed:
             local_train_steps = torch.tensor(

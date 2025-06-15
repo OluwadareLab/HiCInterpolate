@@ -1,9 +1,7 @@
-import math
-from torchvision.transforms import functional as TF
-from torchvision import transforms
 from torch import Tensor
 from typing import List, Tuple
 from torch.utils.data import Dataset
+import torch.nn.functional as F
 import random
 import torch
 import sys
@@ -15,69 +13,27 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 class TripletDataset(Dataset):
-    def __init__(self, triplet_dicts: List, augment=False, crop=False):
+    def __init__(self, triplet_dicts: List):
         self.triplet_dicts = triplet_dicts
-        self.augment = augment
-        self.crop_f = transforms.CenterCrop(config.CROP_SIZE)
-        self.crop = crop
 
     def __len__(self):
         return len(self.triplet_dicts)
 
     def get_image(self, image_file: str) -> Tensor:
-        img = torch.from_numpy(np.load(image_file))
+        img = torch.from_numpy(np.load(image_file)).unsqueeze(0)
         return img
 
-    def get_image_range(self, img, raw=False) -> Tensor:
-        if raw:
-            tensor_img = torch.ByteTensor(
-                torch.ByteStorage.from_buffer(img.tobytes()))
-            tensor_img = tensor_img.view(
-                img.size[1], img.size[0], 3).permute(2, 0, 1)
-        else:
-            to_tensor = transforms.ToTensor()
-            tensor_img = to_tensor(img)
-        return tensor_img
+    def pad_to_64x64(self, x):
+        _, h, w = x.shape
+        pad_h = max(0, 64 - h)
+        pad_w = max(0, 64 - w)
 
-    def random_rot90(self, x0, y, x1):
-        k = random.randint(0, 4)
-        if k > 0:
-            x0 = TF.rotate(x0, angle=90 * k)
-            y = TF.rotate(y, angle=90 * k)
-            x1 = TF.rotate(x1, angle=90 * k)
-        return x0, y, x1
+        pad_top = pad_h // 2
+        pad_bottom = pad_h - pad_top
+        pad_left = pad_w // 2
+        pad_right = pad_w - pad_left
 
-    def random_flip(self, x0, y, x1):
-        if random.random() < 0.5:
-            x0 = TF.hflip(x0)
-            y = TF.hflip(y)
-            x1 = TF.hflip(x1)
-        return x0, y, x1
-
-    def random_reverse(self, x0, y, x1):
-        if random.random() < 0.7:
-            x0, y = y, x0
-        return x0, y, x1
-
-    def random_rot(self, x0, y, x1):
-        k = random.randint(0, 2)
-        if k > 0:
-            angle = random.uniform(-0.25 * math.pi, 0.25 * math.pi)
-            x0 = TF.rotate(x0, angle=angle,
-                           interpolation=TF.InterpolationMode.BILINEAR, fill=0)
-            y = TF.rotate(y, angle=angle,
-                          interpolation=TF.InterpolationMode.BILINEAR, fill=0)
-            x1 = TF.rotate(x1, angle=angle,
-                           interpolation=TF.InterpolationMode.BILINEAR, fill=0)
-        return x0, y, x1
-
-    def apply_same_augmentation(self, x0, y, x1):
-        x0, y, x1 = self.random_rot90(x0, y, x1)
-        x0, y, x1 = self.random_flip(x0, y, x1)
-        x0, y, x1 = self.random_reverse(x0, y, x1)
-        x0, y, x1 = self.random_rot(x0, y, x1)
-
-        return x0, y, x1
+        return F.pad(x, (pad_left, pad_right, pad_top, pad_bottom))
 
     def __getitem__(self, idx):
         key = self.triplet_dicts[idx]
@@ -86,22 +42,14 @@ class TripletDataset(Dataset):
         x1 = self.get_image(image_file=key["frame_2"])
         time = torch.tensor([key["time"]], dtype=torch.float32)
 
-        if self.augment:
-            x0, y, x1 = self.apply_same_augmentation(x0, y, x1)
-
-        x0 = self.get_image_range(x0)
-        y = self.get_image_range(y)
-        x1 = self.get_image_range(x1)
-
-        if self.crop:
-            x0 = self.crop_f(x0)
-            y = self.crop_f(y)
-            x1 = self.crop_f(x1)
+        # x0 = self.pad_to_64x64(x0)
+        # y = self.pad_to_64x64(y)
+        # x1 = self.pad_to_64x64(x1)
 
         return x0, y, x1, time
 
 
-def get_train_val_dl(augmentation: bool = False) -> Tuple[Dataset, Dataset]:
+def get_train_val_dl() -> Tuple[Dataset, Dataset]:
     record_file = config.RECORD_FILE
     with open(record_file, "r") as fid:
         triplets_list = np.loadtxt(fid, dtype=str)
@@ -125,8 +73,8 @@ def get_train_val_dl(augmentation: bool = False) -> Tuple[Dataset, Dataset]:
     val_dicts = triplet_dicts[train_len:train_len+val_len]
 
     train_ds = TripletDataset(
-        triplet_dicts=train_dicts, augment=augmentation, crop=True)
-    val_ds = TripletDataset(triplet_dicts=val_dicts, augment=False, crop=True)
+        triplet_dicts=train_dicts)
+    val_ds = TripletDataset(triplet_dicts=val_dicts)
 
     return train_ds, val_ds
 

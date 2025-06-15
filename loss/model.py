@@ -49,12 +49,15 @@ class _VGG(Module):
         return weights, bias
 
     def forward(self, input: Tensor) -> Dict[str, Tensor]:
+        # gray_mean_val = 0.2989 * 123.68 + 0.5870 * 116.779 + 0.1140 * 103.939
+        # imagenet_mean = torch.tensor(
+        #     [gray_mean_val], dtype=torch.float32, device=input.device).view(1, 1, 1, 1)
+
         imagenet_mean = torch.tensor(
             [123.6800, 116.7790, 103.9390], dtype=torch.float32, device=input.device).view(1, 3, 1, 1)
-
+        psudo_input = input.repeat(1, 3, 1, 1)
         net = {}
-        # net['input'] = input - imagenet_mean
-        net['input'] = input - imagenet_mean
+        net['input'] = psudo_input - imagenet_mean
         weights, bias = self.get_weights_bias(self.vgg_layers, 0, input.device)
         net['conv11'] = self.layer_(
             name="conv", input_tensor=net['input'], weight=weights, bias=bias)

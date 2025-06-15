@@ -70,7 +70,7 @@ def main(total_epochs: int, batch_size: int, save_every: int, augmentation: bool
 
     if isDistributed:
         ddp_setup()
-    train_ds, val_ds = load_data.get_train_val_dl(augmentation=augmentation)
+    train_ds, val_ds = load_data.get_train_val_dl()
     train_dl, val_dl = prepare_dataloader(
         train_ds, val_ds, batch_size, isDistributed)
     trainer = Train.Trainer(train_dl, val_dl, save_every,

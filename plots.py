@@ -2,47 +2,60 @@ from torch import Tensor
 import matplotlib.pyplot as plt
 import torch
 import config
+import seaborn as sns
+import numpy as np
 
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['figure.dpi'] = 300
 
 
-def draw_real_in_out_images(x0: Tensor, x1: Tensor, x2: Tensor, pred: Tensor, epoch: int):
-    num_examples = min(config.NUM_VISUALIZATION_SAMPLES, len(x1))
+def draw_real_in_out_images(x0: Tensor, y: Tensor, pred: Tensor, x1: Tensor,  epoch: int):
+    num_examples = min(config.NUM_VISUALIZATION_SAMPLES, len(y))
     x0_cpu = x0[:num_examples].cpu()
-    x1_cpu = x1[:num_examples].cpu()
+    y_cpu = y[:num_examples].cpu()
     pred_cpu = pred[:num_examples].cpu()
-    x2_cpu = x1[:num_examples].cpu()
+    x1_cpu = x1[:num_examples].cpu()
 
     plt.figure(figsize=(20, num_examples * 5))
     plt.style.use("ggplot")
     for i in range(num_examples):
         plt.subplot(num_examples, 4, i * 4 + 1)
-        img_x0 = torch.clamp(x0_cpu[i].permute(1, 2, 0), 0, 1)
-        plt.imshow(img_x0.numpy())
-        plt.title("x0 (input)")
+        log_matrix = np.log10(x0_cpu[i].squeeze(0) + 1)
+        sns.heatmap(x0_cpu[i].squeeze(0), cmap="YlOrRd_r")
+        plt.title("x0")
+        plt.xlabel("Genome coordinates")
+        plt.ylabel("Genome coordinates")
         plt.axis("off")
+        plt.tight_layout()
 
         plt.subplot(num_examples, 4, i * 4 + 2)
-        true_img = torch.clamp(x1_cpu[i].permute(1, 2, 0), 0, 1)
-        plt.imshow(true_img.numpy())
-        plt.title("x1 (ground truth)")
+        log_matrix = np.log10(y_cpu[i].squeeze(0) + 1)
+        sns.heatmap(y_cpu[i].squeeze(0), cmap="YlOrRd_r")
+        plt.title("y")
+        plt.xlabel("Genome coordinates")
+        plt.ylabel("Genome coordinates")
         plt.axis("off")
+        plt.tight_layout()
 
         plt.subplot(num_examples, 4, i * 4 + 3)
-        pred_img = torch.clamp(pred_cpu[i].permute(1, 2, 0), 0, 1)
-        plt.imshow(pred_img.numpy())
-        plt.title("prediction")
+        log_matrix = np.log10(pred_cpu[i].squeeze(0) + 1)
+        sns.heatmap(pred_cpu[i].squeeze(0), cmap="YlOrRd_r")
+        plt.title("pred")
+        plt.xlabel("Genome coordinates")
+        plt.ylabel("Genome coordinates")
         plt.axis("off")
+        plt.tight_layout()
 
         plt.subplot(num_examples, 4, i * 4 + 4)
-        img_x1 = torch.clamp(x2_cpu[i].permute(1, 2, 0), 0, 1)
-        plt.imshow(img_x1.numpy())
-        plt.title("x2 (input)")
+        log_matrix = np.log10(x1_cpu[i].squeeze(0) + 1)
+        sns.heatmap(x1_cpu[i].squeeze(0), cmap="YlOrRd_r")
+        plt.title("x1")
+        plt.xlabel("Genome coordinates")
+        plt.ylabel("Genome coordinates")
         plt.axis("off")
+        plt.tight_layout()
 
-    plt.tight_layout()
-    plt.savefig(f"{config.IMG_VAL_PLOT_PATH}/epoch_{epoch+1}.png")
+    plt.savefig(f"{config.IMG_VAL_PLOT_PATH}/epoch_{epoch+1}.png", )
     plt.close()
 
 

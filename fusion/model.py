@@ -35,18 +35,18 @@ class Fusion(Module):
             m = config.UNIQUE_LEVELS
             k = config.INIT_OUT_CHANNELS
             out_channels = (k << i) if i < m else (k << m)
-            in_channels = (prev_out_channels + out_channels + 3) * 2 + 4
+            in_channels = (prev_out_channels + out_channels + config.INIT_IN_CHANNELS) * 2 + 4
 
             convs = ModuleList()
-            convs.append(Conv2d(in_channels=out_channels*2 if i < m else in_channels,
-                                out_channels=out_channels, kernel_size=2, padding='same'))
-            convs.append(Block(in_channels=in_channels + out_channels,
-                         out_channels=out_channels, kernel_size=3))
+            channels = out_channels*2 if i < m else in_channels
+            convs.append(Conv2d(in_channels=channels, out_channels=out_channels, kernel_size=2, padding='same'))
+            channels = in_channels + out_channels
+            convs.append(Block(in_channels=channels, out_channels=out_channels, kernel_size=3))
             self.convs.append(convs)
             prev_out_channels = prev_out_channels + out_channels
 
         self.output_conv = Conv2d(
-            in_channels=config.INIT_OUT_CHANNELS, out_channels=3, kernel_size=1)
+            in_channels=config.INIT_OUT_CHANNELS, out_channels=config.INIT_IN_CHANNELS, kernel_size=1)
 
     def forward(self, pyramid: List[Tensor]) -> Tensor:
         if len(pyramid) != self.levels:

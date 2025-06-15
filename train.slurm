@@ -44,5 +44,5 @@ train.py \
 echo "Job finished at $(date)"
 
 # torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --epochs 1000 --batch-size 12 --save-every 10 --data-augmentation --distributed --load-snapshot
-# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --epochs 1000 --batch-size 12 --save-every 10 --data-augmentation --distributed
+# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --epochs 100 --batch-size 32 --save-every 10 --distributed
 
