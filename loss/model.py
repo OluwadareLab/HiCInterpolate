@@ -5,6 +5,7 @@ import torch
 import config
 import numpy as np
 import scipy.io as sio
+from metrics import calculate_ssim as ssim
 
 
 class _L1Loss(Module):
@@ -12,9 +13,65 @@ class _L1Loss(Module):
         super().__init__()
         self.criterion = L1Loss()
 
-    def forward(self, pred: Tensor, target: Tensor):
-        loss = self.criterion(pred, target)
+    def forward(self, pred: Tensor, y: Tensor):
+        loss = self.criterion(pred, y)
         return loss
+
+
+class _MSELoss(Module):
+    def __init__(self):
+        super().__init__()
+        self.criterion = MSELoss()
+
+    def forward(self, pred: Tensor, y: Tensor):
+        loss = self.criterion(pred, y)
+        return loss
+
+
+class CharbonnierLoss(Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred: Tensor, y: Tensor, epsilon=1e-3):
+        diff = pred - y
+        loss = torch.mean(torch.sqrt(diff ** 2 + epsilon ** 2))
+        return loss
+
+
+class SymmetryLoss(Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred: Tensor):
+        loss = L1Loss(pred, pred.transpose(-1, -2))
+        return loss
+
+
+class SSIMLoss(Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred: Tensor, y: Tensor):
+        loss = 1-ssim(pred, y)
+        return loss
+
+
+class TVLoss(Module):
+    def __init__(self, tv_loss_weight=1):
+        super(TVLoss, self).__init__()
+        self.tv_loss_weight = tv_loss_weight
+
+    def forward(self, x):
+        b, c, h, w = x.shape
+        count_h = self.tensor_size(x[:, :, 1:, :])
+        count_w = self.tensor_size(x[:, :, :, 1:])
+        h_tv = torch.pow((x[:, :, 1:, :] - x[:, :, :h-1, :]), 2).sum()
+        w_tv = torch.pow((x[:, :, :, 1:] - x[:, :, :, :w-1]), 2).sum()
+        return self.tv_loss_weight * 2 * (h_tv / count_h + w_tv / count_w) / b
+
+    @staticmethod
+    def tensor_size(t):
+        return t.size()[1] * t.size()[2] * t.size()[3]
 
 
 class _VGG(Module):
@@ -49,10 +106,6 @@ class _VGG(Module):
         return weights, bias
 
     def forward(self, input: Tensor) -> Dict[str, Tensor]:
-        # gray_mean_val = 0.2989 * 123.68 + 0.5870 * 116.779 + 0.1140 * 103.939
-        # imagenet_mean = torch.tensor(
-        #     [gray_mean_val], dtype=torch.float32, device=input.device).view(1, 1, 1, 1)
-
         imagenet_mean = torch.tensor(
             [123.6800, 116.7790, 103.9390], dtype=torch.float32, device=input.device).view(1, 3, 1, 1)
         psudo_input = input.repeat(1, 3, 1, 1)
@@ -125,7 +178,6 @@ class _VGG(Module):
 class VGGLoss(Module):
     def __init__(self, weights=None):
         super().__init__()
-        self.vgg = _VGG()
         self.criterion = L1Loss()
         if weights is None:
             self.weights = [1.0 / 2.6, 1.0 / 4.8,
@@ -133,19 +185,17 @@ class VGGLoss(Module):
         else:
             self.weights = weights
 
-    def forward(self, pred: Tensor, target: Tensor):
-        vgg_ref = self.vgg(pred * 255.0)
-        vgg_img = self.vgg(target * 255.0)
-        l1 = self.criterion(vgg_ref['conv12'],
-                            vgg_img['conv12']) * self.weights[0]
-        l2 = self.criterion(vgg_ref['conv22'],
-                            vgg_img['conv22']) * self.weights[1]
-        l3 = self.criterion(vgg_ref['conv32'],
-                            vgg_img['conv32']) * self.weights[2]
-        l4 = self.criterion(vgg_ref['conv42'],
-                            vgg_img['conv42']) * self.weights[3]
-        l5 = self.criterion(vgg_ref['conv52'],
-                            vgg_img['conv52']) * self.weights[4]
+    def forward(self, pred: Tensor, y: Tensor):
+        l1 = self.criterion(pred['conv12'],
+                            y['conv12']) * self.weights[0]
+        l2 = self.criterion(pred['conv22'],
+                            y['conv22']) * self.weights[1]
+        l3 = self.criterion(pred['conv32'],
+                            y['conv32']) * self.weights[2]
+        l4 = self.criterion(pred['conv42'],
+                            y['conv42']) * self.weights[3]
+        l5 = self.criterion(pred['conv52'],
+                            y['conv52']) * self.weights[4]
         vgg_loss = (l1 + l2 + l3 + l4 + l5) / 255.0
         return vgg_loss
 
@@ -153,8 +203,7 @@ class VGGLoss(Module):
 class StyleLoss(Module):
     def __init__(self, weights=None):
         super().__init__()
-        self.vgg = _VGG()
-        self.criterion = MSELoss()
+        self.criterion = L1Loss()
         if weights is None:
             self.weights = [1.0 / 2.6, 1.0 / 4.8,
                             1.0 / 3.7, 1.0 / 5.6, 10.0 / 1.5]
@@ -162,30 +211,37 @@ class StyleLoss(Module):
             self.weights = weights
 
     def gram_matrix(self, features: Tensor, mask: Tensor = None) -> torch.Tensor:
-        B, C, H, W = features.shape
+        # B, C, H, W = features.shape
+        # if mask is not None:
+        #     mask = F.interpolate(mask, size=(
+        #         H, W), mode='bilinear', align_corners=False)
+        #     features = features * mask
+        # features = features.view(B, C, -1)
+        # gram = torch.bmm(features, features.transpose(1, 2))
+        # gram /= ((C * H * W))
+
+        b, c, h, w = features.shape
         if mask is not None:
             mask = F.interpolate(mask, size=(
-                H, W), mode='bilinear', align_corners=False)
+                h, w), mode='bilinear', align_corners=False)
             features = features * mask
-        features = features.view(B, C, -1)
+        features = features.view(b, c, h*w)
         gram = torch.bmm(features, features.transpose(1, 2))
-        gram /= ((C * H * W))
+        gram /= (h*w)
 
         return gram
 
-    def forward(self, pred: Tensor, target: Tensor):
-        vgg_ref = self.vgg(pred * 255.0)
-        vgg_img = self.vgg(target * 255.0)
-        l1 = self.criterion(self.gram_matrix(vgg_ref['conv12']) / 255.0,
-                            self.gram_matrix(vgg_img['conv12']) / 255.0) * self.weights[0]
-        l2 = self.criterion(self.gram_matrix(vgg_ref['conv22']) / 255.0,
-                            self.gram_matrix(vgg_img['conv22']) / 255.0) * self.weights[1]
-        l3 = self.criterion(self.gram_matrix(vgg_ref['conv32']) / 255.0,
-                            self.gram_matrix(vgg_img['conv32']) / 255.0) * self.weights[2]
-        l4 = self.criterion(self.gram_matrix(vgg_ref['conv42']) / 255.0,
-                            self.gram_matrix(vgg_img['conv42']) / 255.0) * self.weights[3]
-        l5 = self.criterion(self.gram_matrix(vgg_ref['conv52']) / 255.0,
-                            self.gram_matrix(vgg_img['conv52']) / 255.0) * self.weights[4]
+    def forward(self, pred: Tensor, y: Tensor):
+        l1 = self.criterion(self.gram_matrix(pred['conv12']) / 255.0,
+                            self.gram_matrix(y['conv12']) / 255.0) * self.weights[0]
+        l2 = self.criterion(self.gram_matrix(pred['conv22']) / 255.0,
+                            self.gram_matrix(y['conv22']) / 255.0) * self.weights[1]
+        l3 = self.criterion(self.gram_matrix(pred['conv32']) / 255.0,
+                            self.gram_matrix(y['conv32']) / 255.0) * self.weights[2]
+        l4 = self.criterion(self.gram_matrix(pred['conv42']) / 255.0,
+                            self.gram_matrix(y['conv42']) / 255.0) * self.weights[3]
+        l5 = self.criterion(self.gram_matrix(pred['conv52']) / 255.0,
+                            self.gram_matrix(y['conv52']) / 255.0) * self.weights[4]
         style_loss = l1 + l2 + l3 + l4 + l5
         return style_loss
 
@@ -193,9 +249,15 @@ class StyleLoss(Module):
 class CombinedLoss(Module):
     def __init__(self):
         super().__init__()
+        self.vgg = _VGG()
+        self.vgg_loss = VGGLoss()  # Perceptual loss
+        self.style_loss = StyleLoss()  # Style loss
         self.l1_loss = _L1Loss()
-        self.vgg_loss = VGGLoss()
-        self.style_loss = StyleLoss()
+        self.mse_loss = _MSELoss()
+        self.charbonnier_loss = CharbonnierLoss()  # mix of l1 and mse
+        self.tv_loss = TVLoss()
+        self.symmetry_loss = SymmetryLoss()
+        self.ssim_loss = SSIMLoss()
 
     def weight_schedule(self, weight_params: tuple, epoch: int) -> float:
         i = 0
@@ -206,21 +268,43 @@ class CombinedLoss(Module):
             i += 1
         return weight_params["values"][0]
 
-    def forward(self, pred: Tensor, target: Tensor, epoch: int):
+    def forward(self, pred: Tensor, y: Tensor, epoch: int):
         loss = torch.tensor(0.0, device=pred.device, dtype=torch.float32)
+        vgg_pred = self.vgg(pred * 255.0)
+        vgg_y = self.vgg(y * 255.0)
         for weight_params in config.LOSS_WEIGHT_PARAMETERS:
             weight = self.weight_schedule(
                 weight_params=weight_params, epoch=epoch)
             if weight_params["name"] == "l1" and weight > 0.0:
-                l1_loss = self.l1_loss(pred, target)
+                l1_loss = self.l1_loss(pred, y)
                 l1_loss = l1_loss * weight
                 loss += l1_loss
+            elif weight_params["name"] == "mse" and weight > 0.0:
+                mse_loss = self.mse_loss(pred, y)
+                mse_loss = mse_loss * weight
+                loss += mse_loss
+            elif weight_params["name"] == "charbonnier" and weight > 0.0:
+                charbonnier_loss = self.charbonnier_loss(pred, y)
+                charbonnier_loss = charbonnier_loss * weight
+                loss += charbonnier_loss
+            elif weight_params["name"] == "tv" and weight > 0.0:
+                tv_loss = self.tv_loss(pred)
+                tv_loss = tv_loss * weight
+                loss += tv_loss
+            elif weight_params["name"] == "symmetry" and weight > 0.0:
+                symmetry_loss = self.symmetry_loss(pred)
+                symmetry_loss = symmetry_loss * weight
+                loss += symmetry_loss
+            elif weight_params["name"] == "ssim" and weight > 0.0:
+                ssim_loss = self.ssim_loss(pred, y)
+                ssim_loss = ssim_loss * weight
+                loss += ssim_loss
             elif weight_params["name"] == "vgg" and weight > 0.0:
-                vgg_loss = self.vgg_loss(pred, target)
+                vgg_loss = self.vgg_loss(vgg_pred, vgg_y)
                 vgg_loss = vgg_loss * weight
                 loss += vgg_loss
             elif weight_params["name"] == "style" and weight > 0.0:
-                style_loss = self.style_loss(pred, target)
+                style_loss = self.style_loss(vgg_pred, vgg_y)
                 style_loss = style_loss * weight
                 loss += style_loss
         return loss

@@ -7,12 +7,6 @@ DEVICE = torch.device(
 ROOT_DIR = f"/home/mohit/Documents/project/interpolation/HiCInterpolate"
 DATA_DIR = f"/home/mohit/Documents/project/interpolation/data/triplets/normalized"
 
-# ROOT_DIR = f"/home/hchowdhu/ap_film"
-# DATA_DIR = f"/mmfs1/home/hchowdhu/data"
-
-# ROOT_DIR = f"/home/mohit/Documents/project/interpolation/film"
-# DATA_DIR = f"/home/mohit/Documents/project/interpolation/frame-interpolation/data"
-
 RECORD_FILE = f"{DATA_DIR}/128/train.txt"
 IMAGE_DIR = f"{DATA_DIR}/128"
 INTERPOLATOR_IMAGES_MAP = {
@@ -21,8 +15,8 @@ INTERPOLATOR_IMAGES_MAP = {
     'frame_2': 'img3.npy'
 }
 
-TRAIN_VAL_RATIO = [0.90, 0.10]
-BATCH_SIZE = 64
+TRAIN_VAL_RATIO = [0.85, 0.15]
+BATCH_SIZE = 32
 
 NUM_EPOCHS = 1000
 SAVE_EVERY = 10
@@ -46,9 +40,10 @@ FUSION_PYRAMID_LEVEL = 5
 
 VGG_MODEL_FILE = f"{DATA_DIR}/models/imagenet-vgg-verydeep-19.mat"
 LOSS_WEIGHT_PARAMETERS = [
-    {'name': 'l1', 'boundaries': [0], 'values': [1.0, 1.0]},
-    {'name': 'vgg', 'boundaries': [500], 'values': [1.0, 0.25]},
-    {'name': 'style', 'boundaries': [500], 'values': [0.0, 40.0]}]
+    {'name': 'charbonnier', 'boundaries': [0], 'values': [1.0, 1.0]},
+    {'name': 'ssim', 'boundaries': [500], 'values': [1.0, 0.8]},
+    {'name': 'vgg', 'boundaries': [600], 'values': [1.0, 0.40]},
+    {'name': 'style', 'boundaries': [400], 'values': [0.0, 0.60]}]
 
 NUM_VISUALIZATION_SAMPLES = 2
 IMG_VAL_PLOT_PATH = os.path.sep.join(
@@ -57,9 +52,9 @@ IMG_VAL_PLOT_PATH = os.path.sep.join(
 MODEL_NAME = 'hicinterpolate_128'
 MODEL_FILE = os.path.join(ROOT_DIR, "models", f"{MODEL_NAME}.pth")
 TRAIN_VAL_PLOT_FILE = os.path.sep.join(
-    [ROOT_DIR, "output", f"{MODEL_NAME}_vimeo_train_val_plot.png"])
+    [ROOT_DIR, "output", f"{MODEL_NAME}_train_val_plot.png"])
 TEST_PLOT_FILE = os.path.sep.join(
-    [ROOT_DIR, "output", f"{MODEL_NAME}_vimeo_test_plot.png"])
+    [ROOT_DIR, "output", f"{MODEL_NAME}_test_plot.png"])
 
 EVAL_METRICS_FILE = os.path.join(
     ROOT_DIR, "output", f"{MODEL_NAME}_val_metrics.csv")
