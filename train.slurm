@@ -1,13 +1,13 @@
 #!/bin/bash
 
-#SBATCH --partition=gpu
+#SBATCH --partition=gpu-long
 #SBATCH --nodes=1
 #SBATCH --nodelist=g001
-#SBATCH --ntasks-per-node=2
-#SBATCH --gres=gpu:2
-#SBATCH --time=24:00:00
-#SBATCH --job-name=ap_film_training
-#SBATCH --output=/home/hchowdhu/ap_film/af_%j.log
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:1
+#SBATCH --time=30-00:00:00
+#SBATCH --job-name=hici
+#SBATCH --output=/home/hchowdhu/Documents/HiCInterpolate_Set_1/_%j.log
 
 # === Load your modules or conda env ===
 module load anaconda
@@ -25,7 +25,7 @@ echo "MASTER_PORT=$MASTER_PORT"
 echo "Job started on $(hostname) at $(date)"
 
 torchrun \
---nproc-per-node=2 \
+--nproc-per-node=1 \
 --nnodes=1 \
 --node_rank=$SLURM_NODEID \
 --rdzv-id=$RANDOM \
@@ -35,9 +35,8 @@ torchrun \
 --master_port=$MASTER_PORT \
 train.py \
 --epochs 1000 \
---batch-size 8 \
+--batch-size 32 \
 --save-every 10 \
---data-augmentation \
 --distributed \
 --load-snapshot
 
