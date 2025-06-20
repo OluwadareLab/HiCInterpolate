@@ -36,7 +36,7 @@ torchrun \
 train.py \
 --distributed \
 --load-snapshot \
---config config_128_set_1
+--config config_256_set_1
 
 echo "Job finished at $(date)"
 
