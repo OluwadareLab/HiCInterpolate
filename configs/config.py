@@ -21,10 +21,12 @@ class PathsConfig:
     psnr_eval_plot_file: str
     ssim_eval_plot_file: str
     lr_file: str
+    log_file: str
 
 
 @dataclass
 class DataConfig:
+    patch: int
     interpolator_images_map: Dict[str, str]
     train_val_ratio: List[float]
     batch_size: int

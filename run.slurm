@@ -7,7 +7,7 @@
 #SBATCH --gres=gpu:2
 #SBATCH --time=30-00:00:00
 #SBATCH --job-name=hici
-#SBATCH --output=/home/hchowdhu/Documents/HiCInterpolate_Set_1/_%j.log
+#SBATCH --output=/home/mohit/Documents/project/interpolation/HiCInterpolate/hici_%j.log
 
 # === Load your modules or conda env ===
 module load anaconda

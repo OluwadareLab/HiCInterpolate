@@ -17,8 +17,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Trainer:
-    def __init__(self, cfg, train_dl: DataLoader, val_dl: DataLoader, load_snapshot: bool = False, isDistributed: bool = False) -> None:
+    def __init__(self, cfg, log, train_dl: DataLoader, val_dl: DataLoader, load_snapshot: bool = False, isDistributed: bool = False) -> None:
         self.cfg = cfg
+        self.log = log
         self.isDistributed = dist.is_available() and dist.is_initialized()
         if isDistributed:
             self.device = int(os.environ["LOCAL_RANK"])
@@ -55,6 +56,7 @@ class Trainer:
 
         self.snapshot_file = f'{self.cfg.paths.model_state_dir}/{self.cfg.model.name}_snapshot.pt'
         if load_snapshot and os.path.exists(self.snapshot_file):
+            self.log.info(f"[{self.device}] loading snapshot...")
             print(f"[INFO][{self.device}] loading snapshot...")
             self._load_snapshot(self.snapshot_file)
 
@@ -71,6 +73,8 @@ class Trainer:
         self.scheduler.load_state_dict(snapshot["scheduler"])
         self.state = snapshot["state"]
         self.best_val = snapshot["state"]["best_val"][-1]
+        self.log.info(
+            f"[{self.device}] resuming training from snapshot at epoch {self.epochs_run}")
         print(
             f"[INFO][{self.device}] resuming training from snapshot at epoch {self.epochs_run}")
 
@@ -116,15 +120,17 @@ class Trainer:
         snapshot = self._get_model_stats(epoch)
         torch.save(snapshot, self.snapshot_file)
         print(
-            f"[DEBUG][{self.device}] epoch {epoch+1} --> saved snapshot at {self.snapshot_file}")
+            f"[DEBUG][{self.device}] epoch {epoch+1} saved snapshot at {self.snapshot_file}")
 
     def _save_best_model(self, epoch: int):
         if self.val_ssim_per_epoch > self.best_val:
             self.best_val = self.val_ssim_per_epoch
             snapshot = self._get_model_stats(epoch)
             torch.save(snapshot, self.best_model_file)
+            self.log.debug(
+                f"[{self.device}] epoch {epoch+1} saved best model.")
             print(
-                f"[DEBUG][{self.device}] epoch {epoch+1} --> saved best model.")
+                f"[DEBUG][{self.device}] epoch {epoch+1} saved best model.")
 
     def _save_and_draw_metrics(self):
         metrics_df = pd.DataFrame({
@@ -159,8 +165,6 @@ class Trainer:
             pred, loss = self._run_batch(x0, y, x1, time_frame)
             local_train_loss += loss
 
-            # del x0, y, x1, time_frame, pred
-
         self.scheduler.step()
 
         local_val_loss = 0
@@ -185,8 +189,6 @@ class Trainer:
                 ssim_val = metric.calculate_ssim(pred, y)
                 local_val_psnr += psnr_val.item()
                 local_val_ssim += ssim_val.item()
-
-                # del x0, y, x1, time_frame, pred
 
         if self.isDistributed:
             local_train_steps = torch.tensor(
@@ -222,7 +224,8 @@ class Trainer:
                                  local_val_loss, local_val_psnr, local_val_ssim)
 
     def train(self, max_epochs: int):
-        print(f"[INFO][{self.device}] training the network...")
+        self.log.info(f"[{self.device}] ==== training started ====")
+        print(f"[INFO][{self.device}] ==== training started ====")
 
         start_time = time.time()
         try:
@@ -235,14 +238,21 @@ class Trainer:
                     if (epoch+1) % self.save_every == 0:
                         self._save_snapshot(epoch)
                     self._save_and_draw_metrics()
-                    print(f"[INFO] epoch [{(epoch+1)}/{max_epochs}] --> learning rate: {self.scheduler.get_last_lr()[0]}; batch size: {self.batch_size}; train loss: {format(self.train_loss_per_epoch, '.6f')}; validation (loss: {format(self.val_loss_per_epoch, '.6f')}, psnr: {format(self.val_psnr_per_epoch, '.4f')}, ssim: {format(self.val_ssim_per_epoch, '.4f')});")
+
+                    self.log.info(f"epoch [{(epoch+1)}/{max_epochs}] learning rate: {self.scheduler.get_last_lr()[0]}; batch size: {self.batch_size}; train loss: {format(self.train_loss_per_epoch, '.6f')}; validation (loss: {format(self.val_loss_per_epoch, '.6f')}, psnr: {format(self.val_psnr_per_epoch, '.4f')}, ssim: {format(self.val_ssim_per_epoch, '.4f')});")
+
+                    print(f"[INFO] epoch [{(epoch+1)}/{max_epochs}] learning rate: {self.scheduler.get_last_lr()[0]}; batch size: {self.batch_size}; train loss: {format(self.train_loss_per_epoch, '.6f')}; validation (loss: {format(self.val_loss_per_epoch, '.6f')}, psnr: {format(self.val_psnr_per_epoch, '.4f')}, ssim: {format(self.val_ssim_per_epoch, '.4f')});")
 
                 elif not self.isDistributed:
                     self._save_best_model(epoch)
                     self.state["best_val"].append(self.best_val)
                     if (epoch+1) % self.save_every == 0:
                         self._save_snapshot(epoch)
-                    print(f"[INFO] epoch [{(epoch+1)}/{max_epochs}] --> learning rate: {self.scheduler.get_last_lr()[0]}; batch size: {self.batch_size}; train loss: {format(self.train_loss_per_epoch, '.6f')}; validation (loss: {format(self.val_loss_per_epoch, '.6f')}, psnr: {format(self.val_psnr_per_epoch, '.4f')}, ssim: {format(self.val_ssim_per_epoch, '.4f')});")
+                    self._save_and_draw_metrics()
+
+                    self.log.info(f"epoch [{(epoch+1)}/{max_epochs}] learning rate: {self.scheduler.get_last_lr()[0]}; batch size: {self.batch_size}; train loss: {format(self.train_loss_per_epoch, '.6f')}; validation (loss: {format(self.val_loss_per_epoch, '.6f')}, psnr: {format(self.val_psnr_per_epoch, '.4f')}, ssim: {format(self.val_ssim_per_epoch, '.4f')});")
+
+                    print(f"[INFO] epoch [{(epoch+1)}/{max_epochs}] learning rate: {self.scheduler.get_last_lr()[0]}; batch size: {self.batch_size}; train loss: {format(self.train_loss_per_epoch, '.6f')}; validation (loss: {format(self.val_loss_per_epoch, '.6f')}, psnr: {format(self.val_psnr_per_epoch, '.4f')}, ssim: {format(self.val_ssim_per_epoch, '.4f')});")
 
         except Exception as ex:
             print(ex)
@@ -254,11 +264,9 @@ class Trainer:
                 torch.cuda.ipc_collect()
 
         end_time = time.time()
-
-        if self.isDistributed and self.device == 0:
-            self._save_and_draw_metrics()
-        elif not self.isDistributed:
-            self._save_and_draw_metrics()
-
+        self.log.info(
+            f"[{self.device}] total time taken: {format((end_time-start_time), '.2f')} seconds")
         print(
             f"[INFO][{self.device}] total time taken: {format((end_time-start_time), '.2f')} seconds")
+        self.log.info(f"[{self.device}] ==== training end ====")
+        print(f"[INFO][{self.device}] ==== training end ====")

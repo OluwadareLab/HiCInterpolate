@@ -43,7 +43,6 @@ class SymmetryLoss(Module):
         self.criterion = L1Loss()
 
     def forward(self, pred: Tensor):
-        # assert pred.shape[-1] == pred.shape[-2]
         transposed = pred.transpose(-1, -2)
         loss = self.criterion(pred, transposed)
         return loss
