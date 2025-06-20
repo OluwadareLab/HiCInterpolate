@@ -2,8 +2,6 @@ from dataclasses import dataclass
 from typing import List, Dict
 
 
-# === Base Components ===
-
 @dataclass
 class PathsConfig:
     root_dir: str
@@ -76,8 +74,6 @@ class LossConfig:
 class EvalConfig:
     num_visualization_samples: int
 
-
-# === Main Config ===
 
 @dataclass
 class Config:

@@ -4,8 +4,7 @@ import sys
 import os
 import torch
 import torch.distributed as dist
-from src import TrainLib
-from data_loader import CustomDataset
+from src import TrainLib, CustomDataset
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from typing import Tuple
