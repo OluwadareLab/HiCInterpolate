@@ -51,7 +51,7 @@ model:
 
 loss:
   weight_parameters:
-    - name: l1
+    - name: mse
       boundaries: [0]
       values: [1.0, 1.0]
     - name: ssim

@@ -51,7 +51,7 @@ model:
 
 loss:
   weight_parameters:
-    - name: l1
+    - name: charbonnier
       boundaries: [0]
       values: [1.0, 1.0]
     - name: ssim
@@ -63,7 +63,7 @@ loss:
     - name: style
       boundaries: [500]
       values: [0.0, 1.00]
-    - name: symmetry
+    - name: tv
       boundaries: [0]
       values: [1.0, 1.0]
 

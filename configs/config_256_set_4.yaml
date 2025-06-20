@@ -51,7 +51,7 @@ model:
 
 loss:
   weight_parameters:
-    - name: mse
+    - name: charbonnier
       boundaries: [0]
       values: [1.0, 1.0]
     - name: ssim

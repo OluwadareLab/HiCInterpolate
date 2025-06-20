@@ -63,7 +63,7 @@ loss:
     - name: style
       boundaries: [500]
       values: [0.0, 1.00]
-    - name: tv
+    - name: symmetry
       boundaries: [0]
       values: [1.0, 1.0]
 
