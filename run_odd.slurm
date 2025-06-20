@@ -19,12 +19,14 @@ MASTER_ADDR=$(getent ahostsv4 $MASTER_NODE | awk '{ print $1; exit }')
 echo "Job started on $(hostname) at $(date)"
 
 PORT_1=$(python -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
+PORT_2=$(python -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
 
+# === Run job 1 in background ===
 CUDA_VISIBLE_DEVICES=0 torchrun \
 --nproc-per-node=1 \
 --nnodes=1 \
 --node_rank=0 \
---rdzv-id=$RANDOM \
+--rdzv-id=job1_$RANDOM \
 --rdzv-backend=c10d \
 --rdzv-endpoint=$MASTER_ADDR:$PORT_1 \
 --master_addr=$MASTER_ADDR \
@@ -32,15 +34,14 @@ CUDA_VISIBLE_DEVICES=0 torchrun \
 train.py \
 --distributed \
 --load-snapshot \
---config config_128_set_1
+--config config_128_set_1 &
 
-PORT_2=$(python -c "import socket; s=socket.socket(); s.bind(('',0)); print(s.getsockname()[1]); s.close()")
-
+# === Run job 2 in background ===
 CUDA_VISIBLE_DEVICES=1 torchrun \
 --nproc-per-node=1 \
 --nnodes=1 \
 --node_rank=0 \
---rdzv-id=$RANDOM \
+--rdzv-id=job2_$RANDOM \
 --rdzv-backend=c10d \
 --rdzv-endpoint=$MASTER_ADDR:$PORT_2 \
 --master_addr=$MASTER_ADDR \
@@ -48,7 +49,9 @@ CUDA_VISIBLE_DEVICES=1 torchrun \
 train.py \
 --distributed \
 --load-snapshot \
---config config_128_set_2
+--config config_128_set_2 &
+
+# Wait for both jobs to complete
+wait
 
 echo "Job finished at $(date)"
-
