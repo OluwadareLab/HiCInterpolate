@@ -34,12 +34,12 @@ torchrun \
 --master_addr=$MASTER_ADDR \
 --master_port=$MASTER_PORT \
 train.py \
---config "config"\
 --distributed \
---load-snapshot
+--load-snapshot \
+--config config
 
 echo "Job finished at $(date)"
 
-# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --epochs 1000 --batch-size 12 --save-every 10 --data-augmentation --distributed --load-snapshot
-# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --config config --distributed
+# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py train.py --distributed --load-snapshot --config config
+# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py train.py --distributed --config config
 

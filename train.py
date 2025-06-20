@@ -66,7 +66,7 @@ def prepare_dataloader(train_ds: Dataset, val_ds: Dataset, batch_size: int = 0, 
     return train_dl, val_dl
 
 
-def main(config_filename: str, augmentation: bool = False, isDistributed: bool = False, load_snapshot: bool = False):
+def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool = False):
     yaml_cfg = OmegaConf.load(f"./configs/{config_filename}.yaml")
     structured_cfg = OmegaConf.structured(Config)
     cfg = OmegaConf.merge(structured_cfg, yaml_cfg)
@@ -97,11 +97,8 @@ if __name__ == "__main__":
                         help='Configuration filename without extension. This file should be in the configs folder (default: config)')
     parser.add_argument('-ls', '--load-snapshot', dest="load_snapshot", action='store_true',
                         help='Load saved snapshot (default: False)')
-    parser.add_argument('-da', '--data-augmentation', dest="data_augmentation",
-                        action='store_true', help='Train data augmentation (default: False)')
     parser.add_argument('-dis', '--distributed', dest="distributed",
                         action='store_true', help='Distributed training (default: False)')
     args = parser.parse_args()
 
-    main(args.config, args.data_augmentation,
-         args.distributed, args.load_snapshot)
+    main(args.config, args.distributed, args.load_snapshot)
