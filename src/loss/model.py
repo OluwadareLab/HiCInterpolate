@@ -2,10 +2,9 @@ from torch.nn import L1Loss, MSELoss, Module, functional as F
 from torch import Tensor
 from typing import Tuple, Dict
 import torch
-import config
 import numpy as np
 import scipy.io as sio
-from metrics import calculate_ssim as ssim
+from ..misc import metrics as metric
 
 
 class _L1Loss(Module):
@@ -41,9 +40,12 @@ class CharbonnierLoss(Module):
 class SymmetryLoss(Module):
     def __init__(self):
         super().__init__()
+        self.criterion = L1Loss()
 
     def forward(self, pred: Tensor):
-        loss = L1Loss(pred, pred.transpose(-1, -2))
+        # assert pred.shape[-1] == pred.shape[-2]
+        transposed = pred.transpose(-1, -2)
+        loss = self.criterion(pred, transposed)
         return loss
 
 
@@ -52,7 +54,7 @@ class SSIMLoss(Module):
         super().__init__()
 
     def forward(self, pred: Tensor, y: Tensor):
-        loss = 1-ssim(pred, y)
+        loss = 1-metric.calculate_ssim(pred, y)
         return loss
 
 
@@ -75,9 +77,10 @@ class TVLoss(Module):
 
 
 class _VGG(Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
-        vgg = sio.loadmat(config.VGG_MODEL_FILE)
+        self.cfg = cfg
+        vgg = sio.loadmat(self.cfg.paths.vgg_model_file)
         self.vgg_layers = vgg['layers'][0]
 
     def layer_(self, name, input_tensor, weight=None, bias=None, stride=1):
@@ -211,15 +214,6 @@ class StyleLoss(Module):
             self.weights = weights
 
     def gram_matrix(self, features: Tensor, mask: Tensor = None) -> torch.Tensor:
-        # B, C, H, W = features.shape
-        # if mask is not None:
-        #     mask = F.interpolate(mask, size=(
-        #         H, W), mode='bilinear', align_corners=False)
-        #     features = features * mask
-        # features = features.view(B, C, -1)
-        # gram = torch.bmm(features, features.transpose(1, 2))
-        # gram /= ((C * H * W))
-
         b, c, h, w = features.shape
         if mask is not None:
             mask = F.interpolate(mask, size=(
@@ -247,9 +241,10 @@ class StyleLoss(Module):
 
 
 class CombinedLoss(Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
-        self.vgg = _VGG()
+        self.cfg = cfg
+        self.vgg = _VGG(self.cfg)
         self.vgg_loss = VGGLoss()  # Perceptual loss
         self.style_loss = StyleLoss()  # Style loss
         self.l1_loss = _L1Loss()
@@ -272,7 +267,7 @@ class CombinedLoss(Module):
         loss = torch.tensor(0.0, device=pred.device, dtype=torch.float32)
         vgg_pred = self.vgg(pred * 255.0)
         vgg_y = self.vgg(y * 255.0)
-        for weight_params in config.LOSS_WEIGHT_PARAMETERS:
+        for weight_params in self.cfg.loss.weight_parameters:
             weight = self.weight_schedule(
                 weight_params=weight_params, epoch=epoch)
             if weight_params["name"] == "l1" and weight > 0.0:
@@ -287,14 +282,6 @@ class CombinedLoss(Module):
                 charbonnier_loss = self.charbonnier_loss(pred, y)
                 charbonnier_loss = charbonnier_loss * weight
                 loss += charbonnier_loss
-            elif weight_params["name"] == "tv" and weight > 0.0:
-                tv_loss = self.tv_loss(pred)
-                tv_loss = tv_loss * weight
-                loss += tv_loss
-            elif weight_params["name"] == "symmetry" and weight > 0.0:
-                symmetry_loss = self.symmetry_loss(pred)
-                symmetry_loss = symmetry_loss * weight
-                loss += symmetry_loss
             elif weight_params["name"] == "ssim" and weight > 0.0:
                 ssim_loss = self.ssim_loss(pred, y)
                 ssim_loss = ssim_loss * weight
@@ -307,4 +294,12 @@ class CombinedLoss(Module):
                 style_loss = self.style_loss(vgg_pred, vgg_y)
                 style_loss = style_loss * weight
                 loss += style_loss
+            elif weight_params["name"] == "tv" and weight > 0.0:
+                tv_loss = self.tv_loss(pred)
+                tv_loss = tv_loss * weight
+                loss += tv_loss
+            elif weight_params["name"] == "symmetry" and weight > 0.0:
+                symmetry_loss = self.symmetry_loss(pred)
+                symmetry_loss = symmetry_loss * weight
+                loss += symmetry_loss
         return loss

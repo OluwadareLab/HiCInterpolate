@@ -1,10 +1,9 @@
-from feature_extractor import FeatureExtractor
-from flow_estimation import PyramidFlowEstimator
-from fusion import Fusion
-from torch import Tensor
+from ..misc import utils
 from torch.nn import Module
-import config
-import utils
+from torch import Tensor
+from ..fusion import Fusion
+from ..flow_estimation import PyramidFlowEstimator
+from ..feature_extractor import FeatureExtractor
 import torch
 import sys
 import os
@@ -12,22 +11,26 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Interpolator(Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
-        self.feature_ext = FeatureExtractor()
-        self.flow_est = PyramidFlowEstimator()
-        self.fusion = Fusion()
+        self.cfg = cfg
+        self.feature_ext = FeatureExtractor(self.cfg)
+        self.flow_est = PyramidFlowEstimator(self.cfg)
+        self.fusion = Fusion(self.cfg)
 
     def forward(self, x0: Tensor, x2: Tensor, time: Tensor) -> Tensor:
-        if config.PYRAMID_LEVEL < config.FUSION_PYRAMID_LEVEL:
+        pyramid_levels = self.cfg.model.pyramid_level
+        fusion_pyramid_levels = self.cfg.model.fusion_pyramid_level
+        if pyramid_levels < fusion_pyramid_levels:
             raise ValueError(
                 '[Error] pyramid level must be greater than or equal to fusion level')
 
         # Create input pyramid
         x0_decoded = x0
         x2_decoded = x2
-        pyramid0 = utils.build_image_pyramid(x0_decoded)
-        pyramid2 = utils.build_image_pyramid(x2_decoded)
+
+        pyramid0 = utils.build_image_pyramid(x0_decoded, pyramid_levels)
+        pyramid2 = utils.build_image_pyramid(x2_decoded, pyramid_levels)
         image_pyramid = [pyramid0, pyramid2]
 
         # Feature extractor
@@ -41,7 +44,7 @@ class Interpolator(Module):
         backward_residual_flow_pyramid = self.flow_est(
             feature_pyramids[1], feature_pyramids[0])
 
-        fusion_pyramid_levels = config.FUSION_PYRAMID_LEVEL
+        fusion_pyramid_levels = fusion_pyramid_levels
         forward_flow_pyramid = utils.flow_pyramid_synthesis(
             forward_residual_flow_pyramid)[:fusion_pyramid_levels]
         backward_flow_pyramid = utils.flow_pyramid_synthesis(

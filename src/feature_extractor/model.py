@@ -2,17 +2,17 @@ from typing import List
 from torch.nn import Module, Conv2d, AvgPool2d, Sequential, LeakyReLU, ModuleList
 from torch import Tensor
 import torch
-import config
 
 
 class SubTreeExtractor(Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
-        n = config.EXT_FEATURE_LEVEL
+        self.cfg = cfg
+        n = self.cfg.model.ext_feature_level
         self.convs = ModuleList()
-        in_channels = config.INIT_IN_CHANNELS
+        in_channels = self.cfg.model.init_in_channels
         for i in range(n):
-            out_channels = config.INIT_OUT_CHANNELS << i
+            out_channels = self.cfg.model.init_out_channels << i
             seq1 = Sequential(Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding="same"),
                               LeakyReLU(negative_slope=0.2))
             self.convs.append(seq1)
@@ -36,21 +36,23 @@ class SubTreeExtractor(Module):
 
 
 class FeatureExtractor(Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
-        self.extract_sublevels = SubTreeExtractor()
+        self.cfg = cfg
+        self.extract_sublevels = SubTreeExtractor(self.cfg)
 
     def forward(self, image_pyramid: List[Tensor]) -> List[Tensor]:
         sub_pyramids = []
+        ext_feature_level = self.cfg.model.ext_feature_level
         for i in range(len(image_pyramid)):
-            capped_sub_levels = min(len(image_pyramid), config.EXT_FEATURE_LEVEL)
+            capped_sub_levels = min(len(image_pyramid), ext_feature_level)
             sub_pyramids.append(self.extract_sublevels(
                 image_pyramid[i], capped_sub_levels))
 
         featur_pyramid = []
         for i in range(len(image_pyramid)):
             features = sub_pyramids[i][0]
-            for j in range(1, config.EXT_FEATURE_LEVEL):
+            for j in range(1, ext_feature_level):
                 if j <= i:
                     features = torch.cat(
                         [features, sub_pyramids[i-j][j]], axis=1)

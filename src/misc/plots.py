@@ -1,7 +1,5 @@
 from torch import Tensor
 import matplotlib.pyplot as plt
-import torch
-import config
 import seaborn as sns
 import numpy as np
 
@@ -9,8 +7,8 @@ plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['figure.dpi'] = 300
 
 
-def draw_real_in_out_images(x0: Tensor, y: Tensor, pred: Tensor, x1: Tensor,  epoch: int):
-    num_examples = min(config.NUM_VISUALIZATION_SAMPLES, len(y))
+def draw_real_in_out_images(cfg, x0: Tensor, y: Tensor, pred: Tensor, x1: Tensor,  epoch: int):
+    num_examples = min(cfg.eval.num_visualization_samples, len(y))
     x0_cpu = x0[:num_examples].cpu()
     y_cpu = y[:num_examples].cpu()
     pred_cpu = pred[:num_examples].cpu()
@@ -55,18 +53,18 @@ def draw_real_in_out_images(x0: Tensor, y: Tensor, pred: Tensor, x1: Tensor,  ep
         plt.axis("off")
         plt.tight_layout()
 
-    plt.savefig(f"{config.IMG_VAL_PLOT_PATH}/epoch_{epoch+1}.png", )
+    plt.savefig(f"{cfg.paths.img_val_plot_path}/epoch_{epoch+1}.png", )
     plt.close()
 
 
-def draw_metric(state):
+def draw_metric(cfg, state):
     plt.style.use("ggplot")
     plt.figure()
     plt.plot(state["lr"])
     plt.xlabel('epoch')
     plt.ylabel('rate')
     plt.title('learning rate')
-    plt.savefig(config.LR_FILE)
+    plt.savefig(cfg.paths.lr_file)
     plt.close()
 
     plt.style.use("ggplot")
@@ -77,7 +75,7 @@ def draw_metric(state):
     plt.xlabel("epoch")
     plt.ylabel("loss")
     plt.legend(loc="lower left")
-    plt.savefig(config.TRAIN_VAL_PLOT_FILE)
+    plt.savefig(cfg.paths.train_val_plot_file)
     plt.close()
 
     plt.figure()
@@ -85,7 +83,7 @@ def draw_metric(state):
     plt.title("ssim on validation set")
     plt.xlabel("epoch")
     plt.ylabel("value")
-    plt.savefig(config.SSIM_EVAL_PLOT_FILE)
+    plt.savefig(cfg.paths.ssim_eval_plot_file)
     plt.close()
 
     plt.figure()
@@ -93,5 +91,5 @@ def draw_metric(state):
     plt.title("psnr on validation set")
     plt.xlabel("epoch")
     plt.ylabel("value")
-    plt.savefig(config.PSNR_EVAL_PLOT_FILE)
+    plt.savefig(cfg.paths.psnr_eval_plot_file)
     plt.close()

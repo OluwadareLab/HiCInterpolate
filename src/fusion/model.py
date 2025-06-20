@@ -1,8 +1,7 @@
+import torch
 from typing import List
 from torch.nn import Module, Conv2d, LeakyReLU, ReLU, functional as F, ModuleList
 from torch import Tensor
-import torch
-import config
 
 
 class Block(Module):
@@ -26,27 +25,33 @@ class Block(Module):
 
 
 class Fusion(Module):
-    def __init__(self):
+    def __init__(self, cfg):
         super().__init__()
+        self.cfg = cfg
         self.convs = ModuleList()
-        self.levels = config.FUSION_PYRAMID_LEVEL
+        self.levels = self.cfg.model.fusion_pyramid_level
+        init_in_channels = self.cfg.model.init_in_channels
+        init_out_channels = self.cfg.model.init_out_channels
         prev_out_channels = 0
-        for i in range(config.FUSION_PYRAMID_LEVEL-1):
-            m = config.UNIQUE_LEVELS
-            k = config.INIT_OUT_CHANNELS
+        for i in range(self.levels-1):
+            m = self.cfg.model.unique_levels
+            k = init_out_channels
             out_channels = (k << i) if i < m else (k << m)
-            in_channels = (prev_out_channels + out_channels + config.INIT_IN_CHANNELS) * 2 + 4
+            in_channels = (prev_out_channels + out_channels +
+                           init_in_channels) * 2 + 4
 
             convs = ModuleList()
             channels = out_channels*2 if i < m else in_channels
-            convs.append(Conv2d(in_channels=channels, out_channels=out_channels, kernel_size=2, padding='same'))
+            convs.append(Conv2d(in_channels=channels,
+                         out_channels=out_channels, kernel_size=2, padding='same'))
             channels = in_channels + out_channels
-            convs.append(Block(in_channels=channels, out_channels=out_channels, kernel_size=3))
+            convs.append(Block(in_channels=channels,
+                         out_channels=out_channels, kernel_size=3))
             self.convs.append(convs)
             prev_out_channels = prev_out_channels + out_channels
 
         self.output_conv = Conv2d(
-            in_channels=config.INIT_OUT_CHANNELS, out_channels=config.INIT_IN_CHANNELS, kernel_size=1)
+            in_channels=init_out_channels, out_channels=init_in_channels, kernel_size=1)
 
     def forward(self, pyramid: List[Tensor]) -> Tensor:
         if len(pyramid) != self.levels:

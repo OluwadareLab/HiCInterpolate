@@ -1,11 +1,9 @@
 from typing import List
 from torch.nn import functional as F, AvgPool2d
 import torch
-import config
 
 
-def build_image_pyramid(image: torch.Tensor) -> List[torch.Tensor]:
-    levels = config.PYRAMID_LEVEL
+def build_image_pyramid(image: torch.Tensor, levels: int) -> List[torch.Tensor]:
     pyramid = []
     pool = AvgPool2d(kernel_size=2, stride=2, padding=0)
     for i in range(0, levels):

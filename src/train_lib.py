@@ -1,47 +1,45 @@
-import pandas as pd
-import time
-import gc
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader
+from torch.optim import Adam
+from tqdm import tqdm
+from .loss import ExponentialDecay, CombinedLoss
+from .interpolator import Interpolator
+from .misc import plots as plot, metrics as metric
+import torch.distributed as dist
+import torch
 import traceback
-import config
+import gc
+import time
+import pandas as pd
 import sys
 import os
-import torch.distributed as dist
-from plots import *
-from metrics import *
-from loss.model import CombinedLoss
-from interpolator.model import Interpolator
-from tqdm import tqdm
-from scheduler import ExponentialDecay
-from torch.optim import Adam
-from torch.utils.data import DataLoader
-from torch.nn.parallel import DistributedDataParallel as DDP
-
-
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Trainer:
-    def __init__(self, train_dl: DataLoader, val_dl: DataLoader, save_every: int = 20, load_snapshot: bool = False, isDistributed: bool = False) -> None:
+    def __init__(self, cfg, train_dl: DataLoader, val_dl: DataLoader, load_snapshot: bool = False, isDistributed: bool = False) -> None:
+        self.cfg = cfg
         self.isDistributed = dist.is_available() and dist.is_initialized()
         if isDistributed:
             self.device = int(os.environ["LOCAL_RANK"])
-            self.model = Interpolator().to(self.device)
+            self.model = Interpolator(self.cfg).to(self.device)
             self.model = DDP(self.model, device_ids=[self.device])
         else:
-            self.device = config.DEVICE
-            self.model = Interpolator().to(self.device)
+            self.device = self.cfg.device
+            self.model = Interpolator(self.cfg).to(self.device)
 
-        self.loss_fn = CombinedLoss()
-        self.optimizer = Adam(self.model.parameters(), lr=config.LEARNING_RATE)
-        self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=config.DECAY_STEPS,
-                                          decay_rate=config.DECAY_RATE, staircase=config.LEARNING_RATE_STAIRCASE)
+        self.loss_fn = CombinedLoss(self.cfg)
+        self.optimizer = Adam(self.model.parameters(),
+                              lr=self.cfg.training.learning_rate)
+        self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
+                                          decay_rate=self.cfg.training.decay_rate, staircase=self.cfg.training.lr_staircase)
 
         self.train_dl = train_dl
         self.train_steps = len(self.train_dl)
         self.batch_size = train_dl.batch_size
         self.val_dl = val_dl
         self.val_steps = len(self.val_dl)
-        self.save_every = save_every
+        self.save_every = self.cfg.training.save_every
 
         self.epochs_run = 0
         self.train_loss_per_epoch = 0
@@ -53,9 +51,9 @@ class Trainer:
         self.metric_columns = ['epoch', 'lr', 'train_loss',
                                'val_loss', 'val_psnr', 'val_ssim', 'best_val']
         self.best_val = -1.0
-        self.best_model_file = f'{config.MODEL_STATE_DIR}/{config.MODEL_NAME}_best_model.pt'
+        self.best_model_file = f'{self.cfg.paths.model_state_dir}/{self.cfg.model.name}_best_model.pt'
 
-        self.snapshot_file = f'{config.MODEL_STATE_DIR}/{config.MODEL_NAME}_snapshot.pt'
+        self.snapshot_file = f'{self.cfg.paths.model_state_dir}/{self.cfg.model.name}_snapshot.pt'
         if load_snapshot and os.path.exists(self.snapshot_file):
             print(f"[INFO][{self.device}] loading snapshot...")
             self._load_snapshot(self.snapshot_file)
@@ -139,8 +137,8 @@ class Trainer:
             'best_val': self.state["best_val"]
         }, columns=self.metric_columns)
 
-        metrics_df.to_csv(config.EVAL_METRICS_FILE, index=False)
-        draw_metric(self.state)
+        metrics_df.to_csv(self.cfg.paths.eval_metrics_file, index=False)
+        plot.draw_metric(self.cfg, self.state)
 
     def _run_epoch(self, epoch):
         self.train_loss_per_epoch = 0
@@ -179,12 +177,12 @@ class Trainer:
                 pred, loss = self._run_batch(x0, y, x1, time_frame, True)
                 local_val_loss += loss
                 if not drawn:
-                    draw_real_in_out_images(
-                        x0=x0, y=y, x1=x1, pred=pred, epoch=epoch)
+                    plot.draw_real_in_out_images(
+                        self.cfg, x0=x0, y=y, x1=x1, pred=pred, epoch=epoch)
                     drawn = True
 
-                psnr_val = calculate_psnr(pred, y)
-                ssim_val = calculate_ssim(pred, y)
+                psnr_val = metric.calculate_psnr(pred, y)
+                ssim_val = metric.calculate_ssim(pred, y)
                 local_val_psnr += psnr_val.item()
                 local_val_ssim += ssim_val.item()
 

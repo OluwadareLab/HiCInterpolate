@@ -3,8 +3,8 @@
 #SBATCH --partition=gpu-long
 #SBATCH --nodes=1
 #SBATCH --nodelist=g001
-#SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:1
+#SBATCH --ntasks-per-node=2
+#SBATCH --gres=gpu:2
 #SBATCH --time=30-00:00:00
 #SBATCH --job-name=hici
 #SBATCH --output=/home/hchowdhu/Documents/HiCInterpolate_Set_1/_%j.log
@@ -25,7 +25,7 @@ echo "MASTER_PORT=$MASTER_PORT"
 echo "Job started on $(hostname) at $(date)"
 
 torchrun \
---nproc-per-node=1 \
+--nproc-per-node=2 \
 --nnodes=1 \
 --node_rank=$SLURM_NODEID \
 --rdzv-id=$RANDOM \
@@ -34,14 +34,12 @@ torchrun \
 --master_addr=$MASTER_ADDR \
 --master_port=$MASTER_PORT \
 train.py \
---epochs 1000 \
---batch-size 32 \
---save-every 10 \
+--config "config"\
 --distributed \
 --load-snapshot
 
 echo "Job finished at $(date)"
 
 # torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --epochs 1000 --batch-size 12 --save-every 10 --data-augmentation --distributed --load-snapshot
-# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --epochs 100 --batch-size 32 --save-every 10 --distributed
+# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --config config --distributed
 

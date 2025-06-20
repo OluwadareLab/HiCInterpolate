@@ -1,6 +1,7 @@
-name: af
+name: hicinterpolate
 channels:
   - conda-forge
+  - bioconda
   - nvidia
   - pytorch
 dependencies:
@@ -10,16 +11,12 @@ dependencies:
   - torchaudio=2.1.1
   - pytorch-cuda=11.8
   - numpy=1.26
+  - cupy
   - torchmetrics=1.7.1
   - matplotlib=3.9.4
   - pandas=2.2.3
   - scipy=1.13.1
   - tqdm=4.67.1
-  - hydra
-
-# conda install -c conda-forge numpy=1.26
-# conda install -c conda-forge matplotlib pandas scipy tqdm
-
-# torchrun --nproc_per_node=2 --nnodes=2 --node_rank=$NODE_RANK --master_addr=$MASTER_ADDR --master_port=29500 train.py
-
-# torchrun --nproc_per_node=2 --nnodes=2 --node_rank=$NODE_RANK --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT train.py
+  - cooler
+  - seaborn
+  - omegaconf=2.3.0

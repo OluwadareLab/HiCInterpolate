@@ -1,12 +1,7 @@
 import os
 import numpy as np
-from PIL import Image
 import cooler as cool
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 from scipy.ndimage import gaussian_filter
-import scipy.stats as st
-from scipy.ndimage import convolve
 import cupy as cp
 from cupyx.scipy.ndimage import gaussian_filter
 
