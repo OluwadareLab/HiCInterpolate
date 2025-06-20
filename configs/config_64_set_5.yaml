@@ -2,6 +2,7 @@ device: cuda
 
 paths:
   root_dir: /home/hchowdhu/Documents/HiCInterpolate
+  root_dir: /home/hchowdhu/Documents/HiCInterpolate
   data_dir: /mmfs1/home/hchowdhu/data/hic_triplets/normalized
   record_file: ${paths.data_dir}/${data.patch}/train.txt
   image_dir: ${paths.data_dir}/${data.patch}
