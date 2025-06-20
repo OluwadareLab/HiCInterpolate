@@ -21,7 +21,7 @@ paths:
   log_file: ${paths.output_dir}/${model.name}.log
 
 data:
-  patch: 64
+  patch: 256
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
@@ -41,17 +41,17 @@ model:
   name: hicinterpolate_${data.patch}
   init_in_channels: 1
   init_out_channels: 4
-  pyramid_level: 4
-  ext_feature_level: 3
-  unique_levels: 2
+  pyramid_level: 6
+  ext_feature_level: 4
+  unique_levels: 3
   flow:
-    num_of_convs: [3, 3, 3]
-    out_channels: [16, 32, 64]
-  fusion_pyramid_level: 4
+    num_of_convs: [3, 3, 3, 3]
+    out_channels: [32, 64, 128, 256]
+  fusion_pyramid_level: 5
 
 loss:
   weight_parameters:
-    - name: charbonnier
+    - name: l1
       boundaries: [0]
       values: [1.0, 1.0]
     - name: ssim
