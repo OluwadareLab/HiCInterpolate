@@ -7,7 +7,7 @@
 #SBATCH --gres=gpu:2
 #SBATCH --time=30-00:00:00
 #SBATCH --job-name=hici
-#SBATCH --output=/home/mohit/Documents/project/interpolation/HiCInterpolate/hici_%j.log
+#SBATCH --output=/home/hchowdhu/Documents/HiCInterpolatee/hici_%j.log
 
 module load anaconda
 source $(conda info --base)/etc/profile.d/conda.sh
@@ -20,7 +20,7 @@ MASTER_PORT=$(python -c "import socket; s=socket.socket(); s.bind(('',0)); print
 echo "MASTER_ADDR=$MASTER_ADDR"
 echo "MASTER_PORT=$MASTER_PORT"
 
-echo "Job started on $(hostname) at $(date)"
+echo "Job ($CONFIG_FILE) started on $(hostname) at $(date)"
 
 torchrun \
 --nproc-per-node=2 \
@@ -34,6 +34,6 @@ torchrun \
 train.py \
 --distributed \
 --load-snapshot \
---config config_128_set_1
+--config "$CONFIG_FILE"
 
 echo "Job finished at $(date)"
