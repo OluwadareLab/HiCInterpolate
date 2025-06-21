@@ -20,9 +20,7 @@ MASTER_PORT=$(python -c "import socket; s=socket.socket(); s.bind(('',0)); print
 echo "MASTER_ADDR=$MASTER_ADDR"
 echo "MASTER_PORT=$MASTER_PORT"
 
-CONFIG_FILE=$1
-
-echo "Job ($CONFIG_FILE) started on $(hostname) at $(date)"
+echo "Job started on $(hostname) at $(date)"
 
 torchrun \
 --nproc-per-node=2 \
@@ -36,6 +34,6 @@ torchrun \
 train.py \
 --distributed \
 --load-snapshot \
---config "$CONFIG_FILE"
+--config config_128_set_1
 
 echo "Job finished at $(date)"
