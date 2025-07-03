@@ -1,0 +1,68 @@
+device: cuda
+
+paths:
+  root_dir: /home/hchowdhu/Documents/HiCInterpolate
+  data_dir: /mmfs1/home/hchowdhu/data/hic_triplets/normalized
+  record_file: ${paths.data_dir}/${data.patch}/train.txt
+  image_dir: ${paths.data_dir}/${data.patch}
+  vgg_model_file: ${paths.data_dir}/models/imagenet-vgg-verydeep-19.mat
+
+  model_file: ${paths.root_dir}/models/${model.name}.pth
+  model_state_dir: ${paths.root_dir}/models
+
+  output_dir: ${paths.root_dir}/output
+  img_val_plot_path: ${paths.output_dir}
+  train_val_plot_file: ${paths.output_dir}/${model.name}_train_val_plot.png
+  test_plot_file: ${paths.output_dir}/${model.name}_test_plot.png
+  eval_metrics_file: ${paths.output_dir}/${model.name}_val_metrics.csv
+  psnr_eval_plot_file: ${paths.output_dir}/${model.name}_psnr_plot.png
+  ssim_eval_plot_file: ${paths.output_dir}/${model.name}_ssim_plot.png
+  lr_file: ${paths.output_dir}/${model.name}_lr_plot.png
+  log_file: ${paths.output_dir}/${model.name}.log
+
+data:
+  patch: 512
+  interpolator_images_map:
+    frame_0: img1.npy
+    frame_1: img2.npy
+    frame_2: img3.npy
+  train_val_ratio: [0.85, 0.15]
+  batch_size: 8
+
+training:
+  epochs: 1000
+  save_every: 10
+  learning_rate: 0.0001
+  decay_steps: 250
+  decay_rate: 0.5623
+  lr_staircase: true
+
+model:
+  name: hicinterpolate_${data.patch}
+  init_in_channels: 1
+  init_out_channels: 4
+  pyramid_level: 6
+  ext_feature_level: 4
+  unique_levels: 3
+  flow:
+    num_of_convs: [3, 3, 3, 3]
+    out_channels: [64, 128, 256, 512]
+  fusion_pyramid_level: 5
+
+loss:
+  weight_parameters:
+    - name: charbonnier
+      boundaries: [0]
+      values: [1.0, 1.0]
+    - name: vgg
+      boundaries: [500]
+      values: [1.0, 0.75]
+    - name: style
+      boundaries: [500]
+      values: [0.0, 25.00]
+    - name: symmetry
+      boundaries: [0]
+      values: [1.0, 1.0]
+
+eval:
+  num_visualization_samples: 2

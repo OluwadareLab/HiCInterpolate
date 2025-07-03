@@ -10,7 +10,7 @@ root_path = f"/home/mohit/Documents/project/interpolation/data"
 out_root_path = f"/home/mohit/Documents/project/interpolation/data/triplets/normalized"
 resolutions = [10000]
 balance = False
-patch_sizes = [64, 128, 256]
+patch_sizes = [512]
 cmap = "YlOrRd"
 
 train_organisms = ["human"]

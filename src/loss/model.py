@@ -180,7 +180,7 @@ class _VGG(Module):
 class VGGLoss(Module):
     def __init__(self, weights=None):
         super().__init__()
-        self.criterion = L1Loss()
+        self.criterion = MSELoss()
         if weights is None:
             self.weights = [1.0 / 2.6, 1.0 / 4.8,
                             1.0 / 3.7, 1.0 / 5.6, 10.0 / 1.5]
@@ -205,7 +205,7 @@ class VGGLoss(Module):
 class StyleLoss(Module):
     def __init__(self, weights=None):
         super().__init__()
-        self.criterion = L1Loss()
+        self.criterion = MSELoss()
         if weights is None:
             self.weights = [1.0 / 2.6, 1.0 / 4.8,
                             1.0 / 3.7, 1.0 / 5.6, 10.0 / 1.5]

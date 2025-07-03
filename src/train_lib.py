@@ -164,6 +164,7 @@ class Trainer:
             time_frame = time_frame.to(self.device)
             pred, loss = self._run_batch(x0, y, x1, time_frame)
             local_train_loss += loss
+            del x0, y, x1, time_frame
 
         self.scheduler.step()
 
@@ -184,11 +185,14 @@ class Trainer:
                     plot.draw_real_in_out_images(
                         self.cfg, x0=x0, y=y, x1=x1, pred=pred, epoch=epoch)
                     drawn = True
+                
 
                 psnr_val = metric.calculate_psnr(pred, y)
                 ssim_val = metric.calculate_ssim(pred, y)
                 local_val_psnr += psnr_val.item()
                 local_val_ssim += ssim_val.item()
+
+                del x0, y, x1, time_frame
 
         if self.isDistributed:
             local_train_steps = torch.tensor(
