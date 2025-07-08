@@ -31,16 +31,19 @@ class TripletDataset(Dataset):
 
 
 class CustomDataset:
-    def __init__(self, config):
-        self.cfg = config
+    def __init__(self, record_file: str, img_dir: str, img_map: dict, train_val_ratio: List = [0, 0]):
+        self.record_file = record_file
+        self.img_dir = img_dir
+        self.img_map = img_map
+        self.train_val_ratio = train_val_ratio
 
-    def get_train_val_dl(self) -> Tuple[Dataset, Dataset]:
-        record_file = self.cfg.paths.record_file
+    def _prep_triplets(self):
+        record_file = self.record_file
         with open(record_file, "r") as fid:
             triplets_list = np.loadtxt(fid, dtype=str)
 
-        image_dir = self.cfg.paths.image_dir
-        image_map = self.cfg.data.interpolator_images_map
+        image_dir = self.img_dir
+        image_map = self.img_map
         triplet_dicts = []
         for triplet in triplets_list:
             triplet_dict = {
@@ -49,11 +52,21 @@ class CustomDataset:
             }
             triplet_dict["time"] = 0.5
             triplet_dicts.append(triplet_dict)
-        num_of_sample = len(triplet_dicts)
+
         random.shuffle(triplet_dicts)
 
-        train_len = int(self.cfg.data.train_val_ratio[0] * num_of_sample)
-        val_len = int(self.cfg.data.train_val_ratio[1] * num_of_sample)
+        return triplet_dicts
+
+    def _get_test_dl(self) -> Dataset:
+        triplet_dicts = self._prep_triplets()
+        test_ds = TripletDataset(triplet_dicts=triplet_dicts)
+        return test_ds
+
+    def _get_train_dl(self) -> Tuple[Dataset, Dataset]:
+        triplet_dicts = self._prep_triplets()
+        num_of_sample = len(triplet_dicts)
+        train_len = int(self.train_val_ratio[0] * num_of_sample)
+        val_len = int(self.train_val_ratio[1] * num_of_sample)
         train_dicts = triplet_dicts[:train_len]
         val_dicts = triplet_dicts[train_len:train_len+val_len]
 

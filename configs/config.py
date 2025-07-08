@@ -3,25 +3,28 @@ from typing import List, Dict
 
 
 @dataclass
-class PathsConfig:
-    root_dir: str
-    data_dir: str
-    record_file: str
-    image_dir: str
-    vgg_model_file: str
+class DirConfig:
+    root: str
+    data: str
+    image: str
+    model_state: str
+    output: str
 
-    model_file: str
-    model_state_dir: str
 
-    output_dir: str
-    img_val_plot_path: str
-    train_val_plot_file: str
-    test_plot_file: str
-    eval_metrics_file: str
-    psnr_eval_plot_file: str
-    ssim_eval_plot_file: str
-    lr_file: str
-    log_file: str
+@dataclass
+class FileConfig:
+    train: str
+    test: str
+    vgg_model: str
+    snapshot: str
+    model: str
+    train_val_plot: str
+    test_hic_map: str
+    eval_metrics: str
+    psnr_eval_plot: str
+    ssim_eval_plot: str
+    lr_plot: str
+    log: str
 
 
 @dataclass
@@ -80,7 +83,8 @@ class EvalConfig:
 @dataclass
 class Config:
     device: str
-    paths: PathsConfig
+    dir: DirConfig
+    file: FileConfig
     data: DataConfig
     training: TrainingConfig
     model: ModelConfig

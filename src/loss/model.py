@@ -79,7 +79,7 @@ class _VGG(Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        vgg = sio.loadmat(self.cfg.paths.vgg_model_file)
+        vgg = sio.loadmat(self.cfg.file.vgg_model)
         self.vgg_layers = vgg['layers'][0]
 
     def layer_(self, name, input_tensor, weight=None, bias=None, stride=1):

@@ -7,7 +7,7 @@ from cupyx.scipy.ndimage import gaussian_filter
 
 
 root_path = f"/home/mohit/Documents/project/interpolation/data"
-out_root_path = f"/home/mohit/Documents/project/interpolation/data/triplets/normalized"
+out_root_path = f"/home/mohit/Documents/project/interpolation/data/triplets/natural"
 resolutions = [10000]
 balance = False
 patch_sizes = [512]
@@ -116,7 +116,8 @@ def fast_gaussian_filter(matrix, sigma=4):
 
 def normalization(matrix):
     matrix = np.nan_to_num(matrix, nan=0.0, posinf=0.0, neginf=0.0)
-    norm_matrix = fast_gaussian_filter(matrix)
+    # norm_matrix = fast_gaussian_filter(matrix)
+    norm_matrix = matrix
     min_val = np.min(norm_matrix)
     max_val = np.max(norm_matrix)
     range_val = max_val - min_val

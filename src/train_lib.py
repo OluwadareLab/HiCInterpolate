@@ -5,6 +5,7 @@ from tqdm import tqdm
 from .loss import ExponentialDecay, CombinedLoss
 from .interpolator import Interpolator
 from .misc import plots as plot, metrics as metric
+from collections import OrderedDict
 import torch.distributed as dist
 import torch
 import traceback
@@ -13,6 +14,7 @@ import time
 import pandas as pd
 import sys
 import os
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -22,7 +24,7 @@ class Trainer:
         self.log = log
         self.isDistributed = dist.is_available() and dist.is_initialized()
         if isDistributed:
-            self.device = int(os.environ["LOCAL_RANK"])
+            self.device = int(os.environ['LOCAL_RANK'])
             self.model = Interpolator(self.cfg).to(self.device)
             self.model = DDP(self.model, device_ids=[self.device])
         else:
@@ -47,32 +49,48 @@ class Trainer:
         self.val_loss_per_epoch = 0
         self.val_psnr_per_epoch = 0
         self.val_ssim_per_epoch = 0
-        self.state = {"epoch": [], "lr": [], "train_loss": [], "val_loss": [],
-                      "val_psnr": [], "val_ssim": [], "best_val": []}
+        self.state = {'epoch': [], 'lr': [], 'train_loss': [], 'val_loss': [],
+                      'val_psnr': [], 'val_ssim': [], 'best_val': []}
         self.metric_columns = ['epoch', 'lr', 'train_loss',
                                'val_loss', 'val_psnr', 'val_ssim', 'best_val']
         self.best_val = -1.0
-        self.best_model_file = f'{self.cfg.paths.model_state_dir}/{self.cfg.model.name}_best_model.pt'
+        self.best_model = f'{self.cfg.file.model}'
 
-        self.snapshot_file = f'{self.cfg.paths.model_state_dir}/{self.cfg.model.name}_snapshot.pt'
-        if load_snapshot and os.path.exists(self.snapshot_file):
+        self.snapshot = f'{self.cfg.file.snapshot}'
+        if load_snapshot and os.path.exists(self.snapshot):
             self.log.info(f"[{self.device}] loading snapshot...")
             print(f"[INFO][{self.device}] loading snapshot...")
-            self._load_snapshot(self.snapshot_file)
+            self._load_snapshot(self.snapshot)
 
-    def _load_snapshot(self, snapshot_file):
+    def _remove_module_prefix(self, state_dict):
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k.replace("module.", "")
+            new_state_dict[name] = v
+        return new_state_dict
+
+    def _load_snapshot(self, snapshot):
         if self.isDistributed:
             loc = f"cuda:{self.device}"
-            snapshot = torch.load(snapshot_file, map_location=loc)
+            snapshot = torch.load(snapshot, map_location=loc)
+            self.epochs_run = snapshot['epoch']
+            self.model.load_state_dict(snapshot['model'])
+            self.optimizer.load_state_dict(snapshot['optimizer'])
+            self.scheduler.load_state_dict(snapshot['scheduler'])
+            self.state = snapshot['state']
+            self.best_val = snapshot['state']['best_val'][-1]
         else:
-            snapshot = torch.load(snapshot_file, map_location=self.device)
-
-        self.epochs_run = snapshot["epoch"]
-        self.model.load_state_dict(snapshot["model"])
-        self.optimizer.load_state_dict(snapshot["optimizer"])
-        self.scheduler.load_state_dict(snapshot["scheduler"])
-        self.state = snapshot["state"]
-        self.best_val = snapshot["state"]["best_val"][-1]
+            snapshot = torch.load(snapshot, map_location=self.device)
+            self.epochs_run = snapshot['epoch']
+            state_dict = self._remove_module_prefix(snapshot['model'])
+            self.model.load_state_dict(state_dict)
+            state_dict = self._remove_module_prefix(snapshot['optimizer'])
+            self.optimizer.load_state_dict(state_dict)
+            state_dict = self._remove_module_prefix(snapshot['scheduler'])
+            self.scheduler.load_state_dict(state_dict)
+            state_dict = self._remove_module_prefix(snapshot['state'])
+            self.state = state_dict
+            self.best_val = state_dict['best_val'][-1]
         self.log.info(
             f"[{self.device}] resuming training from snapshot at epoch {self.epochs_run}")
         print(
@@ -99,12 +117,12 @@ class Trainer:
         self.val_psnr_per_epoch = local_val_psnr / local_val_steps
         self.val_ssim_per_epoch = local_val_ssim / local_val_steps
 
-        self.state["epoch"].append(epoch+1)
-        self.state["lr"].append(self.scheduler.get_last_lr()[0])
-        self.state["train_loss"].append(self.train_loss_per_epoch)
-        self.state["val_loss"].append(self.val_loss_per_epoch)
-        self.state["val_psnr"].append(self.val_psnr_per_epoch)
-        self.state["val_ssim"].append(self.val_ssim_per_epoch)
+        self.state['epoch'].append(epoch+1)
+        self.state['lr'].append(self.scheduler.get_last_lr()[0])
+        self.state['train_loss'].append(self.train_loss_per_epoch)
+        self.state['val_loss'].append(self.val_loss_per_epoch)
+        self.state['val_psnr'].append(self.val_psnr_per_epoch)
+        self.state['val_ssim'].append(self.val_ssim_per_epoch)
 
     def _get_model_stats(self, epoch: int):
         snapshot = {
@@ -118,15 +136,15 @@ class Trainer:
 
     def _save_snapshot(self, epoch: int):
         snapshot = self._get_model_stats(epoch)
-        torch.save(snapshot, self.snapshot_file)
+        torch.save(snapshot, self.snapshot)
         print(
-            f"[DEBUG][{self.device}] epoch {epoch+1} saved snapshot at {self.snapshot_file}")
+            f"[DEBUG][{self.device}] epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int):
         if self.val_ssim_per_epoch > self.best_val:
             self.best_val = self.val_ssim_per_epoch
             snapshot = self._get_model_stats(epoch)
-            torch.save(snapshot, self.best_model_file)
+            torch.save(snapshot, self.best_model)
             self.log.debug(
                 f"[{self.device}] epoch {epoch+1} saved best model.")
             print(
@@ -143,7 +161,7 @@ class Trainer:
             'best_val': self.state["best_val"]
         }, columns=self.metric_columns)
 
-        metrics_df.to_csv(self.cfg.paths.eval_metrics_file, index=False)
+        metrics_df.to_csv(self.cfg.file.eval_metrics, index=False)
         plot.draw_metric(self.cfg, self.state)
 
     def _run_epoch(self, epoch):
@@ -157,7 +175,7 @@ class Trainer:
             self.train_dl.sampler.set_epoch(epoch)
 
         local_train_loss = 0
-        for idx, (x0, y, x1, time_frame) in enumerate(tqdm(self.train_dl)):
+        for _, (x0, y, x1, time_frame) in enumerate(tqdm(self.train_dl)):
             x0 = x0.to(self.device)
             y = y.to(self.device)
             x1 = x1.to(self.device)
@@ -173,7 +191,6 @@ class Trainer:
         local_val_ssim = 0
         with torch.no_grad():
             self.model.eval()
-            drawn = False
             for _, (x0, y, x1, time_frame) in enumerate(self.val_dl):
                 x0 = x0.to(self.device)
                 y = y.to(self.device)
@@ -181,11 +198,6 @@ class Trainer:
                 time_frame = time_frame.to(self.device)
                 pred, loss = self._run_batch(x0, y, x1, time_frame, True)
                 local_val_loss += loss
-                if not drawn:
-                    plot.draw_real_in_out_images(
-                        self.cfg, x0=x0, y=y, x1=x1, pred=pred, epoch=epoch)
-                    drawn = True
-                
 
                 psnr_val = metric.calculate_psnr(pred, y)
                 ssim_val = metric.calculate_ssim(pred, y)

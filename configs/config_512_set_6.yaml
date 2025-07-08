@@ -1,24 +1,25 @@
 device: cuda
 
-paths:
-  root_dir: /home/hchowdhu/Documents/HiCInterpolate
-  data_dir: /mmfs1/home/hchowdhu/data/hic_triplets/normalized
-  record_file: ${paths.data_dir}/${data.patch}/train.txt
-  image_dir: ${paths.data_dir}/${data.patch}
-  vgg_model_file: ${paths.data_dir}/models/imagenet-vgg-verydeep-19.mat
+dir:
+  root: /home/hchowdhu/Documents/HiCInterpolate
+  model_state: ${dir.root}/models
+  output: ${dir.root}/output
+  data: /mmfs1/home/hchowdhu/data/hic_triplets/normalized
+  image: ${dir.data}/${data.patch}
 
-  model_file: ${paths.root_dir}/models/${model.name}.pth
-  model_state_dir: ${paths.root_dir}/models
-
-  output_dir: ${paths.root_dir}/output
-  img_val_plot_path: ${paths.output_dir}
-  train_val_plot_file: ${paths.output_dir}/${model.name}_train_val_plot.png
-  test_plot_file: ${paths.output_dir}/${model.name}_test_plot.png
-  eval_metrics_file: ${paths.output_dir}/${model.name}_val_metrics.csv
-  psnr_eval_plot_file: ${paths.output_dir}/${model.name}_psnr_plot.png
-  ssim_eval_plot_file: ${paths.output_dir}/${model.name}_ssim_plot.png
-  lr_file: ${paths.output_dir}/${model.name}_lr_plot.png
-  log_file: ${paths.output_dir}/${model.name}.log
+file:
+  train: ${dir.image}/train.txt
+  test: ${dir.image}/test.txt
+  vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
+  snapshot: ${dir.model_state}/${model.name}_snapshot.pt
+  model: ${dir.model_state}/${model.name}.pt
+  train_val_plot: ${dir.output}/${model.name}_train_val_plot.png
+  test_hic_map: ${dir.output}/${model.name}_hic_map.jpg
+  eval_metrics: ${dir.output}/${model.name}_val_metrics.csv
+  psnr_eval_plot: ${dir.output}/${model.name}_psnr_plot.png
+  ssim_eval_plot: ${dir.output}/${model.name}_ssim_plot.png
+  lr_plot: ${dir.output}/${model.name}_lr_plot.png
+  log: ${dir.output}/${model.name}.log
 
 data:
   patch: 512

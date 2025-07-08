@@ -40,6 +40,6 @@ train.py \
 
 echo "Job finished at $(date)"
 
-# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --distributed --load-snapshot --config config_64_set_1
-# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 train.py --distributed --config config
+# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --load-snapshot --train --test --config config_64_set_1
+# torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_64_set_1
 
