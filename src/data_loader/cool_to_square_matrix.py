@@ -7,10 +7,10 @@ from cupyx.scipy.ndimage import gaussian_filter
 
 
 root_path = f"/home/mohit/Documents/project/interpolation/data"
-out_root_path = f"/home/mohit/Documents/project/interpolation/data/triplets/natural"
+out_root_path = f"/home/mohit/Documents/project/interpolation/data/triplets/balanced"
 resolutions = [10000]
-balance = False
-patch_sizes = [512]
+balance = 'KR'
+patch_sizes = [64, 128, 256, 512]
 cmap = "YlOrRd"
 
 train_organisms = ["human"]
@@ -134,7 +134,7 @@ def generate_ds(organisms, samples, filename_set, ds_filename):
         for sample, sample_filenames in zip(org_samples, org_filenames):
             for resolution in resolutions:
                 for filenames in sample_filenames:
-
+                    
                     cool_0 = cool.Cooler(
                         f"{root_path}/{organism}/{sample}/{filenames[0]}_{resolution}.cool")
                     cool_y = cool.Cooler(

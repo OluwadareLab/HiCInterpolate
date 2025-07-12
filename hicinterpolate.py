@@ -63,6 +63,10 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
     structured_cfg = OmegaConf.structured(Config)
     cfg = OmegaConf.merge(structured_cfg, yaml_cfg)
 
+
+    # OmegaConf.update(cfg, "dir.root", "/home/mohit/Documents/project/interpolation/HiCInterpolate")
+    # OmegaConf.update(cfg, "dir.data", "/home/mohit/Documents/project/interpolation/data/triplets/normalized")
+
     output_dir = f"{cfg.dir.output}/{config_filename}"
     model_state_dir = f"{cfg.dir.model_state}/{config_filename}"
     os.makedirs(f"{output_dir}", exist_ok=True)

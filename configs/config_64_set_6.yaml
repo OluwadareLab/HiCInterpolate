@@ -21,6 +21,15 @@ file:
   lr_plot: ${dir.output}/${model.name}_lr_plot.png
   log: ${dir.output}/${model.name}.log
 
+data:
+  patch: 64
+  interpolator_images_map:
+    frame_0: img1.npy
+    frame_1: img2.npy
+    frame_2: img3.npy
+  train_val_ratio: [0.85, 0.15]
+  batch_size: 8
+  
 training:
   epochs: 1000
   save_every: 10
