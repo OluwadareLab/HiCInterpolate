@@ -36,6 +36,8 @@ torchrun \
 hicinterpolate.py \
 --distributed \
 --load-snapshot \
+--train \
+--test \
 --config "$CONFIG_FILE"
 
 echo "Job finished at $(date)"
