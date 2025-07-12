@@ -33,9 +33,11 @@ torchrun \
 --rdzv-endpoint=$MASTER_ADDR:$MASTER_PORT \
 --master_addr=$MASTER_ADDR \
 --master_port=$MASTER_PORT \
-train.py \
+hicinterpolate.py \
 --distributed \
 --load-snapshot \
+--train \
+--test \
 --config config
 
 echo "Job finished at $(date)"
