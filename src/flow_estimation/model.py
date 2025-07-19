@@ -39,7 +39,7 @@ class PyramidFlowEstimator(Module):
         residuals = [v]
         for i in reversed(range(0, levels-1)):
             level_size = (ftr_pyr_a[i].shape)[2:4]
-            v = F.interpolate(input=2*v, size=level_size)
+            v = F.interpolate(input=2*v, size=level_size, mode = 'nearest')
             warper = utils.warp(ftr_pyr_b[i], v)
             v_residual = self.levels[i](ftr_pyr_a[i], warper)
             residuals.append(v_residual)

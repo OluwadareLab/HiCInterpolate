@@ -7,9 +7,9 @@ from cupyx.scipy.ndimage import gaussian_filter
 
 
 root_path = f"/home/mohit/Documents/project/interpolation/data"
-out_root_path = f"/home/mohit/Documents/project/interpolation/data/triplets/balanced"
+out_root_path = f"/home/mohit/Documents/project/interpolation/data/triplets/z_kr_w_rand"
 resolutions = [10000]
-balance = 'KR'
+balance = True
 patch_sizes = [64, 128, 256, 512]
 cmap = "YlOrRd"
 
@@ -39,6 +39,7 @@ train_filenames = [[[["a_2d_4DNFIWUZLEWY",
                    ["8h_4DNFIIFBC8WN",
                     "9h_4DNFI9ZBEBJH",
                     "10h_4DNFID4SLU53"]]]]
+
 test_organisms = ["human"]
 test_samples = [["hela_s3"]]
 test_filenames = [[[["3h_4DNFIDT9EB5M",
@@ -80,23 +81,55 @@ def generate_patch(mat_0, mat_y, mat_1, organism, sample, resolution, chromosome
             print(
                 f"[INFO] generating {ds_filename} patches({patch}X{patch}) for {organism} > {sample} > {sub_sample} > {resolution} > chr{chromosome}")
             row, col = mat_0.shape
-            r = 0
-            c = 0
-            while (r+patch <= row and c+patch <= col):
-                folder = f"{counter[i]:06d}"
-                path = f"{ds_filename}/{organism}/{sample}/{sub_sample}/{str(resolution)}/{chromosome}/{folder}"
-                file.write(path+"\n")
-                path = f"{out_root_path}/{patch}/{path}"
+            bin_inc = int(patch*0.85)
+            col_start = [0, -bin_inc, bin_inc]
+            for cs in col_start:
+                c = cs
+                r = 0
+                # print(f"Diag:", end=' ')
+                while (r+patch <= row and c+patch <= col):
+                    if c >= 0:
+                        folder = f"{counter[i]:06d}"
+                        path = f"{ds_filename}/{organism}/{sample}/{sub_sample}/{str(resolution)}/{chromosome}/{folder}"
+                        file.write(path+"\n")
+                        path = f"{out_root_path}/{patch}/{path}"
+                        os.makedirs(path, exist_ok=True)
+                        # print(f"({r}, {c})", end=' ')
+                        save_img(mat_0, r, c, patch, path, "img1")
+                        save_img(mat_y, r, c, patch, path, "img2")
+                        save_img(mat_1, r, c, patch, path, "img3")
+                        counter[i] += 1
+                    
+                    c += bin_inc
+                    r += bin_inc
+                
+                c =  np.random.randint(cs+(patch*2), col)
+                r = 0
+                rand_c = 0
+                max_rand_c = int((col//patch) * 0.25)
+                # print(f"\nRand:", end=' ')
+                while (r+patch <= row and c+patch <= col and rand_c < max_rand_c):
+                    if c >= 0:
+                        folder = f"{counter[i]:06d}"
+                        path = f"{ds_filename}/{organism}/{sample}/{sub_sample}/{str(resolution)}/{chromosome}/{folder}"
+                        file.write(path+"\n")
+                        path = f"{out_root_path}/{patch}/{path}"
+                        os.makedirs(path, exist_ok=True)
+                        # print(f"({r}, {c})", end=' ')
+                        save_img(mat_0, r, c, patch, path, "img1")
+                        save_img(mat_y, r, c, patch, path, "img2")
+                        save_img(mat_1, r, c, patch, path, "img3")
+                        counter[i] += 1
+                        rand_c += 1
+                    
+                    c += patch
+                    r += patch
 
-                os.makedirs(path, exist_ok=True)
-                save_img(mat_0, r, c, patch, path, "img1")
-                save_img(mat_y, r, c, patch, path, "img2")
-                save_img(mat_1, r, c, patch, path, "img3")
-
-                counter[i] += 1
-                c += (patch//2)
-                r += (patch//2)
+                    
+                    
     return counter
+
+
 
 
 def fast_gaussian_filter(matrix, sigma=4):
@@ -120,12 +153,12 @@ def normalization(matrix):
     norm_matrix = matrix
     min_val = np.min(norm_matrix)
     max_val = np.max(norm_matrix)
-    range_val = max_val - min_val
-    if range_val == 0:
-        norm_matrix = np.zeros_like(norm_matrix)
-    else:
-        norm_matrix = (norm_matrix - min_val) / range_val
-
+    # range_val = max_val - min_val
+    # if range_val == 0:
+    #     norm_matrix = np.zeros_like(norm_matrix)
+    # else:
+    #     norm_matrix = (norm_matrix - min_val) / range_val
+    norm_matrix = (norm_matrix - min_val) / (max_val - min_val + 1e-8) 
     return norm_matrix
 
 
@@ -134,42 +167,31 @@ def generate_ds(organisms, samples, filename_set, ds_filename):
         for sample, sample_filenames in zip(org_samples, org_filenames):
             for resolution in resolutions:
                 for filenames in sample_filenames:
-                    
                     cool_0 = cool.Cooler(
-                        f"{root_path}/{organism}/{sample}/{filenames[0]}_{resolution}.cool")
+                        f"{root_path}/{organism}/{sample}/{filenames[0]}_{resolution}_kr.cool")
                     cool_y = cool.Cooler(
-                        f"{root_path}/{organism}/{sample}/{filenames[1]}_{resolution}.cool")
+                        f"{root_path}/{organism}/{sample}/{filenames[1]}_{resolution}_kr.cool")
                     cool_1 = cool.Cooler(
-                        f"{root_path}/{organism}/{sample}/{filenames[2]}_{resolution}.cool")
+                        f"{root_path}/{organism}/{sample}/{filenames[2]}_{resolution}_kr.cool")
 
                     sub_sample = "_".join(name.split(
                         '_')[-1] for name in filenames[:3])
                     for chromosome, chr_size in zip(cool_0.chromnames, cool_0.chromsizes):
-                        counter = [1, 1, 1]
-                        steps = chr_size // 4
-                        start = 0
-                        end = steps + 256
-                        count = 0
-                        while (count < 4):
-                            end = min(end, chr_size)
-                            # fetch = f"{chromosome}"
-                            fetch = f"{chromosome}:{start}-{end}"
 
-                            chr_mat_0 = cool_0.matrix(
-                                balance=balance).fetch(fetch)
-                            chr_mat_0 = normalization(chr_mat_0)
-                            chr_mat_y = cool_y.matrix(
-                                balance=balance).fetch(fetch)
-                            chr_mat_y = normalization(chr_mat_y)
-                            chr_mat_1 = cool_1.matrix(
-                                balance=balance).fetch(fetch)
-                            chr_mat_1 = normalization(chr_mat_1)
-                            counter = generate_patch(chr_mat_0, chr_mat_y, chr_mat_1,
-                                                     organism, sample, resolution, chromosome, ds_filename, sub_sample, counter)
-
-                            start = end - 512
-                            end = end + steps
-                            count += 1
+                        fetch = f"{chromosome}:{0}-{chr_size}"
+                        chr_mat_0 = cool_0.matrix(
+                            balance=balance).fetch(fetch)
+                        chr_mat_0 = normalization(chr_mat_0)
+                        chr_mat_y = cool_y.matrix(
+                            balance=balance).fetch(fetch)
+                        chr_mat_y = normalization(chr_mat_y)
+                        chr_mat_1 = cool_1.matrix(
+                            balance=balance).fetch(fetch)
+                        chr_mat_1 = normalization(chr_mat_1)
+                        
+                        counter = [1, 1, 1, 1]
+                        counter = generate_patch(chr_mat_0, chr_mat_y, chr_mat_1,
+                                                    organism, sample, resolution, chromosome, ds_filename, sub_sample, counter)
 
 
 if __name__ == "__main__":

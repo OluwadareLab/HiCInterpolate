@@ -30,7 +30,7 @@ def warp(image: torch.Tensor, flow: torch.Tensor):
     flowed_grid_x = 2.0 * flowed_grid[..., 0] / (W - 1) - 1.0
     flowed_grid_y = 2.0 * flowed_grid[..., 1] / (H - 1) - 1.0
     normalized_grid = torch.stack((flowed_grid_x, flowed_grid_y), dim=-1)
-    warped = F.grid_sample(image, normalized_grid, mode='bilinear',
+    warped = F.grid_sample(image, normalized_grid, mode='nearest',
                            padding_mode='border', align_corners=True)
 
     return warped
@@ -43,7 +43,7 @@ def flow_pyramid_synthesis(residual_pyramid: List[torch.Tensor]) -> List[torch.T
     for residual_flow in reversed(residual_pyramid[:-1]):
         level_size = (residual_flow.shape)[2:4]
         flow = F.interpolate(2 * flow, size=level_size,
-                             mode='bilinear', align_corners=True)
+                             mode='nearest')
         flow = residual_flow + flow
         flow_pyramid.append(flow)
 
@@ -60,16 +60,16 @@ def multiply_pyramid(pyramid: List[torch.Tensor], scalar: torch.Tensor) -> List[
     return results
 
 
+def concatenate_pyramids(pyramid1: List[torch.Tensor], pyramid2: List[torch.Tensor]) -> List[torch.Tensor]:
+    result = []
+    for feature1, feature2 in zip(pyramid1, pyramid2):
+        result.append(torch.cat([feature1, feature2], dim=1))
+    return result
+
+
 def pyramid_warp(feature_pyramid: List[torch.Tensor], flow_pyramid: List[torch.Tensor]) -> List[torch.Tensor]:
     warped_feature_pyramid = []
     for features, flow in zip(feature_pyramid, flow_pyramid):
         warped_feature_pyramid.append(warp(image=features, flow=flow))
 
     return warped_feature_pyramid
-
-
-def concatenate_pyramids(pyramid1: List[torch.Tensor], pyramid2: List[torch.Tensor]) -> List[torch.Tensor]:
-    result = []
-    for feature1, feature2 in zip(pyramid1, pyramid2):
-        result.append(torch.cat([feature1, feature2], dim=1))
-    return result
