@@ -1,10 +1,10 @@
 device: cuda
 
 dir:
-  root: /home/mohit/Documents/project/interpolation/HiCInterpolate
+  root: /home/hchowdhu/Documents/HiCInterpolate
   model_state: ${dir.root}/models
   output: ${dir.root}/output
-  data: /home/mohit/Documents/project/interpolation/data/triplets/z_kr_w_rand  
+  data: /mmfs1/home/hchowdhu/data/hic_triplets/kr_w_rand
   image: ${dir.data}/${data.patch}
 
 file:
@@ -22,33 +22,33 @@ file:
   log: ${dir.output}/${model.name}.log
 
 data:
-  patch: 64
+  patch: 256
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
   train_val_ratio: [0.85, 0.15]
-  batch_size: 8
+  batch_size: 32
 
 training:
   epochs: 1000
   save_every: 10
   learning_rate: 0.0001
-  decay_steps: 250
-  decay_rate: 0.5623
+  decay_steps: 100
+  decay_rate: 0.631
   lr_staircase: true
 
 model:
   name: hicinterpolate_${data.patch}
   init_in_channels: 1
   init_out_channels: 4
-  pyramid_level: 4
-  ext_feature_level: 3
-  unique_levels: 2
+  pyramid_level: 6
+  ext_feature_level: 4
+  unique_levels: 3
   flow:
-    num_of_convs: [3, 3, 3]
-    out_channels: [16, 32, 64]
-  fusion_pyramid_level: 4
+    num_of_convs: [3, 3, 3, 3]
+    out_channels: [32, 64, 128, 256]
+  fusion_pyramid_level: 5
 
 loss:
   weight_parameters:
@@ -57,10 +57,10 @@ loss:
       values: [1.0, 1.0]
     - name: vgg
       boundaries: [500]
-      values: [1.0, 0.80]
+      values: [1.0, 0.75]
     - name: style
       boundaries: [500]
-      values: [0.0, 1.00]
+      values: [0.0, 40.00]
     - name: tv
       boundaries: [0]
       values: [1.0, 1.0]

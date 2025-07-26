@@ -2,7 +2,7 @@
 
 #SBATCH --partition=gpu-long
 #SBATCH --nodes=1
-#SBATCH --nodelist=g002
+#SBATCH --nodelist=g001
 #SBATCH --ntasks-per-node=2
 #SBATCH --gres=gpu:2
 #SBATCH --time=30-00:00:00

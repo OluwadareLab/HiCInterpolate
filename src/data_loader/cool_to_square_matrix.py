@@ -7,7 +7,7 @@ from cupyx.scipy.ndimage import gaussian_filter
 
 
 root_path = f"/home/mohit/Documents/project/interpolation/data"
-out_root_path = f"/home/mohit/Documents/project/interpolation/data/triplets/z_kr_w_rand"
+out_root_path = f"/home/mohit/Documents/project/interpolation/data/triplets/kr_w_rand"
 resolutions = [10000]
 balance = True
 patch_sizes = [64, 128, 256, 512]
@@ -82,7 +82,8 @@ def generate_patch(mat_0, mat_y, mat_1, organism, sample, resolution, chromosome
                 f"[INFO] generating {ds_filename} patches({patch}X{patch}) for {organism} > {sample} > {sub_sample} > {resolution} > chr{chromosome}")
             row, col = mat_0.shape
             bin_inc = int(patch*0.85)
-            col_start = [0, -bin_inc, bin_inc]
+            # col_start = [0, -bin_inc, bin_inc]
+            col_start = [0]
             for cs in col_start:
                 c = cs
                 r = 0
@@ -128,9 +129,6 @@ def generate_patch(mat_0, mat_y, mat_1, organism, sample, resolution, chromosome
                     
                     
     return counter
-
-
-
 
 def fast_gaussian_filter(matrix, sigma=4):
     try:
