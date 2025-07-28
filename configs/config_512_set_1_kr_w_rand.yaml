@@ -28,7 +28,7 @@ data:
     frame_1: img2.npy
     frame_2: img3.npy
   train_val_ratio: [0.85, 0.15]
-  batch_size: 32
+  batch_size: 24
 
 training:
   epochs: 1000
