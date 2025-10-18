@@ -191,7 +191,7 @@ class Trainer:
             'best_val': self.state["best_val"]
         }, columns=self.metric_columns)
 
-        metrics_df.to_csv(self.cfg.file.eval_metrics, index=False)
+        metrics_df.to_csv(self.cfg.file.val_metrics, index=False)
         plot.draw_metric(self.cfg, self.state)
 
     def _run_epoch(self, epoch):

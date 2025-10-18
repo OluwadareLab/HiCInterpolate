@@ -58,7 +58,6 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False, isDi
 
 
 def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool = False, train: bool = False, test: bool = False):
-
     yaml_cfg = OmegaConf.load(f"./configs/{config_filename}.yaml")
     structured_cfg = OmegaConf.structured(Config)
     cfg = OmegaConf.merge(structured_cfg, yaml_cfg)
@@ -78,11 +77,10 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
         ddp_setup()
 
     batch_size = cfg.data.batch_size
+    cds = CustomDataset(record_file=cfg.file.dataset_dict, img_dir=cfg.dir.image,
+                        img_map=cfg.data.interpolator_images_map, shuffle=True, train_val_test_ratio=cfg.data.train_val_test_ratio)
+    train_ds, val_ds, test_ds = cds._get_train_dl()
     if train:
-        train_cds = CustomDataset(record_file=cfg.file.train, img_dir=cfg.dir.image,
-                                  img_map=cfg.data.interpolator_images_map, train_val_ratio=cfg.data.train_val_ratio)
-        train_ds, val_ds = train_cds._get_train_dl()
-
         train_dl = get_dataloader(
             ds=train_ds, batch_size=batch_size, shuffle=True, isDistributed=isDistributed)
         val_dl = get_dataloader(ds=val_ds, batch_size=batch_size,
@@ -92,9 +90,6 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
         trainer.train(max_epochs=cfg.training.epochs)
 
     if test and os.path.exists(cfg.file.model):
-        test_cds = CustomDataset(record_file=cfg.file.test, img_dir=cfg.dir.image,
-                                 img_map=cfg.data.interpolator_images_map)
-        test_ds = test_cds._get_test_dl()
         test_dl = get_dataloader(
             ds=test_ds, batch_size=batch_size, shuffle=True, isDistributed=isDistributed)
         tester = TestLib.Tester(

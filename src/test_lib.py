@@ -75,7 +75,7 @@ class Tester:
 
         with torch.no_grad():
             self.model.eval()
-            drawn = False
+            drawn = 0
             for _, (x0, y, x1, time_frame) in enumerate(tqdm(self.test_dl)):
                 x0 = x0.to(self.device)
                 y = y.to(self.device)
@@ -99,16 +99,16 @@ class Tester:
                 local_ncc += ncc_val.item()
                 local_lpips += lpips_val.item()
 
-                if not drawn:
+                if drawn == 10:
                     num_examples = min(
-                        self.cfg.eval.num_visualization_samples, len(y))
-                    x0_cpu = x0[:num_examples].cpu()
-                    y_cpu = y[:num_examples].cpu()
-                    pred_cpu = pred[:num_examples].cpu()
-                    x1_cpu = x1[:num_examples].cpu()
+                        self.cfg.file.num_visualization_samples, len(y))
+                    x0_cpu = x0[:num_examples]
+                    y_cpu = y[:num_examples]
+                    pred_cpu = pred[:num_examples]
+                    x1_cpu = x1[:num_examples]
                     plot.draw_hic_map(num_examples=num_examples, x0=x0_cpu,
                                       y=y_cpu, pred=pred_cpu, x1=x1_cpu, file=self.cfg.file.test_hic_map)
-                    drawn = True
+                drawn += 1
 
                 del x0, y, x1, time_frame
 

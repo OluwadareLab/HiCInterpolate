@@ -13,22 +13,21 @@ class DirConfig:
 
 @dataclass
 class FileConfig:
-    train: str
-    test: str
+    dataset_dict: str
     vgg_model: str
     snapshot: str
     model: str
-    train_val_plot: str
     test_hic_map: str
-    eval_metrics: str
-    psnr_eval_plot: str
-    ssim_eval_plot: str
-    scc_eval_plot: str
-    pcc_eval_plot: str
-    genome_disco_eval_plot: str
-    ncc_eval_plot: str
-    lpips_eval_plot: str
-    eval_plot: str
+    val_metrics: str
+    num_visualization_samples: int
+    psnr_val_plot: str
+    ssim_val_plot: str
+    scc_val_plot: str
+    pcc_val_plot: str
+    genome_disco_val_plot: str
+    ncc_val_plot: str
+    lpips_val_plot: str
+    train_val_loss_plot: str
     lr_plot: str
     log: str
 
@@ -37,7 +36,7 @@ class FileConfig:
 class DataConfig:
     patch: int
     interpolator_images_map: Dict[str, str]
-    train_val_ratio: List[float]
+    train_val_test_ratio: List[float]
     batch_size: int
 
 
@@ -82,11 +81,6 @@ class LossConfig:
 
 
 @dataclass
-class EvalConfig:
-    num_visualization_samples: int
-
-
-@dataclass
 class Config:
     device: str
     dir: DirConfig
@@ -95,4 +89,3 @@ class Config:
     training: TrainingConfig
     model: ModelConfig
     loss: LossConfig
-    eval: EvalConfig

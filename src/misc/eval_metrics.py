@@ -4,6 +4,8 @@ import torch
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 
+_EPSILON = 1e-8
+
 
 def get_psnr(pred, target):
     psnr = PeakSignalNoiseRatio(data_range=1.0).to(pred.device)
@@ -150,6 +152,12 @@ def get_ncc(pred, target, eps=1e-8):
 def get_lpips(pred, target):
     lpips = LearnedPerceptualImagePatchSimilarity(
         net_type='alex').to(pred.device)
-    temp_pred = pred.repeat(1, 3, 1, 1)
+
+    pred_min = pred.amin(dim=(1, 2, 3), keepdim=True)
+    pred_max = pred.amax(dim=(1, 2, 3), keepdim=True)
+    pred_norm = (pred - pred_min) / (pred_max - pred_min + _EPSILON)
+
+    temp_pred = pred_norm.repeat(1, 3, 1, 1)
     temp_target = target.repeat(1, 3, 1, 1)
+
     return lpips(temp_pred, temp_target)
