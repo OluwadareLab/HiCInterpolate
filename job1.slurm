@@ -6,8 +6,8 @@
 #SBATCH --ntasks-per-node=2
 #SBATCH --gres=gpu:2
 #SBATCH --time=30-00:00:00
-#SBATCH --job-name=hici
-#SBATCH --output=/home/hchowdhu/Documents/HiCInterpolate/hici_%j.log
+#SBATCH --job-name=HI
+#SBATCH --output=/home/hchowdhu/Documents/HiCInterpolate/job_hicinterpolate_%j.log
 
 module load anaconda
 source $(conda info --base)/etc/profile.d/conda.sh

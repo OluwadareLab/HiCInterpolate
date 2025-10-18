@@ -2,7 +2,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from .interpolator import Interpolator
-from .misc import plots as plot, metrics as metric
+from .misc import plots as plot, eval_metrics as eval_metric
 import torch.distributed as dist
 import torch
 import traceback
@@ -26,14 +26,14 @@ class Tester:
             loc = f"cuda:{self.device}"
             snapshot = torch.load(model, map_location=loc)
             self.model.load_state_dict(snapshot['model'])
+            # self.lpips_model = metric.LPIPSLoss(device=self.device)
         else:
             self.device = self.cfg.device
             self.model = Interpolator(self.cfg).to(self.device)
             snapshot = torch.load(model, map_location=self.device)
             state_dict = self._remove_module_prefix(snapshot['model'])
             self.model.load_state_dict(state_dict)
-
-        
+            # self.lpips_model = metric.LPIPSLoss(device=self.device)
 
         self.test_dl = test_dl
         self.test_steps = len(self.test_dl)
@@ -41,6 +41,11 @@ class Tester:
 
         self.psnr = 0
         self.ssim = 0
+        self.scc = 0
+        self.pcc = 0
+        self.genome_disco = 0
+        self.ncc = 0
+        self.lpips = 0
 
     def _remove_module_prefix(self, state_dict):
         from collections import OrderedDict
@@ -50,13 +55,24 @@ class Tester:
             new_state_dict[name] = v
         return new_state_dict
 
-    def _update_metrics(self, local_steps, local_psnr, local_ssim):
+    def _update_metrics(self, local_steps, local_psnr, local_ssim, local_scc, local_pcc, local_genome_disco, local_ncc, local_lpips):
         self.psnr = local_psnr / local_steps
         self.ssim = local_ssim / local_steps
+        self.scc = local_scc / local_steps
+        self.pcc = local_pcc / local_steps
+        self.genome_disco = local_genome_disco / local_steps
+        self.ncc = local_ncc / local_steps
+        self.lpips = local_lpips / local_steps
 
     def _run(self):
         local_psnr = 0
         local_ssim = 0
+        local_scc = 0
+        local_pcc = 0
+        local_genome_disco = 0
+        local_ncc = 0
+        local_lpips = 0
+
         with torch.no_grad():
             self.model.eval()
             drawn = False
@@ -67,10 +83,21 @@ class Tester:
                 time_frame = time_frame.to(self.device)
                 pred = self.model(x0, x1, time_frame)
 
-                psnr_val = metric.calculate_psnr(pred, y)
-                ssim_val = metric.calculate_ssim(pred, y)
+                psnr_val = eval_metric.get_psnr(pred, y)
+                ssim_val = eval_metric.get_ssim(pred, y)
+                scc_val = eval_metric.get_scc(pred, y)
+                pcc_val = eval_metric.get_pcc(pred, y)
+                genome_disco_val = eval_metric.get_genome_disco(pred, y)
+                ncc_val = eval_metric.get_ncc(pred, y)
+                lpips_val = eval_metric.get_lpips(pred, y)
+
                 local_psnr += psnr_val.item()
                 local_ssim += ssim_val.item()
+                local_scc += scc_val.item()
+                local_pcc += pcc_val.item()
+                local_genome_disco += genome_disco_val
+                local_ncc += ncc_val.item()
+                local_lpips += lpips_val.item()
 
                 if not drawn:
                     num_examples = min(
@@ -92,37 +119,57 @@ class Tester:
                 local_psnr, device=self.device)
             local_ssim = torch.tensor(
                 local_ssim, device=self.device)
+            local_scc = torch.tensor(
+                local_scc, device=self.device)
+            local_pcc = torch.tensor(
+                local_pcc, device=self.device)
+            local_genome_disco = torch.tensor(
+                local_genome_disco, device=self.device)
+            local_ncc = torch.tensor(
+                local_ncc, device=self.device)
+            local_lpips = torch.tensor(
+                local_lpips, device=self.device)
 
             dist.all_reduce(local_steps, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_psnr, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_ssim, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_scc, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_pcc, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_genome_disco, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_ncc, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_lpips, op=dist.ReduceOp.SUM)
 
             local_steps = local_steps.item()
             local_psnr = local_psnr.item()
             local_ssim = local_ssim.item()
+            local_scc = local_scc.item()
+            local_pcc = local_pcc.item()
+            local_genome_disco = local_genome_disco.item()
+            local_ncc = local_ncc.item()
+            local_lpips = local_lpips.item()
 
-            self._update_metrics(local_steps, local_psnr, local_ssim)
+            self._update_metrics(local_steps, local_psnr, local_ssim,
+                                 local_pcc, local_scc, local_genome_disco, local_ncc, local_lpips)
         else:
-            self._update_metrics(self.test_steps, local_psnr, local_ssim)
+            self._update_metrics(self.test_steps, local_psnr, local_ssim,
+                                 local_pcc, local_scc, local_genome_disco, local_ncc, local_lpips)
 
     def test(self):
-        self.log.info(f"[{self.device}] ==== testing started ====")
-        print(f"[INFO][{self.device}] ==== testing started ====")
+        self.log.info(f"[{self.device}] ==== Testing Started ====")
+        print(f"[INFO][{self.device}] ==== Testing Started ====")
 
         start_time = time.time()
         try:
             self._run()
             if self.isDistributed and self.device == 0:
-                self.log.info(
-                    f"psnr: {format(self.psnr, '.4f')}, ssim: {format(self.ssim, '.4f')};")
-                print(
-                    f"[INFO] psnr: {format(self.psnr, '.4f')}, ssim: {format(self.ssim, '.4f')};")
+                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, SCC: {format(self.scc, '.4f')}, PCC: {format(self.pcc, '.4f')}, GenomeDISCO: {format(self.genome_disco, '.4f')}, NCC: {format(self.ncc, '.4f')}, LPIPS: {format(self.lpips, '.4f')};"
+                self.log.info(f"{scores}")
+                print(f"[INFO] {scores}")
 
             elif not self.isDistributed:
-                self.log.info(
-                    f"psnr: {format(self.psnr, '.4f')}, ssim: {format(self.ssim, '.4f')};")
-                print(
-                    f"[INFO] psnr: {format(self.psnr, '.4f')}, ssim: {format(self.ssim, '.4f')};")
+                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, SCC: {format(self.scc, '.4f')}, PCC: {format(self.pcc, '.4f')}, GenomeDISCO: {format(self.genome_disco, '.4f')}, NCC: {format(self.ncc, '.4f')}, LPIPS: {format(self.lpips, '.4f')};"
+                self.log.info(f"{scores}")
+                print(f"[INFO] {scores}")
 
         except Exception as ex:
             print(ex)
@@ -135,8 +182,8 @@ class Tester:
 
         end_time = time.time()
         self.log.info(
-            f"[{self.device}] total time taken: {format((end_time-start_time), '.2f')} seconds")
+            f"[{self.device}] Total time taken: {format((end_time-start_time), '.2f')} seconds")
         print(
-            f"[INFO][{self.device}] total time taken: {format((end_time-start_time), '.2f')} seconds")
-        self.log.info(f"[{self.device}] ==== testing end ====")
-        print(f"[INFO][{self.device}] ==== testing end ====")
+            f"[INFO][{self.device}] Total time taken: {format((end_time-start_time), '.2f')} seconds")
+        self.log.info(f"[{self.device}] ==== Testing End ====")
+        print(f"[INFO][{self.device}] ==== Testing End ====")

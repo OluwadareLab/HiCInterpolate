@@ -18,6 +18,9 @@ file:
   eval_metrics: ${dir.output}/${model.name}_val_metrics.csv
   psnr_eval_plot: ${dir.output}/${model.name}_psnr_plot.png
   ssim_eval_plot: ${dir.output}/${model.name}_ssim_plot.png
+  ncc_eval_plot: ${dir.output}/${model.name}_ncc_plot.png
+  lpips_eval_plot: ${dir.output}/${model.name}_lpips_plot.png
+  eval_plot: ${dir.output}/${model.name}_eval_plot.png
   lr_plot: ${dir.output}/${model.name}_lr_plot.png
   log: ${dir.output}/${model.name}.log
 
@@ -28,12 +31,12 @@ data:
     frame_1: img2.npy
     frame_2: img3.npy
   train_val_ratio: [0.80, 0.20]
-  batch_size: 128
+  batch_size: 16
 
 training:
-  epochs: 1000
+  epochs: 500
   save_every: 10
-  learning_rate: 0.0001
+  learning_rate: 1e-4
   decay_steps: 100
   decay_rate: 0.631
   lr_staircase: true
@@ -53,11 +56,11 @@ model:
 loss:
   weight_parameters:
     - name: mse
-      boundaries: [0]
-      values: [1.0, 1.0]
+      boundaries: [250]
+      values: [0.9, 0.5]
     - name: vgg
-      boundaries: [500]
-      values: [1.0, 0.80]
+      boundaries: [250]
+      values: [0.1, 0.5]
     # - name: style
     #   boundaries: [500]
     #   values: [0.0, 1.00]

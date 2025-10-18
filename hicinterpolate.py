@@ -63,7 +63,6 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
     structured_cfg = OmegaConf.structured(Config)
     cfg = OmegaConf.merge(structured_cfg, yaml_cfg)
 
-
     # OmegaConf.update(cfg, "dir.root", "/home/mohit/Documents/project/interpolation/HiCInterpolate")
     # OmegaConf.update(cfg, "dir.data", "/home/mohit/Documents/project/interpolation/data/triplets/normalized")
 
@@ -97,7 +96,7 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
                                  img_map=cfg.data.interpolator_images_map)
         test_ds = test_cds._get_test_dl()
         test_dl = get_dataloader(
-            ds=test_ds, batch_size=batch_size, shuffle=False, isDistributed=isDistributed)
+            ds=test_ds, batch_size=batch_size, shuffle=True, isDistributed=isDistributed)
         tester = TestLib.Tester(
             cfg=cfg, log=log, model=cfg.file.model, test_dl=test_dl, isDistributed=isDistributed)
         tester.test()
@@ -126,4 +125,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
-    # main("config_64_set_1", True, True, True, True)
+    # main(config_filename="config_64_set_1_kr_w_rand_AdamW_cosin",
+    #      isDistributed=False, load_snapshot=False, train=True, test=True)

@@ -35,7 +35,8 @@
 # torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_64_set_4
 # torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_64_set_5
 # torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_64_set_6
-torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_128_set_1
+torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --train --test --config config_64_set_1_kr_w_rand_AdamW_cosin
+torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --load-snapshot --train --test --config config_64_set_1_kr_w_rand
 torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_128_set_2
 torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_128_set_3
 torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_128_set_4
@@ -53,3 +54,7 @@ torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distrib
 torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_512_set_4
 # torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_512_set_5
 # torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --test --config config_512_set_6
+
+
+torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --train --test --config config_256_set_1_kr_log_clip_norm_AdamW_cosin
+torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distributed --train --test --config config_256_set_1_kr_log_clip_norm_diag_AdamW_cosin.yaml

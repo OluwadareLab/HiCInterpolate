@@ -1,12 +1,12 @@
-from ..misc import utils
-from torch.nn import Module
-from torch import Tensor
-from ..fusion import Fusion
-from ..flow_estimation import PyramidFlowEstimator
-from ..feature_extractor import FeatureExtractor
-import torch
-import sys
 import os
+import sys
+import torch
+from src.feature_extractor import FeatureExtractor
+from src.flow_estimation import PyramidFlowEstimator
+from src.fusion import Fusion
+from torch import Tensor
+from torch.nn import Module
+from src.misc import utils
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 

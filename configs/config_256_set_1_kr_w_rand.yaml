@@ -1,10 +1,10 @@
 device: cuda
 
 dir:
-  root: /home/hchowdhu/Documents/HiCInterpolate
+  root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate
   model_state: ${dir.root}/models
   output: ${dir.root}/output
-  data: /mmfs1/home/hchowdhu/data/hic_triplets/kr_w_rand
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/triplets/kr_log_clip_norm
   image: ${dir.data}/${data.patch}
 
 file:
@@ -18,6 +18,9 @@ file:
   eval_metrics: ${dir.output}/${model.name}_val_metrics.csv
   psnr_eval_plot: ${dir.output}/${model.name}_psnr_plot.png
   ssim_eval_plot: ${dir.output}/${model.name}_ssim_plot.png
+  ncc_eval_plot: ${dir.output}/${model.name}_ncc_plot.png
+  lpips_eval_plot: ${dir.output}/${model.name}_lpips_plot.png
+  eval_plot: ${dir.output}/${model.name}_eval_plot.png
   lr_plot: ${dir.output}/${model.name}_lr_plot.png
   log: ${dir.output}/${model.name}.log
 
@@ -27,13 +30,13 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_ratio: [0.85, 0.15]
+  train_val_ratio: [0.80, 0.20]
   batch_size: 32
 
 training:
-  epochs: 1000
+  epochs: 300
   save_every: 10
-  learning_rate: 0.0001
+  learning_rate: 0.1e-4
   decay_steps: 100
   decay_rate: 0.631
   lr_staircase: true
@@ -46,8 +49,8 @@ model:
   ext_feature_level: 4
   unique_levels: 3
   flow:
-    num_of_convs: [3, 3, 3, 3]
-    out_channels: [32, 64, 128, 256]
+    num_of_convs: [3, 3, 3, 3, 3]
+    out_channels: [16, 32, 64, 128, 256]
   fusion_pyramid_level: 5
 
 loss:
@@ -56,14 +59,14 @@ loss:
       boundaries: [0]
       values: [1.0, 1.0]
     - name: vgg
-      boundaries: [500]
-      values: [1.0, 0.75]
-    - name: style
-      boundaries: [500]
-      values: [0.0, 40.00]
-    - name: tv
+      boundaries: [150]
+      values: [0.3, 0.7]
+    - name: genome_disco
       boundaries: [0]
       values: [1.0, 1.0]
+    # - name: tv
+    #   boundaries: [0]
+    #   values: [1.0, 1.0]
 
 eval:
   num_visualization_samples: 2

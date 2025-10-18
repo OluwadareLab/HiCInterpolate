@@ -75,6 +75,70 @@ class TVLoss(Module):
         return t.size()[1] * t.size()[2] * t.size()[3]
 
 
+class GenomeDISCOLoss(Module):
+    def __init__(self):
+        super().__init__()
+
+    def _to_transition_torch(self, m):
+        row_sum = m.sum(dim=-1, keepdim=True)
+        row_sum = torch.clamp(row_sum, min=1e-12)
+        return m / row_sum
+
+    def _compute_reproducibility_gpu(self, m1, m2, transition=True, tmin=3, tmax=3):
+        assert m1.shape == m2.shape, "Input shapes must match"
+        B, C, H, W = m1.shape
+        assert H == W, "Matrix must be square"
+        m1_sym = m1 + m1.transpose(-1, -2)
+        m2_sym = m2 + m2.transpose(-1, -2)
+
+        if transition:
+            m1_sym = self._to_transition_torch(m1_sym)
+            m2_sym = self._to_transition_torch(m2_sym)
+
+        row_sum1 = m1_sym.sum(dim=-1)
+        row_sum2 = m2_sym.sum(dim=-1)
+        nonzero1 = (row_sum1 > 0).float().sum(dim=-1)
+        nonzero2 = (row_sum2 > 0).float().sum(dim=-1)
+        nonzero_total = 0.5 * (nonzero1 + nonzero2)
+        nonzero_total = torch.clamp(nonzero_total, min=1e-8)
+
+        rw1 = m1_sym.clone()
+        rw2 = m2_sym.clone()
+
+        scores = []
+
+        for t in range(1, tmax + 1):
+            if t > 1:
+                rw1 = torch.matmul(rw1, m1_sym)
+                rw2 = torch.matmul(rw2, m2_sym)
+
+            if t >= tmin:
+                diff = torch.abs(rw1 - rw2).sum(dim=(-2, -1))
+                score_t = diff / nonzero_total
+                scores.append(score_t)
+
+        scores = torch.stack(scores, dim=-1)
+        if tmin == tmax:
+            auc = scores[..., 0]
+            auc = torch.clamp(auc, 0, 2)
+        else:
+            f_i = scores[..., :-1]
+            f_ip1 = scores[..., 1:]
+            auc = 0.5 * (f_i + f_ip1)
+            auc = auc.sum(dim=-1) / (scores.shape[-1] - 1)
+
+        reproducibility = 1.0 - auc
+        reproducibility = reproducibility.mean(dim=1)
+
+        return reproducibility
+
+    def forward(self, pred: Tensor, y: Tensor):
+        reproducibility = self._compute_reproducibility_gpu(pred, y)
+        mean_repro = torch.mean(reproducibility)
+        loss = 1.0-mean_repro
+        return loss
+
+
 class _VGG(Module):
     def __init__(self, cfg):
         super().__init__()
@@ -252,6 +316,7 @@ class CombinedLoss(Module):
         self.tv_loss = TVLoss()
         self.symmetry_loss = SymmetryLoss()
         self.ssim_loss = SSIMLoss()
+        self.genome_disco_loss = GenomeDISCOLoss()
 
     def weight_schedule(self, weight_params: tuple, epoch: int) -> float:
         i = 0
@@ -301,4 +366,8 @@ class CombinedLoss(Module):
                 symmetry_loss = self.symmetry_loss(pred)
                 symmetry_loss = symmetry_loss * weight
                 loss += symmetry_loss
+            elif weight_params["name"] == "genome_disco" and weight > 0.0:
+                genome_disco_loss = self.genome_disco_loss(pred, y)
+                genome_disco_loss = genome_disco_loss * weight
+                loss += genome_disco_loss
         return loss
