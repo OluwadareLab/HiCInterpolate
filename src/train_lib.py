@@ -1,20 +1,20 @@
-from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader
-from torch.optim import Adam, AdamW
-from tqdm import tqdm
-from .loss import ExponentialDecay, CombinedLoss
-from .interpolator import Interpolator
-from .misc import plots as plot, eval_metrics as eval_metric
 from collections import OrderedDict
-import torch.distributed as dist
-import torch
-import traceback
-import gc
-import time
-import pandas as pd
-import sys
+from src.loss import CombinedLoss, ExponentialDecay
+from src.misc import plots as plot, eval_metrics as eval_metric
+from src.interpolator import Interpolator
+from tqdm import tqdm
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, CosineAnnealingLR
+from torch.optim import Adam, AdamW, SGD
+from torch.utils.data import DataLoader
+from torch.nn.parallel import DistributedDataParallel as DDP
 import os
-
+import sys
+import pandas as pd
+import time
+import gc
+import traceback
+import torch
+import torch.distributed as dist
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -22,27 +22,22 @@ class Trainer:
     def __init__(self, cfg, log, train_dl: DataLoader, val_dl: DataLoader, load_snapshot: bool = False, isDistributed: bool = False) -> None:
         self.cfg = cfg
         self.log = log
+        self.model = Interpolator(self.cfg)
+
         self.isDistributed = dist.is_available() and dist.is_initialized()
         if isDistributed:
             self.device = int(os.environ['LOCAL_RANK'])
-            self.model = Interpolator(self.cfg).to(self.device)
             self.model = DDP(self.model, device_ids=[self.device])
-            # self.lpips = metric.LPIPSLoss(device=self.device)
         else:
             self.device = self.cfg.device
-            self.model = Interpolator(self.cfg).to(self.device)
-            # self.lpips = metric.LPIPSLoss(device=self.device)
+            self.model = self.model.to(self.device)
 
         self.loss_fn = CombinedLoss(self.cfg)
 
-        # self.optimizer = Adam(self.model.parameters(),
-        #                       lr=self.cfg.training.learning_rate)
-        self.optimizer = AdamW(self.model.parameters(),
-                               lr=self.cfg.training.learning_rate)
-        # self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
-        #                                   decay_rate=self.cfg.training.decay_rate, staircase=self.cfg.training.lr_staircase)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=self.cfg.training.epochs, eta_min=1e-6
-                                                                    )
+        self.optimizer = Adam(self.model.parameters(),
+                              lr=self.cfg.training.init_lr)
+        self.scheduler = CosineAnnealingWarmRestarts(
+            self.optimizer, T_0=self.cfg.training.restart_every, T_mult=1, eta_min=self.cfg.training.min_lr)
 
         self.train_dl = train_dl
         self.train_steps = len(self.train_dl)
@@ -66,13 +61,13 @@ class Trainer:
                       'val_psnr': [], 'val_ssim': [], 'val_scc': [], 'val_pcc': [], 'val_genome_disco': [], 'val_ncc': [], 'val_lpips': [], 'best_val': []}
         self.metric_columns = ['epoch', 'lr', 'train_loss',
                                'val_loss', 'val_psnr', 'val_ssim', 'val_scc', 'val_pcc', 'val_genome_disco', 'val_ncc', 'val_lpips', 'best_val']
-        self.best_val = -1.0
+        self.best_val = 1e4
         self.best_model = f'{self.cfg.file.model}'
 
         self.snapshot = f'{self.cfg.file.snapshot}'
         if load_snapshot and os.path.exists(self.snapshot):
-            self.log.info(f"[{self.device}] loading snapshot...")
-            print(f"[INFO][{self.device}] loading snapshot...")
+            self.log.info(f"Loading snapshot...")
+            print(f"[INFO] Loading snapshot...")
             self._load_snapshot(self.snapshot)
 
     def _remove_module_prefix(self, state_dict):
@@ -105,23 +100,9 @@ class Trainer:
             self.state = state_dict
             self.best_val = state_dict['best_val'][-1]
         self.log.info(
-            f"[{self.device}] Resuming training from snapshot at epoch {self.epochs_run}")
+            f"Resuming training from snapshot at epoch {self.epochs_run}")
         print(
-            f"[INFO][{self.device}] Resuming training from snapshot at epoch {self.epochs_run}")
-
-    def _run_batch(self, x0, y, x1, time_frame, isValidation=False):
-        if isValidation:
-            pred = self.model(x0, x1, time_frame)
-            loss_fn = self.loss_fn(pred, y, self.epochs_run)
-            loss_val = loss_fn
-        else:
-            self.optimizer.zero_grad()
-            pred = self.model(x0, x1, time_frame)
-            loss_fn = self.loss_fn(pred, y, self.epochs_run)
-            loss_val = loss_fn
-            loss_fn.backward()
-            self.optimizer.step()
-        return pred, loss_val
+            f"[INFO] Resuming training from snapshot at epoch {self.epochs_run}")
 
     def _update_metrics(self, epoch, local_train_steps, local_train_loss, local_val_steps, local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_ncc, local_val_lpips):
 
@@ -160,20 +141,17 @@ class Trainer:
     def _save_snapshot(self, epoch: int):
         snapshot = self._get_model_stats(epoch)
         torch.save(snapshot, self.snapshot)
-        print(
-            f"[DEBUG][{self.device}] Epoch {epoch+1} saved snapshot at {self.snapshot}")
+        print(f"[DEBUG] Epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int):
-        best_value = (2*self.val_scc_per_epoch + self.val_pcc_per_epoch +
-                      self.val_ncc_per_epoch + self.val_ssim_per_epoch)/4
-        if best_value > self.best_val:
-            self.best_val = best_value
+        if self.val_loss_per_epoch < self.best_val:
+            self.best_val = self.val_loss_per_epoch
             snapshot = self._get_model_stats(epoch)
             torch.save(snapshot, self.best_model)
             self.log.debug(
-                f"[{self.device}] Epoch {epoch+1} saved best model.")
+                f"Epoch {epoch+1} saved best model.")
             print(
-                f"[DEBUG][{self.device}] Epoch {epoch+1} saved best model.")
+                f"[DEBUG] Epoch {epoch+1} saved best model.")
 
     def _save_and_draw_metrics(self):
         metrics_df = pd.DataFrame({
@@ -210,14 +188,34 @@ class Trainer:
             self.train_dl.sampler.set_epoch(epoch)
 
         local_train_loss = 0
+        total_norm = 0.0
         for _, (x0, y, x1, time_frame) in enumerate(tqdm(self.train_dl)):
             x0 = x0.to(self.device)
             y = y.to(self.device)
             x1 = x1.to(self.device)
             time_frame = time_frame.to(self.device)
-            pred, loss = self._run_batch(x0, y, x1, time_frame)
-            local_train_loss += loss.item()
+            # pred, loss = self._run_batch(x0, y, x1, time_frame)
+
+            self.optimizer.zero_grad()
+            pred = self.model(x0, x1, time_frame)
+            train_loss = self.loss_fn(pred, y, self.epochs_run)
+            local_train_loss += train_loss.item()
+            train_loss.backward()
+            self.optimizer.step()
+
+            for p in self.model.parameters():
+                if p.grad is None:
+                    continue
+                param_norm = p.grad.detach().data.norm(2)
+                total_norm += param_norm.item()**2
+
             del x0, y, x1, time_frame
+
+        total_norm = total_norm**0.5
+        self.log.info(
+            f"Grad Norm: {total_norm}")
+        print(
+            f"[INFO] Grad Norm: {total_norm}")
 
         self.scheduler.step()
 
@@ -237,8 +235,9 @@ class Trainer:
                 y = y.to(self.device)
                 x1 = x1.to(self.device)
                 time_frame = time_frame.to(self.device)
-                pred, loss = self._run_batch(x0, y, x1, time_frame, True)
-                local_val_loss += loss.item()
+                pred = self.model(x0, x1, time_frame)
+                val_loss = self.loss_fn(pred, y, self.epochs_run)
+                local_val_loss += val_loss.item()
 
                 psnr_val = eval_metric.get_psnr(pred, y)
                 ssim_val = eval_metric.get_ssim(pred, y)
@@ -311,8 +310,8 @@ class Trainer:
                                  local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_ncc, local_val_lpips)
 
     def train(self, max_epochs: int):
-        self.log.info(f"[{self.device}] ==== Training Started ====")
-        print(f"[INFO][{self.device}] ==== Training Started ====")
+        self.log.info(f"==== Training Started ([{self.device}]) ====")
+        print(f"[INFO] ==== Training Started ([{self.device}]) ====")
 
         start_time = time.time()
         try:
@@ -352,8 +351,8 @@ class Trainer:
 
         end_time = time.time()
         self.log.info(
-            f"[{self.device}] Total time taken: {format((end_time-start_time), '.2f')} seconds")
+            f"Total time taken: {format((end_time-start_time), '.2f')} seconds")
         print(
-            f"[INFO][{self.device}] Total time taken: {format((end_time-start_time), '.2f')} seconds")
-        self.log.info(f"[{self.device}] ==== Training End ====")
-        print(f"[INFO][{self.device}] ==== Training End ====")
+            f"[INFO] Total time taken: {format((end_time-start_time), '.2f')} seconds")
+        self.log.info(f"==== Training End ====")
+        print(f"[INFO] ==== Training End ====")

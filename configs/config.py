@@ -43,8 +43,10 @@ class DataConfig:
 @dataclass
 class TrainingConfig:
     epochs: int
+    restart_every: int
     save_every: int
-    learning_rate: float
+    init_lr: float
+    min_lr: float
     decay_steps: int
     decay_rate: float
     lr_staircase: bool

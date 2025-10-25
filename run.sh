@@ -61,4 +61,6 @@ torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distrib
 
 /mmfs1/home/hchowdhu/data/hicinterpolate
 /mmfs1/home/hchowdhu/data/triplets/kr_log_clip_norm_diag
-sbatch job1.slurm config_256_set_1_kr_log_clip_norm_diag_AdamW_cosin
+sbatch job1.slurm config_256_set_1_kr_log_clip_norm_diag_slurm
+
+python3 hicinterpolate.py --train --test --config config_256_set_1_kr_log_clip_norm_diag

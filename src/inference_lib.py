@@ -9,7 +9,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 import sys
-sys.path.append("..")
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 class HiCInterpolate:

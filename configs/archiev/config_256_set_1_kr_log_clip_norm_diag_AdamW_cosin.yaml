@@ -1,11 +1,18 @@
 device: cuda
 
 dir:
-  root: /mmfs1/home/hchowdhu/data/hicinterpolate
+  root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate
   model_state: ${dir.root}/models
   output: ${dir.root}/output
-  data: /mmfs1/home/hchowdhu/data/triplets/kr_log_clip_norm_diag
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/triplets/kr_log_clip_norm_diag
   image: ${dir.data}/${data.patch}
+
+# dir:
+#   root: /mmfs1/home/hchowdhu/data/hicinterpolate
+#   model_state: ${dir.root}/models
+#   output: ${dir.root}/output
+#   data: /mmfs1/home/hchowdhu/data/triplets/kr_log_clip_norm_diag
+#   image: ${dir.data}/${data.patch}
 
 file:
   dataset_dict: ${dir.image}/dataset_dict.txt
@@ -32,14 +39,16 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.8, 0.1, 0.1]
+  train_val_test_ratio: [0.05, 0.00625, 0.00625]
   batch_size: 8
 
 training:
-  epochs: 500
+  epochs: 50
+  restart_every: 50
   save_every: 10
-  learning_rate: 0.1e-3
-  decay_steps: 100
+  init_lr: 1e-4
+  min_lr: 1e-6
+  decay_steps: 10
   decay_rate: 0.631
   lr_staircase: true
 
@@ -51,8 +60,8 @@ model:
   ext_feature_level: 4
   unique_levels: 3
   flow:
-    num_of_convs: [3, 5, 3, 5, 3, 5]
-    out_channels: [8, 16, 32, 64, 128, 256]
+    num_of_convs: [3, 3, 3, 3]
+    out_channels: [32, 64, 128, 256]
   fusion_pyramid_level: 5
 
 loss:
@@ -60,12 +69,27 @@ loss:
     - name: mse
       boundaries: [0]
       values: [1.0, 1.0]
-    - name: genome_disco
+    - name: symmetry
       boundaries: [0]
       values: [1.0, 1.0]
     - name: vgg
-      boundaries: [150]
-      values: [0.5, 1.0]
-    - name: style
-      boundaries: [250]
-      values: [0.0, 0.8]
+      boundaries: [0]
+      values: [1.0, 1.0]
+    # - name: style
+    #   boundaries: [250]
+    #   values: [0.0, 0.8]
+
+# loss:
+#   weight_parameters:
+#     - name: mse
+#       boundaries: [0]
+#       values: [1.0, 1.0]
+#     - name: genome_disco
+#       boundaries: [0]
+#       values: [1.0, 1.0]
+#     - name: vgg
+#       boundaries: [150]
+#       values: [0.5, 1.0]
+#     - name: style
+#       boundaries: [250]
+#       values: [0.0, 0.8]

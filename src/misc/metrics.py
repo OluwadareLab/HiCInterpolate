@@ -4,9 +4,12 @@ import torch.nn.functional as F
 from torch import nn
 from lpips import LPIPS
 from scipy import stats
-from .genome_disco import get_avg_genome_disco
+from src.misc.genome_disco import get_avg_genome_disco
 from torchmetrics import PearsonCorrCoef, SpearmanCorrCoef
 from torchmetrics.functional.regression import pearson_corrcoef, spearman_corrcoef
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 def get_psnr(pred, target):

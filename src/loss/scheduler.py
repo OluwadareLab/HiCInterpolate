@@ -13,7 +13,8 @@ class WarmupScheduler(_LRScheduler):
             return [base_lr * (self.last_epoch + 1) / self.warmup_steps for base_lr in self.base_lrs]
         else:
             if not self.finished_warmup:
-                self.after_scheduler.base_lrs = [base_lr for base_lr in self.base_lrs]
+                self.after_scheduler.base_lrs = [
+                    base_lr for base_lr in self.base_lrs]
                 self.finished_warmup = True
             return self.after_scheduler.get_lr()
 

@@ -119,6 +119,6 @@ if __name__ == "__main__":
                         action='store_true', help='Test Model (default: False)')
     args = parser.parse_args()
 
-    main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
-    # main(config_filename="config_64_set_1_kr_w_rand_AdamW_cosin",
-    #      isDistributed=False, load_snapshot=False, train=True, test=True)
+    # main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
+    main(config_filename="config_256_set_1_kr_log_clip_norm_diag",
+         isDistributed=False, load_snapshot=False, train=True, test=True)
