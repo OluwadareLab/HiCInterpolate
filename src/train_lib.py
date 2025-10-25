@@ -27,6 +27,7 @@ class Trainer:
         self.isDistributed = dist.is_available() and dist.is_initialized()
         if isDistributed:
             self.device = int(os.environ['LOCAL_RANK'])
+            self.model = self.model.to(self.device)
             self.model = DDP(self.model, device_ids=[self.device])
         else:
             self.device = self.cfg.device
