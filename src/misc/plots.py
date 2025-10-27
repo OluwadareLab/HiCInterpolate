@@ -6,7 +6,8 @@ import torch
 
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['figure.dpi'] = 600
-CMAP_ = "Reds"
+CMAP_ = "hot"
+# CMAP_ = "Reds"
 # CMAP_ = "YlOrRd"
 
 
