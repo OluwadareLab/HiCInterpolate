@@ -57,12 +57,13 @@ class Trainer:
         self.val_genome_disco_per_epoch = 0
         self.val_ncc_per_epoch = 0
         self.val_lpips_per_epoch = 0
+        self.grad_norm = 0
 
         self.state = {'epoch': [], 'lr': [], 'train_loss': [], 'val_loss': [],
-                      'val_psnr': [], 'val_ssim': [], 'val_scc': [], 'val_pcc': [], 'val_genome_disco': [], 'val_ncc': [], 'val_lpips': [], 'best_val': []}
+                      'val_psnr': [], 'val_ssim': [], 'val_scc': [], 'val_pcc': [], 'val_genome_disco': [], 'val_ncc': [], 'val_lpips': [], 'best_val': [], 'grad_norms': []}
         self.metric_columns = ['epoch', 'lr', 'train_loss',
-                               'val_loss', 'val_psnr', 'val_ssim', 'val_scc', 'val_pcc', 'val_genome_disco', 'val_ncc', 'val_lpips', 'best_val']
-        self.best_val = 1e4
+                               'val_loss', 'val_psnr', 'val_ssim', 'val_scc', 'val_pcc', 'val_genome_disco', 'val_ncc', 'val_lpips', 'best_val', 'grad_norms']
+        self.best_val = -1e4
         self.best_model = f'{self.cfg.file.model}'
 
         self.snapshot = f'{self.cfg.file.snapshot}'
@@ -105,7 +106,7 @@ class Trainer:
         print(
             f"[INFO] Resuming training from snapshot at epoch {self.epochs_run}")
 
-    def _update_metrics(self, epoch, local_train_steps, local_train_loss, local_val_steps, local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_ncc, local_val_lpips):
+    def _update_metrics(self, epoch, local_train_steps, local_train_loss, local_val_steps, local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_ncc, local_val_lpips, local_grad_norm):
 
         self.train_loss_per_epoch = local_train_loss / local_train_steps
         self.val_loss_per_epoch = local_val_loss / local_val_steps
@@ -116,6 +117,7 @@ class Trainer:
         self.val_genome_disco_per_epoch = local_val_genome_disco / local_val_steps
         self.val_ncc_per_epoch = local_val_ncc / local_val_steps
         self.val_lpips_per_epoch = local_val_lpips / local_val_steps
+        self.grad_norm = local_grad_norm / local_train_steps
 
         self.state['epoch'].append(epoch+1)
         self.state['lr'].append(self.scheduler.get_last_lr()[0])
@@ -128,6 +130,7 @@ class Trainer:
         self.state['val_genome_disco'].append(self.val_genome_disco_per_epoch)
         self.state['val_ncc'].append(self.val_ncc_per_epoch)
         self.state['val_lpips'].append(self.val_lpips_per_epoch)
+        self.state['grad_norms'].append(self.grad_norm)
 
     def _get_model_stats(self, epoch: int):
         snapshot = {
@@ -145,8 +148,9 @@ class Trainer:
         print(f"[DEBUG] Epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int):
-        if self.val_loss_per_epoch < self.best_val:
-            self.best_val = self.val_loss_per_epoch
+        best_val = (self.val_psnr_per_epoch + self.val_ssim_per_epoch)/2.0
+        if best_val > self.best_val:
+            self.best_val = best_val
             snapshot = self._get_model_stats(epoch)
             torch.save(snapshot, self.best_model)
             self.log.debug(
@@ -167,13 +171,15 @@ class Trainer:
             'val_genome_disco':  self.state["val_genome_disco"],
             'val_ncc':  self.state["val_ncc"],
             'val_lpips':  self.state["val_lpips"],
-            'best_val': self.state["best_val"]
+            'best_val': self.state["best_val"],
+            'grad_norms': self.state["grad_norms"]
         }, columns=self.metric_columns)
 
         metrics_df.to_csv(self.cfg.file.val_metrics, index=False)
         plot.draw_metric(self.cfg, self.state)
 
     def _run_epoch(self, epoch):
+        self.epochs_run = epoch
         self.train_loss_per_epoch = 0
         self.val_loss_per_epoch = 0
         self.val_psnr_per_epoch = 0
@@ -183,13 +189,15 @@ class Trainer:
         self.val_genome_disco_per_epoch = 0
         self.val_ncc_per_epoch = 0
         self.val_lpips_per_epoch = 0
+        self.grad_norm = 0
 
         self.model.train()
         if self.isDistributed:
             self.train_dl.sampler.set_epoch(epoch)
 
-        local_train_loss = 0
-        total_norm = 0.0
+        local_train_loss = 0.0
+        local_grad_norm = 0.0
+
         for _, (x0, y, x1, time_frame) in enumerate(tqdm(self.train_dl)):
             x0 = x0.to(self.device)
             y = y.to(self.device)
@@ -202,21 +210,23 @@ class Trainer:
             train_loss = self.loss_fn(pred, y, self.epochs_run)
             local_train_loss += train_loss.item()
             train_loss.backward()
-            self.optimizer.step()
 
+            total_norm_sq = 0.0
             for p in self.model.parameters():
-                if p.grad is None:
-                    continue
-                param_norm = p.grad.detach().data.norm(2)
-                total_norm += param_norm.item()**2
+                if p.grad is not None:
+                    total_norm_sq += p.grad.detach().norm(2).item() ** 2
+            local_grad_norm += total_norm_sq ** 0.5
+
+            self.optimizer.step()
 
             del x0, y, x1, time_frame
 
-        total_norm = total_norm**0.5
+        self.grad_norm = local_grad_norm/self.train_steps
+
         self.log.info(
-            f"Grad Norm: {total_norm}")
+            f"Grad Norm: {self.grad_norm}")
         print(
-            f"[INFO] Grad Norm: {total_norm}")
+            f"[INFO] Grad Norm: {self.grad_norm}")
 
         self.scheduler.step()
 
@@ -280,6 +290,8 @@ class Trainer:
                 local_val_ncc, device=self.device)
             local_val_lpips = torch.tensor(
                 local_val_lpips, device=self.device)
+            local_grad_norm = torch.tensor(
+                local_grad_norm, device=self.device)
 
             dist.all_reduce(local_train_steps, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_val_steps, op=dist.ReduceOp.SUM)
@@ -292,6 +304,7 @@ class Trainer:
             dist.all_reduce(local_val_genome_disco, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_val_ncc, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_val_lpips, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_grad_norm, op=dist.ReduceOp.SUM)
 
             local_train_steps = local_train_steps.item()
             local_val_steps = local_val_steps.item()
@@ -304,11 +317,12 @@ class Trainer:
             local_val_genome_disco = local_val_genome_disco.item()
             local_val_ncc = local_val_ncc.item()
             local_val_lpips = local_val_lpips.item()
+            local_grad_norm = local_grad_norm.item()
             self._update_metrics(epoch, local_train_steps, local_train_loss, local_val_steps,
-                                 local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_ncc, local_val_lpips)
+                                 local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_ncc, local_val_lpips, local_grad_norm)
         else:
             self._update_metrics(epoch, self.train_steps, local_train_loss, self.val_steps,
-                                 local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_ncc, local_val_lpips)
+                                 local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_ncc, local_val_lpips, local_grad_norm)
 
     def train(self, max_epochs: int):
         self.log.info(f"==== Training Started ([{self.device}]) ====")

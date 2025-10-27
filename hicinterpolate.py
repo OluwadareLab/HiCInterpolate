@@ -79,19 +79,20 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
     batch_size = cfg.data.batch_size
     cds = CustomDataset(record_file=cfg.file.dataset_dict, img_dir=cfg.dir.image,
                         img_map=cfg.data.interpolator_images_map, shuffle=True, train_val_test_ratio=cfg.data.train_val_test_ratio)
-    train_ds, val_ds, test_ds = cds._get_train_dl()
+    train_ds, val_ds, test_ds = cds._get_dataset()
+
     if train:
         train_dl = get_dataloader(
             ds=train_ds, batch_size=batch_size, shuffle=True, isDistributed=isDistributed)
         val_dl = get_dataloader(ds=val_ds, batch_size=batch_size,
-                                shuffle=True, isDistributed=isDistributed)
+                                shuffle=False, isDistributed=isDistributed)
         trainer = TrainLib.Trainer(cfg=cfg, log=log, train_dl=train_dl, val_dl=val_dl,
                                    load_snapshot=load_snapshot, isDistributed=isDistributed)
         trainer.train(max_epochs=cfg.training.epochs)
 
     if test and os.path.exists(cfg.file.model):
         test_dl = get_dataloader(
-            ds=test_ds, batch_size=batch_size, shuffle=True, isDistributed=isDistributed)
+            ds=test_ds, batch_size=batch_size, shuffle=False, isDistributed=isDistributed)
         tester = TestLib.Tester(
             cfg=cfg, log=log, model=cfg.file.model, test_dl=test_dl, isDistributed=isDistributed)
         tester.test()
@@ -119,6 +120,6 @@ if __name__ == "__main__":
                         action='store_true', help='Test Model (default: False)')
     args = parser.parse_args()
 
-    main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
-    # main(config_filename="config_256_set_1_kr_log_clip_norm_diag",
-    #      isDistributed=False, load_snapshot=False, train=True, test=True)
+    # main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
+    main(config_filename="config_256_set_1_kr_log_clip_norm_diag_test",
+         isDistributed=False, load_snapshot=False, train=True, test=True)

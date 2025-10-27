@@ -31,6 +31,7 @@ file:
   lpips_val_plot: ${dir.output}/${model.name}_lpips_plot.png
   train_val_loss_plot: ${dir.output}/${model.name}_train_val_loss_plot.png
   lr_plot: ${dir.output}/${model.name}_lr_plot.png
+  grad_norm_plot: ${dir.output}/${model.name}_grad_norm_plot.png
   log: ${dir.output}/${model.name}.log
 
 data:
@@ -39,7 +40,7 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.2, 0.0125, 0.0125]
+  train_val_test_ratio: [0.1, 0.0125, 0.0125]
   batch_size: 8
 
 training:
@@ -69,9 +70,9 @@ loss:
     - name: mse
       boundaries: [0]
       values: [1.0, 1.0]
-    # - name: symmetry
-    #   boundaries: [0]
-    #   values: [1.0, 1.0]
+    - name: symmetry
+      boundaries: [300]
+      values: [0.3, 1.0]
     - name: vgg
       boundaries: [500]
       values: [0.3, 0.7]

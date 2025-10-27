@@ -28,6 +28,7 @@ class FileConfig:
     ncc_val_plot: str
     lpips_val_plot: str
     train_val_loss_plot: str
+    grad_norm_plot: str
     lr_plot: str
     log: str
 

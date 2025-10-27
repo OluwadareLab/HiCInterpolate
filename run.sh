@@ -64,3 +64,5 @@ torchrun --nproc-per-node 1 --nnodes 1 --node_rank 0 hicinterpolate.py --distrib
 sbatch job1.slurm config_256_set_1_kr_log_clip_norm_diag_slurm
 
 python3 hicinterpolate.py --train --test --config config_256_set_1_kr_log_clip_norm_diag
+
+python3 hicinterpolate.py --train --test --config config_256_set_1_kr_log_clip_norm_diag_test

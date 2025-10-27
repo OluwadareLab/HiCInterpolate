@@ -1,8 +1,11 @@
 
+from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from torch import Tensor
 import torch
-from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
-from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 _EPSILON = 1e-8
 

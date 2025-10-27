@@ -13,3 +13,4 @@ seaborn
 omegaconf=2.3.0
 lpips
 scikit-learn
+wandb

@@ -10,7 +10,7 @@ from torchvision import transforms
 from torch.nn import L1Loss, MSELoss, Module, functional as F, ModuleList, MaxPool2d
 from torch import Tensor
 from typing import Tuple, Dict
-from src.misc import metrics as metric
+from src.misc import metrics as metric, eval_metrics as eval_metric
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -47,11 +47,11 @@ class CharbonnierLoss(Module):
 class SymmetryLoss(Module):
     def __init__(self):
         super().__init__()
-        self.criterion = L1Loss()
 
     def forward(self, pred: Tensor):
         transposed = pred.transpose(-1, -2)
-        loss = self.criterion(pred, transposed)
+        diff = pred - transposed
+        loss = torch.abs(diff).mean()
         return loss
 
 
@@ -60,7 +60,7 @@ class SSIMLoss(Module):
         super().__init__()
 
     def forward(self, pred: Tensor, y: Tensor):
-        loss = 1-metric.calculate_ssim(pred, y)
+        loss = 1.0-eval_metric.get_ssim(pred, y)
         return loss
 
 
@@ -386,10 +386,10 @@ class CombinedLoss(Module):
                 weight_params=weight_params, epoch=epoch)
 
             if (weight_params["name"] == "vgg" and weight > 0.0) or (weight_params["name"] == "style" and weight > 0.0):
-                # vgg_pred = self.vgg(pred*255)
-                # vgg_y = self.vgg(y*255)
-                vgg_pred = pred.repeat(1, 3, 1, 1)
-                vgg_y = y.repeat(1, 3, 1, 1)
+                vgg_pred = pred*255
+                vgg_y = y*255
+                vgg_pred = vgg_pred.repeat(1, 3, 1, 1)
+                vgg_y = vgg_y.repeat(1, 3, 1, 1)
 
             if weight_params["name"] == "l1" and weight > 0.0:
                 l1_loss = self.l1_loss(pred, y)
@@ -408,7 +408,7 @@ class CombinedLoss(Module):
                 ssim_loss = ssim_loss * weight
                 loss += ssim_loss
             elif weight_params["name"] == "vgg" and weight > 0.0:
-                vgg_loss = self.vgg_loss(vgg_pred, vgg_y)
+                vgg_loss = self.vgg_loss(vgg_pred, vgg_y)/255.0
                 vgg_loss = vgg_loss * weight
                 loss += vgg_loss
             elif weight_params["name"] == "style" and weight > 0.0:

@@ -30,7 +30,7 @@ def warp(image: torch.Tensor, flow: torch.Tensor):
     flowed_grid_x = 2.0 * flowed_grid[..., 0] / (W - 1) - 1.0
     flowed_grid_y = 2.0 * flowed_grid[..., 1] / (H - 1) - 1.0
     normalized_grid = torch.stack((flowed_grid_x, flowed_grid_y), dim=-1)
-    warped = F.grid_sample(image, normalized_grid, mode='nearest',
+    warped = F.grid_sample(image, normalized_grid, mode='bilinear',
                            padding_mode='border', align_corners=True)
 
     return warped
@@ -43,7 +43,7 @@ def flow_pyramid_synthesis(residual_pyramid: List[torch.Tensor]) -> List[torch.T
     for residual_flow in reversed(residual_pyramid[:-1]):
         level_size = (residual_flow.shape)[2:4]
         flow = F.interpolate(2 * flow, size=level_size,
-                             mode='nearest')
+                             mode='bilinear')
         flow = residual_flow + flow
         flow_pyramid.append(flow)
 

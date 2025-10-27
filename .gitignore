@@ -8,6 +8,7 @@ __pycache__/
 *.png
 *.csv
 *.zip
+*.pth
 
 # Virtual environments
 venv/
