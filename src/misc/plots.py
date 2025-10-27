@@ -118,14 +118,6 @@ def draw_metric(cfg, state):
     plt.close()
 
     plt.figure()
-    plt.plot(state["val_ncc"])
-    plt.title("NCC on validation set")
-    plt.xlabel("epoch")
-    plt.ylabel("value")
-    plt.savefig(cfg.file.ncc_val_plot, dpi=300, format='png')
-    plt.close()
-
-    plt.figure()
     plt.plot(state["val_lpips"])
     plt.title("LPIPS on validation set")
     plt.xlabel("epoch")

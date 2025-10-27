@@ -46,7 +46,7 @@ data:
 
 training:
   epochs: 50
-  restart_every: 50
+  restart_every: 25
   save_every: 10
   init_lr: 1e-4
   min_lr: 1e-6
@@ -71,6 +71,12 @@ loss:
     - name: mse
       boundaries: [0]
       values: [1.0, 1.0]
+    - name: symmetry
+      boundaries: [25]
+      values: [0.1, 0.5]
+    - name: vgg
+      boundaries: [25]
+      values: [0.01, 0.1]
     # - name: ssim
     #   boundaries: [0]
     #   values: [0.5, 0.5]
