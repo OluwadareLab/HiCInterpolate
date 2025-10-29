@@ -57,7 +57,7 @@ def train_model(
         log,
         model,
         device,
-        epochs: int = 50,
+        epochs: int = 100,
         batch_size: int = 8,
         learning_rate: float = 1e-5,
         amp: bool = False,
@@ -72,7 +72,7 @@ def train_model(
         "frame_1": "img2.npy",
         "frame_2": "img3.npy"
     }
-    train_val_test_ratio = [0.10, 0.0125, 0.0125]
+    train_val_test_ratio = [0.20, 0.025, 0.025]
     isDistributed = False
 
     cds = CustomDataset(record_file=dataset_dict, img_dir=img_dir,
@@ -82,12 +82,12 @@ def train_model(
     train_dataloader = get_dataloader(
         ds=train_dataset, batch_size=batch_size, shuffle=True, isDistributed=isDistributed)
     val_dataloader = get_dataloader(ds=val_dataset, batch_size=batch_size,
-                                    shuffle=True, isDistributed=isDistributed)
+                                    shuffle=False, isDistributed=isDistributed)
 
     optimizer = optim.RMSprop(model.parameters(),
                               lr=learning_rate, weight_decay=weight_decay, momentum=momentum, foreach=True)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, 'max', patience=5)
+        optimizer, 'min', patience=5)
     grad_scaler = torch.cuda.amp.GradScaler(enabled=amp)
     criterion = nn.MSELoss()
     global_step = 0
@@ -116,7 +116,9 @@ def train_model(
                        memory_format=torch.channels_last)
             with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
                 pred = model(x1, x3)
+                del x1, x3
                 loss = criterion(pred, y)
+                del pred, y
             optimizer.zero_grad(set_to_none=True)
             grad_scaler.scale(loss).backward()
             grad_scaler.unscale_(optimizer)
@@ -183,6 +185,7 @@ def train_model(
             msg = f"New best model saved!"
             log.info(msg)
             print(msg)
+            # plot.draw_hic_map(y=y, pred=pred, filename="unet_hic_map")
         elif epoch > 200:
             epochs_no_improve += 1
 

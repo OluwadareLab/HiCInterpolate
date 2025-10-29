@@ -8,6 +8,12 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+_EPSILON = 1e-8
+
+
+_min = torch.tensor(_EPSILON).float()
+_max = torch.tensor(1.0).float()
+
 
 class TripletDataset(Dataset):
     def __init__(self, triplet_dicts: List):
@@ -18,6 +24,7 @@ class TripletDataset(Dataset):
 
     def get_image(self, image_file: str) -> Tensor:
         img = torch.from_numpy(np.load(image_file)).unsqueeze(0)
+        img = torch.clamp(img, _min, _max)
         return img
 
     def __getitem__(self, idx):

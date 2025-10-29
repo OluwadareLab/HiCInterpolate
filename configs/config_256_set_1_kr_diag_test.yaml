@@ -4,14 +4,14 @@ dir:
   root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate
   model_state: ${dir.root}/models
   output: ${dir.root}/output
-  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/triplets/kr_log_clip_norm_diag
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/triplets/kr_diag
   image: ${dir.data}/${data.patch}
 
 # dir:
 #   root: /mmfs1/home/hchowdhu/data/hicinterpolate
 #   model_state: ${dir.root}/models
 #   output: ${dir.root}/output
-#   data: /mmfs1/home/hchowdhu/data/triplets/kr_log_clip_norm_diag
+#   data: /mmfs1/home/hchowdhu/data/triplets/kr_diag
 #   image: ${dir.data}/${data.patch}
 
 file:
@@ -45,10 +45,10 @@ data:
   batch_size: 8
 
 training:
-  epochs: 50
+  epochs: 10
   restart_every: 25
   save_every: 10
-  init_lr: 1e-4
+  init_lr: 1e-3
   min_lr: 1e-6
   decay_steps: 10
   decay_rate: 0.631

@@ -7,10 +7,10 @@ from cupyx.scipy.ndimage import gaussian_filter
 import matplotlib.pyplot as plt
 
 ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data"
-OUTPUT_ROOT_PATH = f"{ROOT_PATH}/triplets/kr_log_clip_norm_diag"
+OUTPUT_ROOT_PATH = f"{ROOT_PATH}/triplets/kr_diag"
 RESOLUTIONS = [10000]
 BALANCE_COOL = True
-PATCHES = [512, 256, 128, 64]
+PATCHES = [64, 128, 256, 512]
 # _CMAP = "YlOrRd"
 _CMAP = "Reds"
 _EPSILON = 1e-8
@@ -63,7 +63,6 @@ def plot_hic_map(matrix, filename):
 def save_img(chr_mat, r, c, patch, path, img_name):
     submatrix = chr_mat[r:r+patch, c:c+patch]
     submatrix = submatrix.astype(np.float32)
-    # plot_hic_map(submatrix, f"{patch}_{img_name}")
     np.save(f"{path}/{img_name}.npy", submatrix)
 
 
@@ -137,15 +136,83 @@ def draw_hic_map(x0: np.ndarray, y: np.ndarray, x1: np.ndarray, filename):
     plt.close()
 
 
-def normalization(matrix):
+def raw_matrix(matrix):
     matrix = np.nan_to_num(matrix, nan=_EPSILON,
                            posinf=_EPSILON, neginf=_EPSILON)
-    log_matrix = np.log1p(matrix+1)
+    return matrix
+
+
+def min_max_norm(matrix):
+    matrix = np.nan_to_num(matrix, nan=_EPSILON,
+                           posinf=_EPSILON, neginf=_EPSILON)
+
+    min_val = np.min(matrix)
+    max_val = np.max(matrix)
+    # min_max_matrix = (matrix - min_val) / (max_val - min_val + _EPSILON)
+    min_max_matrix = matrix/max_val
+    return min_max_matrix
+
+
+def log_clip(matrix):
+    matrix = np.nan_to_num(matrix, nan=_EPSILON,
+                           posinf=_EPSILON, neginf=_EPSILON)
+    log_matrix = np.log1p(matrix)
+    percentile_val = np.percentile(log_matrix, CLIPPING_PERCENTILE)
+    clip_matrix = np.clip(log_matrix, _EPSILON, percentile_val)
+
+    return clip_matrix
+
+
+def rev_log_clip_min_max(matrix):
+    mat = np.expm1(matrix)
+    log_matrix = np.log1p(mat)
+    return log_matrix
+
+
+def log_clip_min_max(matrix):
+    matrix = np.nan_to_num(matrix, nan=_EPSILON,
+                           posinf=_EPSILON, neginf=_EPSILON)
+    log_matrix = np.log1p(matrix)
     percentile_val = np.percentile(log_matrix, CLIPPING_PERCENTILE)
     clip_matrix = np.clip(log_matrix, _EPSILON, percentile_val)
     norm_matrix = clip_matrix / percentile_val
 
     return norm_matrix
+
+
+def normalization(matrix):
+    matrix = np.nan_to_num(matrix, nan=_EPSILON,
+                           posinf=_EPSILON, neginf=_EPSILON)
+    log_matrix = np.log1p(matrix)
+    percentile_val = np.percentile(log_matrix, CLIPPING_PERCENTILE)
+    clip_matrix = np.clip(log_matrix, _EPSILON, percentile_val)
+    norm_matrix = clip_matrix / percentile_val
+
+    return norm_matrix
+
+
+def draw_patch():
+    chr_mat_0 = np.load(
+        "/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/HiCPlus/data/GM12878_replicate_down16_chr17_17.npy")
+    submatrix = chr_mat_0[159][0]
+    submatrix = submatrix.astype(np.float32)
+
+    raw_mat = raw_matrix(submatrix)
+    plot_hic_map(raw_mat, f"hicplus_raw_mat")
+
+    min_max_mat = min_max_norm(submatrix)
+    plot_hic_map(min_max_mat, f"hicplus_min_max_mat")
+
+    log_clip_mat = log_clip(submatrix)
+    plot_hic_map(log_clip_mat, f"hicplus_log_clip_mat")
+
+    log_clip_mat_af_mm = rev_log_clip_min_max(log_clip_mat)
+    plot_hic_map(log_clip_mat_af_mm,
+                 f"hicplus_log_clip_mat_af_mm")
+
+    log_clip_min_max_mat = log_clip_min_max(submatrix)
+    plot_hic_map(log_clip_min_max_mat,
+                 f"hicplus_log_clip_min_max_mat")
 
 
 def generate_ds(organisms, samples, filename_list):
@@ -166,15 +233,13 @@ def generate_ds(organisms, samples, filename_list):
                         fetch = f"{chromosome}:{0}-{chr_size}"
                         chr_mat_0 = cool_0.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
-                        chr_mat_0 = normalization(chr_mat_0)
+                        chr_mat_0 = log_clip(chr_mat_0)
                         chr_mat_y = cool_y.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
-                        chr_mat_y = normalization(chr_mat_y)
+                        chr_mat_y = log_clip(chr_mat_y)
                         chr_mat_1 = cool_1.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
-                        chr_mat_1 = normalization(chr_mat_1)
-                        # draw_hic_map(chr_mat_0, chr_mat_y,
-                        #              chr_mat_1, f"{OUTPUT_ROOT_PATH}/{sub_sample}_{chromosome}")
+                        chr_mat_1 = log_clip(chr_mat_1)
                         counter = [1, 1, 1, 1]
                         counter = generate_patch(chr_mat_0, chr_mat_y, chr_mat_1,
                                                  organism, sample, resolution, chromosome, sub_sample, counter)
