@@ -1,8 +1,7 @@
 
 import torch
 from torch import Tensor
-from torchmetrics.functional import peak_signal_noise_ratio, structural_similarity_index_measure
-from torchmetrics.functional.image.lpips import learned_perceptual_image_patch_similarity
+from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure, LearnedPerceptualImagePatchSimilarity
 from src.metric.genome_disco import compute_reproducibility
 from scipy.sparse import csr_matrix
 import numpy as np
@@ -11,14 +10,15 @@ _EPSILON = 1e-8
 
 
 def get_psnr(preds: Tensor, target: Tensor, data_range: float = 1.0):
-    psnr_score = peak_signal_noise_ratio(
-        preds=preds, target=target, data_range=data_range).to(preds.device)
+    psnr = PeakSignalNoiseRatio(data_range=data_range).to(preds.device)
+    psnr_score = psnr(preds, target)
     return psnr_score
 
 
 def get_ssim(preds: Tensor, target: Tensor, data_range: float = 1.0):
-    ssim_score = structural_similarity_index_measure(
-        preds=preds, target=target, data_range=data_range).to(preds.device)
+    ssim = StructuralSimilarityIndexMeasure(
+        data_range=data_range).to(preds.device)
+    ssim_score = ssim(preds, target)
     return ssim_score
 
 
@@ -38,14 +38,15 @@ def get_genome_disco(preds: Tensor, target: Tensor):
 
 
 def get_lpips(preds, target):
+    lpips = LearnedPerceptualImagePatchSimilarity(
+        net_type='vgg').to(preds.device)
     preds_min = preds.amin(dim=(1, 2, 3), keepdim=True)
     preds_max = preds.amax(dim=(1, 2, 3), keepdim=True)
     preds_norm = (preds - preds_min) / (preds_max - preds_min + _EPSILON)
 
     tmp_preds = preds_norm.repeat(1, 3, 1, 1)
     tmp_target = target.repeat(1, 3, 1, 1)
-    lpips_score = learned_perceptual_image_patch_similarity(
-        tmp_preds, tmp_target, net_type='vgg').to(preds.device)
+    lpips_score = lpips(tmp_preds, tmp_target)
     return lpips_score
 
 
