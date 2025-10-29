@@ -35,7 +35,6 @@ torchrun \
 --master_port=$MASTER_PORT \
 hicinterpolate.py \
 --distributed \
---load-snapshot \
 --train \
 --test \
 --config "$CONFIG_FILE"
