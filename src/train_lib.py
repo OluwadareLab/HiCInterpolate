@@ -216,7 +216,7 @@ class Trainer:
             local_grad_norm += total_norm_sq ** 0.5
             self.optimizer.step()
 
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+            # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
 
             del x0, y, x1, time_frame
 
