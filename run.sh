@@ -67,3 +67,5 @@ sbatch job1.slurm config_256_set_1_kr_diag_slurm
 python3 hicinterpolate.py --train --test --config config_256_set_1_kr_log_clip_norm_diag
 
 python3 hicinterpolate.py --train --test --config config_256_set_1_kr_diag_test
+
+python3 hicinterpolate.py --train --test --config config_64_set_3

@@ -121,5 +121,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
-    # main(config_filename="config_256_set_1_kr_log_clip_norm_diag_test",
+    # main(config_filename="config_64_set_1",
     #      isDistributed=False, load_snapshot=False, train=True, test=True)

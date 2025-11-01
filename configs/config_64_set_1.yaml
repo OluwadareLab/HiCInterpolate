@@ -4,7 +4,7 @@ dir:
   root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate
   model_state: ${dir.root}/models
   output: ${dir.root}/output
-  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/triplets/kr_diag
+  data: /home/hc0783.unt.ad.unt.edu/mohit/Documents/project/interpolation/data/triplets/normalized
   image: ${dir.data}/${data.patch}
 
 # dir:
@@ -15,7 +15,7 @@ dir:
 #   image: ${dir.data}/${data.patch}
 
 file:
-  dataset_dict: ${dir.image}/dataset_dict.txt
+  dataset_dict: ${dir.image}/train.txt
   vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
   snapshot: ${dir.model_state}/${model.name}_snapshot.pt
   model: ${dir.model_state}/${model.name}.pt
@@ -42,11 +42,11 @@ data:
     frame_2: img3.npy
   train_val_test_ratio: [0.1, 0.0125, 0.0125]
   # train_val_test_ratio: [0.1, 0.0125, 0.0125]
-  batch_size: 32
+  batch_size: 8
 
 training:
-  epochs: 100
-  restart_every: 25
+  epochs: 1000
+  restart_every: 100
   save_every: 10
   init_lr: 1e-4
   min_lr: 1e-6
@@ -58,13 +58,13 @@ model:
   name: hicinterpolate_${data.patch}
   init_in_channels: 1
   init_out_channels: 4
-  pyramid_level: 6
-  ext_feature_level: 4
-  unique_levels: 3
+  pyramid_level: 4
+  ext_feature_level: 3
+  unique_levels: 2
   flow:
-    num_of_convs: [3, 3, 3, 3]
-    out_channels: [32, 64, 128, 256]
-  fusion_pyramid_level: 5
+    num_of_convs: [3, 3, 3]
+    out_channels: [16, 32, 64]
+  fusion_pyramid_level: 4
 
 loss:
   weight_parameters:
@@ -72,32 +72,8 @@ loss:
       boundaries: [0]
       values: [1.0, 1.0]
     - name: symmetry
-      boundaries: [50]
+      boundaries: [150]
       values: [0.1, 0.5]
     - name: vgg
-      boundaries: [50]
+      boundaries: [150]
       values: [0.01, 0.1]
-    # - name: ssim
-    #   boundaries: [0]
-    #   values: [0.5, 0.5]
-    # - name: vgg
-    #   boundaries: [0]
-    #   values: [0.1, 0.1]
-    # - name: style
-    #   boundaries: [250]
-    #   values: [0.0, 0.8]
-
-# loss:
-#   weight_parameters:
-#     - name: mse
-#       boundaries: [0]
-#       values: [1.0, 1.0]
-#     - name: genome_disco
-#       boundaries: [0]
-#       values: [1.0, 1.0]
-#     - name: vgg
-#       boundaries: [150]
-#       values: [0.5, 1.0]
-#     - name: style
-#       boundaries: [250]
-#       values: [0.0, 0.8]

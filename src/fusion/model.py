@@ -60,7 +60,7 @@ class Fusion(Module):
         net = pyramid[-1]
         for i in reversed(range(0, self.levels-1)):
             level_size = (pyramid[i].shape)[2:4]
-            net = F.interpolate(net, size=level_size, mode='bilinear')
+            net = F.interpolate(net, size=level_size, mode='nearest')
             net = self.convs[i][0](net)
             net = torch.cat([pyramid[i], net], dim=1)
             net = self.convs[i][1](net)

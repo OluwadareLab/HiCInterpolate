@@ -35,11 +35,13 @@ class Trainer:
             self.model = self.model.to(self.device)
 
         self.loss_fn = CombinedLoss(self.cfg)
-
         self.optimizer = AdamW(self.model.parameters(),
                                lr=self.cfg.training.init_lr)
-        self.scheduler = CosineAnnealingWarmRestarts(
-            self.optimizer, T_0=self.cfg.training.restart_every, T_mult=1, eta_min=self.cfg.training.min_lr)
+        self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
+                                          decay_rate=self.cfg.training.decay_rate, staircase=self.cfg.training.lr_staircase)
+
+        # self.scheduler = CosineAnnealingWarmRestarts(
+        #     self.optimizer, T_0=self.cfg.training.restart_every, T_mult=1, eta_min=self.cfg.training.min_lr)
 
         self.train_dl = train_dl
         self.train_steps = len(self.train_dl)
@@ -118,7 +120,7 @@ class Trainer:
         self.val_pcc_per_epoch = local_val_pcc / local_val_steps
         self.val_genome_disco_per_epoch = local_val_genome_disco / local_val_steps
         self.val_lpips_per_epoch = local_val_lpips / local_val_steps
-        self.grad_norm = local_grad_norm / local_train_steps
+        self.grad_norm = (local_grad_norm / self.train_steps) ** 0.5
 
         self.state['epoch'].append(epoch+1)
         self.state['lr'].append(self.optimizer.param_groups[0]['lr'])
@@ -148,7 +150,7 @@ class Trainer:
         print(f"[DEBUG] Epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int):
-        best_val = 0.5 * (self.val_psnr_per_epoch + self.val_ssim_per_epoch)
+        best_val = self.val_psnr_per_epoch + 100 * self.val_genome_disco_per_epoch
         if best_val > self.best_val:
             self.epochs_no_improve = 0
             self.best_val = best_val
@@ -158,7 +160,7 @@ class Trainer:
                 f"Epoch {self.epochs_run+1} saved best model.")
             print(
                 f"[DEBUG] Epoch {self.epochs_run+1} saved best model.")
-        elif self.epochs_run > 200:
+        elif self.epochs_run > 300:
             self.epochs_no_improve += 1
 
     def _save_and_draw_metrics(self):
@@ -208,19 +210,16 @@ class Trainer:
             train_loss = self.loss_fn(pred, y, self.epochs_run)
             local_train_loss += train_loss.item()
             train_loss.backward()
+            self.optimizer.step()
 
             total_norm_sq = 0.0
             for p in self.model.parameters():
                 if p.grad is not None:
-                    total_norm_sq += p.grad.detach().norm(2).item() ** 2
-            local_grad_norm += total_norm_sq ** 0.5
-            self.optimizer.step()
-
-            # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                    total_norm_sq += torch.linalg.vector_norm(
+                        p.grad.detach(), ord=2).item() ** 2
+            local_grad_norm += total_norm_sq
 
             del x0, y, x1, time_frame
-
-        self.grad_norm = local_grad_norm/self.train_steps
 
         self.scheduler.step()
 
@@ -320,7 +319,8 @@ class Trainer:
 
             for epoch in range(self.epochs_run, max_epochs):
                 if self.epochs_no_improve > self.patience:
-                    continue
+                    self.log.info(f"No improvement in last 20 epoch!")
+                    print(f"No improvement in last 20 epoch!")
 
                 self._run_epoch(epoch)
                 if self.isDistributed and self.device == 0:

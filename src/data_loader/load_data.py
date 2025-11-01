@@ -6,6 +6,7 @@ from typing import List, Tuple
 from torch import Tensor
 import sys
 import os
+from scipy.stats import norm
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 _EPSILON = 1e-8
@@ -23,8 +24,10 @@ class TripletDataset(Dataset):
         return len(self.triplet_dicts)
 
     def get_image(self, image_file: str) -> Tensor:
-        img = torch.from_numpy(np.load(image_file)).unsqueeze(0)
-        img = torch.clamp(img, _min, _max)
+        np_img = np.load(image_file)
+        # norm_img = norm.pdf(np_img)
+        # mm_img = np.clip(norm_img, 0.0, 1.0)
+        img = torch.from_numpy(np_img).float().unsqueeze(0)
         return img
 
     def __getitem__(self, idx):

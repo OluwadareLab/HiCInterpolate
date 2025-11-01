@@ -4,7 +4,7 @@ import os
 import numpy as np
 import scipy.io as sio
 import torch
-import torchvision.models as models
+from torchvision.models import vgg19, VGG19_Weights
 import torch.nn as nn
 from torchvision import transforms
 from torch.nn import L1Loss, MSELoss, Module, functional as F, ModuleList, MaxPool2d
@@ -268,8 +268,8 @@ class VGGPerceptualLoss(nn.Module):
     def __init__(self, cfg):
         super(VGGPerceptualLoss, self).__init__()
         self.cfg = cfg
-        self.vgg_pretrained_features = models.vgg19(
-            pretrained=True).features.to(self.cfg.device)
+        self.vgg_pretrained_features = vgg19(
+            weights=VGG19_Weights.IMAGENET1K_V1).features.to(self.cfg.device)
         self.normalize = MeanShift([0.485, 0.456, 0.406], [
                                    0.229, 0.224, 0.225], norm=True).to(self.cfg.device)
         for param in self.parameters():

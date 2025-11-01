@@ -1,19 +1,20 @@
 import os
 import numpy as np
 import cooler as cool
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter as sp_gf
 import cupy as cp
-from cupyx.scipy.ndimage import gaussian_filter
+from cupyx.scipy.ndimage import gaussian_filter as cp_gf
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
 
 ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data"
-OUTPUT_ROOT_PATH = f"{ROOT_PATH}/triplets/kr_diag"
+OUTPUT_ROOT_PATH = f"{ROOT_PATH}/triplets/kr_gf"
 RESOLUTIONS = [10000]
 BALANCE_COOL = True
 PATCHES = [64, 128, 256, 512]
 # _CMAP = "YlOrRd"
 _CMAP = "Reds"
-_EPSILON = 1e-8
+_EPSILON = 1e-9
 CLIPPING_PERCENTILE = 99.99
 PATCH_OVERLAP_RATIO = 0.2
 
@@ -101,14 +102,14 @@ def generate_patch(mat_0, mat_y, mat_1, organism, sample, resolution, chromosome
     return counter
 
 
-def fast_gaussian_filter(matrix, sigma=4):
+def get_cp_gf(matrix, sigma=0.75):
     try:
         with cp.cuda.Device(0):
             matrix_gpu = cp.asarray(matrix)
-            result_gpu = gaussian_filter(
-                matrix_gpu, sigma=sigma, mode='reflect')
+            result_gpu = cp_gf(matrix_gpu, sigma=sigma, mode='nearest')
             result_cpu = cp.asnumpy(result_gpu)
             del matrix_gpu, result_gpu
+
             cp._default_memory_pool.free_all_blocks()
             return result_cpu
     except cp.cuda.memory.OutOfMemoryError:
@@ -142,15 +143,26 @@ def raw_matrix(matrix):
     return matrix
 
 
+def gf_norm(matrix):
+    matrix = np.nan_to_num(matrix, nan=_EPSILON,
+                           posinf=_EPSILON, neginf=_EPSILON)
+    # gf_matrix = get_cp_gf(matrix=matrix)
+    gf_matrix = sp_gf(matrix, 0.75)
+    _min = np.min(gf_matrix)
+    _max = np.max(gf_matrix)
+    mm_matrix = (gf_matrix - _min)/(_max - _min)
+    mm_matrix[mm_matrix == 0] = _EPSILON
+    return mm_matrix
+
+
 def min_max_norm(matrix):
     matrix = np.nan_to_num(matrix, nan=_EPSILON,
                            posinf=_EPSILON, neginf=_EPSILON)
-
-    min_val = np.min(matrix)
-    max_val = np.max(matrix)
-    # min_max_matrix = (matrix - min_val) / (max_val - min_val + _EPSILON)
-    min_max_matrix = matrix/max_val
-    return min_max_matrix
+    _min = np.min(matrix)
+    _max = np.max(matrix)
+    mm_matrix = (matrix - _min)/(_max - _min)
+    mm_matrix[mm_matrix == 0] = _EPSILON
+    return mm_matrix
 
 
 def log_clip(matrix):
@@ -233,13 +245,13 @@ def generate_ds(organisms, samples, filename_list):
                         fetch = f"{chromosome}:{0}-{chr_size}"
                         chr_mat_0 = cool_0.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
-                        chr_mat_0 = log_clip(chr_mat_0)
+                        chr_mat_0 = gf_norm(chr_mat_0)
                         chr_mat_y = cool_y.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
-                        chr_mat_y = log_clip(chr_mat_y)
+                        chr_mat_y = gf_norm(chr_mat_y)
                         chr_mat_1 = cool_1.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
-                        chr_mat_1 = log_clip(chr_mat_1)
+                        chr_mat_1 = gf_norm(chr_mat_1)
                         counter = [1, 1, 1, 1]
                         counter = generate_patch(chr_mat_0, chr_mat_y, chr_mat_1,
                                                  organism, sample, resolution, chromosome, sub_sample, counter)
