@@ -35,8 +35,8 @@ class Trainer:
             self.model = self.model.to(self.device)
 
         self.loss_fn = CombinedLoss(self.cfg)
-        self.optimizer = AdamW(self.model.parameters(),
-                               lr=self.cfg.training.init_lr)
+        self.optimizer = Adam(self.model.parameters(),
+                              lr=self.cfg.training.init_lr)
         self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
                                           decay_rate=self.cfg.training.decay_rate, staircase=self.cfg.training.lr_staircase)
 
@@ -329,7 +329,7 @@ class Trainer:
                     if (self.epochs_run+1) % self.save_every == 0:
                         self._save_snapshot(epoch)
                     self._save_and_draw_metrics()
-                    scores = f"[{(self.epochs_run+1)}/{max_epochs}] Grad Norm: {format(self.grad_norm, '.4f')}; LR: {self.optimizer.param_groups[0]['lr']}; Batch Size: {self.batch_size}; Train Loss: {format(self.train_loss_per_epoch, '.6f')}; Val (Loss: {format(self.val_loss_per_epoch, '.6f')}, PSNR: {format(self.val_psnr_per_epoch, '.4f')}, SSIM: {format(self.val_ssim_per_epoch, '.4f')}, GenomeDISCO: {format(self.val_genome_disco_per_epoch, '.4f')}, LPIPS: {format(self.val_lpips_per_epoch, '.4f')};"
+                    scores = f"[{(self.epochs_run+1)}/{max_epochs}] LR: {self.optimizer.param_groups[0]['lr']}; Batch Size: {self.batch_size}; Grad Norm: {format(self.grad_norm, '.4f')}; Train Loss: {format(self.train_loss_per_epoch, '.6f')}; Val (Loss: {format(self.val_loss_per_epoch, '.6f')}, PSNR: {format(self.val_psnr_per_epoch, '.4f')}, SSIM: {format(self.val_ssim_per_epoch, '.4f')}, GenomeDISCO: {format(self.val_genome_disco_per_epoch, '.4f')}, LPIPS: {format(self.val_lpips_per_epoch, '.4f')};"
 
                     self.log.info(f"{scores}")
                     print(f"[INFO] {scores}")
@@ -340,7 +340,7 @@ class Trainer:
                     if (self.epochs_run+1) % self.save_every == 0:
                         self._save_snapshot(epoch)
                     self._save_and_draw_metrics()
-                    scores = f"[{(self.epochs_run+1)}/{max_epochs}] Grad Norm: {format(self.grad_norm, '.4f')}; LR: {self.optimizer.param_groups[0]['lr']}; Batch Size: {self.batch_size}; Train Loss: {format(self.train_loss_per_epoch, '.6f')}; Val (Loss: {format(self.val_loss_per_epoch, '.6f')}, PSNR: {format(self.val_psnr_per_epoch, '.4f')}, SSIM: {format(self.val_ssim_per_epoch, '.4f')}, GenomeDISCO: {format(self.val_genome_disco_per_epoch, '.4f')}, LPIPS: {format(self.val_lpips_per_epoch, '.4f')};"
+                    scores = f"[{(self.epochs_run+1)}/{max_epochs}] LR: {self.optimizer.param_groups[0]['lr']}; Batch Size: {self.batch_size}; Grad Norm: {format(self.grad_norm, '.4f')}; Train Loss: {format(self.train_loss_per_epoch, '.6f')}; Val (Loss: {format(self.val_loss_per_epoch, '.6f')}, PSNR: {format(self.val_psnr_per_epoch, '.4f')}, SSIM: {format(self.val_ssim_per_epoch, '.4f')}, GenomeDISCO: {format(self.val_genome_disco_per_epoch, '.4f')}, LPIPS: {format(self.val_lpips_per_epoch, '.4f')};"
 
                     self.log.info(f"{scores}")
                     print(f"[INFO] {scores}")

@@ -24,19 +24,8 @@ CONFIG_FILE=$1
 
 echo "Job ($CONFIG_FILE) started on $(hostname) at $(date)"
 
-torchrun \
---nproc-per-node=2 \
---nnodes=1 \
---node_rank=$SLURM_NODEID \
---rdzv-id=$RANDOM \
---rdzv-backend=c10d \
---rdzv-endpoint=$MASTER_ADDR:$MASTER_PORT \
---master_addr=$MASTER_ADDR \
---master_port=$MASTER_PORT \
-hicinterpolate.py \
---distributed \
---train \
---test \
---config "$CONFIG_FILE"
+python3 hicinterpolate.py --train --test --config config_256_set_1 &
+python3 hicinterpolate.py --train --test --config config_256_set_2 &
+wait
 
 echo "Job finished at $(date)"
