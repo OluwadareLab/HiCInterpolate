@@ -6,7 +6,7 @@ import torch
 
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['figure.dpi'] = 600
-CMAP_ = "hot"
+CMAP_ = "hot_r"
 # CMAP_ = "Reds"
 # CMAP_ = "YlOrRd"
 
@@ -93,13 +93,13 @@ def draw_metric(cfg, state):
     plt.savefig(cfg.file.ssim_val_plot, dpi=300, format='png')
     plt.close()
 
-    plt.figure()
-    plt.plot(state["val_scc"])
-    plt.title("SCC on validation set")
-    plt.xlabel("epoch")
-    plt.ylabel("value")
-    plt.savefig(cfg.file.scc_val_plot, dpi=300, format='png')
-    plt.close()
+    # plt.figure()
+    # plt.plot(state["val_scc"])
+    # plt.title("SCC on validation set")
+    # plt.xlabel("epoch")
+    # plt.ylabel("value")
+    # plt.savefig(cfg.file.scc_val_plot, dpi=300, format='png')
+    # plt.close()
 
     # plt.figure()
     # plt.plot(state["val_pcc"])

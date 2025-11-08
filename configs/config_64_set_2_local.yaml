@@ -4,15 +4,8 @@ dir:
   root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate
   model_state: ${dir.root}/models
   output: ${dir.root}/output
-  data: /home/hc0783.unt.ad.unt.edu/mohit/Documents/project/interpolation/data/triplets/kr
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/triplets/kr_gf
   image: ${dir.data}/${data.patch}
-
-# dir:
-#   root: /mmfs1/home/hchowdhu/data/hicinterpolate
-#   model_state: ${dir.root}/models
-#   output: ${dir.root}/output
-#   data: /mmfs1/home/hchowdhu/data/triplets/kr_diag
-#   image: ${dir.data}/${data.patch}
 
 file:
   dataset_dict: ${dir.image}/train.txt
@@ -40,18 +33,17 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.1, 0.0125, 0.0125]
-  # train_val_test_ratio: [0.1, 0.0125, 0.0125]
+  train_val_test_ratio: [0.8, 0.1, 0.1]
   batch_size: 8
 
 training:
-  epochs: 1000
+  epochs: 500
   restart_every: 100
   save_every: 10
   init_lr: 1e-4
   min_lr: 1e-6
-  decay_steps: 25
-  decay_rate: 0.316
+  decay_steps: 100
+  decay_rate: 0.398
   lr_staircase: true
 
 model:
@@ -62,7 +54,7 @@ model:
   ext_feature_level: 3
   unique_levels: 2
   flow:
-    num_of_convs: [3, 3, 3]
+    num_of_convs: [5, 5, 5]
     out_channels: [16, 32, 64]
   fusion_pyramid_level: 4
 
