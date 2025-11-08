@@ -8,7 +8,7 @@ dir:
   image: ${dir.data}/${data.patch}
 
 file:
-  dataset_dict: ${dir.image}/train.txt
+  dataset_dict: ${dir.image}/dataset_dict.txt
   vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
   snapshot: ${dir.model_state}/${model.name}_snapshot.pt
   model: ${dir.model_state}/${model.name}.pt
