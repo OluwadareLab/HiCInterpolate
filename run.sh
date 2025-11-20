@@ -71,3 +71,5 @@ python3 hicinterpolate.py --train --test --config config_256_set_1_kr_diag_test
 python3 hicinterpolate.py --train --test --config config_256_set_1 &
 python3 hicinterpolate.py --train --test --config config_256_set_2 &
 wait
+
+python3 hicinterpolate.py --train --test --config config_64_set_3_local

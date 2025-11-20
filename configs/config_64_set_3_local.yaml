@@ -1,10 +1,10 @@
 device: cuda
 
 dir:
-  root: /mmfs1/home/hchowdhu/data/hicinterpolate
+  root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate
   model_state: ${dir.root}/models
   output: ${dir.root}/output
-  data: /mmfs1/home/hchowdhu/data/time_series_data/kr_gf
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/time_series_data/triplets/kr_gf
   image: ${dir.data}/${data.patch}
 
 file:
@@ -33,11 +33,11 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.8, 0.1, 0.1]
+  train_val_test_ratio: [0.2, 0.025, 0.025]
   batch_size: 64
 
 training:
-  epochs: 1200
+  epochs: 1
   restart_every: 150
   save_every: 10
   init_lr: 1e-4

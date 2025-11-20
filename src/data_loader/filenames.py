@@ -1,0 +1,158 @@
+[
+    "4DNFIP9EJSOM_dmso_0m",
+    ["4DNFI7T93SHL_dmso_30m",
+     "4DNFICF2Z2TG_dmso_60m",
+     "4DNFILL624WG_dmso_90m"]
+    "4DNFIC4GB8UM_dmso_120m"
+],
+[
+    "4DNFI5EAPQTI_dtag_v1_0m",
+    ["4DNFIY1TCVLX_dtag_v1_30m",
+     "4DNFIXWT5U42_dtag_v1_60m",
+     "4DNFIHTFIMGG_dtag_v1_90m"]
+    "4DNFIPZCCTV6_dtag_v1_120m"
+]
+[
+    ["4DNFIDBFENL7_hct116_20m",
+     "4DNFI9ZUXG61_hct116_40m",
+     "4DNFIAUMRM2S_hct116_60m"],
+    ["4DNFIV56OFE3_hct116_auxin_20m",
+     "4DNFIBCIA62Q_hct116_auxin_40m",
+     "4DNFIQRTP7NM_hct116_auxin_60m"]
+],
+[
+    ["4DNFIAAH19VM_hct116_2_20m",
+     "4DNFI7QUSU5J_hct116_2_40m",
+     "4DNFIXEB4UZO_hct116_2_60m"],
+    ["4DNFIVC8OQPG_hct116_2_no_atp_30m_20m",
+     "4DNFI44JLUSL_hct116_2_no_atp_30m_40m",
+     "4DNFIBED48O1_hct116_2_no_atp_30m_60m"],
+    ["4DNFITUPI4HA_hct116_2_no_atp_120m_20m",
+     "4DNFIM7Q2FQQ_hct116_2_no_atp_120m_40m",
+     "4DNFISATK9PF_hct116_2_no_atp_120m_60m"],
+    ["4DNFIDD9IF9T_hct116_2_no_replication_20m",
+     "4DNFIQWWATGK_hct116_2_no_replication_40m",
+     "4DNFI3NTD7B3_hct116_2_no_replication_60m"],
+    ["4DNFII16KXA7_hct116_2_no_transcription_60m_20m",
+     "4DNFIMIMLMD3_hct116_2_no_transcription_60m_40m",
+     "4DNFI2LY7B73_hct116_2_no_transcription_60m_60m"],
+    ["4DNFI5IZNXIO_hct116_2_no_transcription_360m_20m",
+     "4DNFIZK7W8GZ_hct116_2_no_transcription_360m_40m",
+     "4DNFISRP84FE_hct116_2_no_transcription_360m_60m"]
+],
+[
+    "4DNFIZZ77KD2_hela_s3_r1_30m",
+    "4DNFIOLO226X_hela_s3_r1_60m",
+    ["4DNFIJMS2ODT_hela_s3_r1_90m",
+     "4DNFI49F3LJ4_hela_s3_r1_105m",
+     "4DNFI65MQOIJ_hela_s3_r1_120m"],
+    ["4DNFIM4KEPRD_hela_s3_r1_135m",
+     "4DNFIIXBIZFC_hela_s3_r1_150m",
+     "4DNFIWDOOBVE_hela_s3_r1_165m"],
+    ["4DNFIDT9EB5M_hela_s3_r1_180m",
+     "4DNFIX2VUNV8_hela_s3_r1_195m",
+     "4DNFIEQHTV1R_hela_s3_r1_210m"],
+    "4DNFIFW7GA64_hela_s3_r1_240m",
+    "4DNFIXGXD67I_hela_s3_r1_270m",
+    "4DNFIA7GB1NB_hela_s3_r1_300m",
+]
+# OlD
+
+ORGANISMS = ["human"]
+SAMPLES = [["atrial", "verticular", "hela_s3"]]
+FILENAME_LIST = [[[["a_2d_4DNFIWUZLEWY",
+                    "a_4d_4DNFI7PCOZ9I",
+                    "a_6d_4DNFIWZYSI2D"]],
+                  [["v_2d_4DNFI1P2EP7L",
+                    "v_4d_4DNFI7C5YXNX",
+                    "v_6d_4DNFI8I2WYXS"]],
+                  [["0_5h_4DNFIZZ77KD2",
+                    "1h_4DNFIOLO226X",
+                    "1_5h_4DNFIJMS2ODT"],
+                   ["1_75h_4DNFI49F3LJ4",
+                    "2h_4DNFI65MQOIJ",
+                    "2_25h_4DNFIM4KEPRD"],
+                   ["2_5h_4DNFIIXBIZFC",
+                    "2_75h_4DNFIWDOOBVE",
+                    "3h_4DNFIDT9EB5M"],
+                   ["3h_4DNFIDT9EB5M",
+                    "3_25h_4DNFIX2VUNV8",
+                    "3_5h_4DNFIEQHTV1R"],
+                   ["3_5h_4DNFIEQHTV1R",
+                    "4h_4DNFIFW7GA64",
+                    "4_5h_4DNFIXGXD67I"],
+                   ["5h_4DNFIA7GB1NB",
+                    "6h_4DNFIVOJGWNP",
+                    "7h_4DNFIW22BNB5"],
+                   ["8h_4DNFIIFBC8WN",
+                    "9h_4DNFI9ZBEBJH",
+                    "10h_4DNFID4SLU53"],
+                   ["10h_4DNFID4SLU53",
+                    "11h_4DNFIODI1NUJ",
+                    "12h_4DNFIJL26LFN"]]]]
+
+# Train Val Test
+ORGANISMS = ["human"]
+SAMPLES = [["dmso_control", "dtag_v1", "hct116",
+            "hct116_2", "hela_s3_r1", "hela_s3_r2", "hela_s3_r3"]]
+FILENAME_LIST = [[[["4DNFI7T93SHL_dmso_30m",
+                   "4DNFICF2Z2TG_dmso_60m",
+                    "4DNFILL624WG_dmso_90m"]],
+                 [["4DNFIY1TCVLX_dtag_v1_30m",
+                   "4DNFIXWT5U42_dtag_v1_60m",
+                   "4DNFIHTFIMGG_dtag_v1_90m"]],
+                 [["4DNFIDBFENL7_hct116_20m",
+                   "4DNFI9ZUXG61_hct116_40m",
+                   "4DNFIAUMRM2S_hct116_60m"],
+                  ["4DNFIV56OFE3_hct116_auxin_20m",
+                   "4DNFIBCIA62Q_hct116_auxin_40m",
+                     "4DNFIQRTP7NM_hct116_auxin_60m"]],
+                 [["4DNFIAAH19VM_hct116_2_20m",
+                   "4DNFI7QUSU5J_hct116_2_40m",
+                   "4DNFIXEB4UZO_hct116_2_60m"],
+                  ["4DNFIVC8OQPG_hct116_2_no_atp_30m_20m",
+                   "4DNFI44JLUSL_hct116_2_no_atp_30m_40m",
+                     "4DNFIBED48O1_hct116_2_no_atp_30m_60m"],
+                  ["4DNFITUPI4HA_hct116_2_no_atp_120m_20m",
+                     "4DNFIM7Q2FQQ_hct116_2_no_atp_120m_40m",
+                     "4DNFISATK9PF_hct116_2_no_atp_120m_60m"],
+                  ["4DNFIDD9IF9T_hct116_2_no_replication_20m",
+                     "4DNFIQWWATGK_hct116_2_no_replication_40m",
+                     "4DNFI3NTD7B3_hct116_2_no_replication_60m"],
+                  ["4DNFII16KXA7_hct116_2_no_transcription_60m_20m",
+                     "4DNFIMIMLMD3_hct116_2_no_transcription_60m_40m",
+                     "4DNFI2LY7B73_hct116_2_no_transcription_60m_60m"],
+                  ["4DNFI5IZNXIO_hct116_2_no_transcription_360m_20m",
+                     "4DNFIZK7W8GZ_hct116_2_no_transcription_360m_40m",
+                     "4DNFISRP84FE_hct116_2_no_transcription_360m_60m"]],
+                 [["4DNFIJMS2ODT_hela_s3_r1_90m",
+                   "4DNFI49F3LJ4_hela_s3_r1_105m",
+                   "4DNFI65MQOIJ_hela_s3_r1_120m"],
+                  ["4DNFIM4KEPRD_hela_s3_r1_135m",
+                   "4DNFIIXBIZFC_hela_s3_r1_150m",
+                     "4DNFIWDOOBVE_hela_s3_r1_165m"],
+                  ["4DNFIDT9EB5M_hela_s3_r1_180m",
+                     "4DNFIX2VUNV8_hela_s3_r1_195m",
+                     "4DNFIEQHTV1R_hela_s3_r1_210m"]]
+                  ]]
+
+
+# Test
+[
+    ["4DNFIP9EJSOM_dmso_0m",
+     "4DNFI7T93SHL_dmso_30m",
+     "4DNFICF2Z2TG_dmso_60m"]
+],
+[
+    ["4DNFIXWT5U42_dtag_v1_60m",
+     "4DNFIHTFIMGG_dtag_v1_90m",
+     "4DNFIPZCCTV6_dtag_v1_120m"]
+],
+[
+    ["4DNFIZZ77KD2_hela_s3_r1_30m",
+     "4DNFIOLO226X_hela_s3_r1_60m",
+     "4DNFIJMS2ODT_hela_s3_r1_90m"],
+    ["4DNFIFW7GA64_hela_s3_r1_240m",
+     "4DNFIXGXD67I_hela_s3_r1_270m",
+     "4DNFIA7GB1NB_hela_s3_r1_300m"]
+]
