@@ -4,7 +4,7 @@ dir:
   root: /mmfs1/home/hchowdhu/data/hicinterpolate
   model_state: ${dir.root}/models
   output: ${dir.root}/output
-  data: /mmfs1/home/hchowdhu/data/time_series_data/kr_gf
+  data: /mmfs1/home/hchowdhu/data/time_series/kr_gf
   image: ${dir.data}/${data.patch}
 
 file:
