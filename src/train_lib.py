@@ -37,11 +37,11 @@ class Trainer:
         self.loss_fn = CombinedLoss(self.cfg)
         self.optimizer = Adam(self.model.parameters(),
                               lr=self.cfg.training.init_lr)
-        # self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
-        #                                   decay_rate=self.cfg.training.decay_rate, staircase=self.cfg.training.lr_staircase)
+        self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
+                                          decay_rate=self.cfg.training.decay_rate, staircase=self.cfg.training.lr_staircase)
 
-        self.scheduler = CosineAnnealingWarmRestarts(
-            self.optimizer, T_0=self.cfg.training.restart_every, T_mult=1, eta_min=self.cfg.training.min_lr)
+        # self.scheduler = CosineAnnealingWarmRestarts(
+        #     self.optimizer, T_0=self.cfg.training.restart_every, T_mult=1, eta_min=self.cfg.training.min_lr)
 
         self.train_dl = train_dl
         self.train_steps = len(self.train_dl)

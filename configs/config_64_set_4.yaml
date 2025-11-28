@@ -34,14 +34,14 @@ data:
     frame_1: img2.npy
     frame_2: img3.npy
   train_val_test_ratio: [0.8, 0.1, 0.1]
-  batch_size: 128
+  batch_size: 8
 
 training:
-  epochs: 1200
+  epochs: 600
   restart_every: 150
   save_every: 10
-  init_lr: 1e-3
-  min_lr: 1e-5
+  init_lr: 1e-4
+  min_lr: 1e-6
   decay_steps: 150
   decay_rate: 0.398
   lr_staircase: true
@@ -54,18 +54,18 @@ model:
   ext_feature_level: 3
   unique_levels: 2
   flow:
-    num_of_convs: [7, 5, 3]
+    num_of_convs: [3, 3, 3]
     out_channels: [16, 32, 64]
   fusion_pyramid_level: 4
 
 loss:
   weight_parameters:
     - name: mse
-      boundaries: [600]
+      boundaries: [0]
       values: [1.0, 1.0]
     - name: symmetry
-      boundaries: [600]
-      values: [0.5, 0.5]
+      boundaries: [150]
+      values: [0.1, 0.5]
     - name: vgg
-      boundaries: [600]
-      values: [0.1, 0.1]
+      boundaries: [150]
+      values: [0.01, 0.1]
