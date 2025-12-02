@@ -160,7 +160,7 @@ class Trainer:
                 f"Epoch {self.epochs_run+1} saved best model.")
             print(
                 f"[DEBUG] Epoch {self.epochs_run+1} saved best model.")
-        elif self.epochs_run > 300:
+        elif self.epochs_run > int(self.cfg.training.epochs/4):
             self.epochs_no_improve += 1
 
     def _save_and_draw_metrics(self):

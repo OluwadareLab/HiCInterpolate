@@ -8,19 +8,66 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 
 ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/time_series_data"
-OUTPUT_ROOT_PATH = f"{ROOT_PATH}/triplets/kr_gf"
+
 RESOLUTIONS = [10000]
 BALANCE_COOL = True
 PATCHES = [64, 128, 256, 512]
 # _CMAP = "YlOrRd"
 _CMAP = "Reds"
-_EPSILON = 1e-9
+_EPSILON = 1e-8
 CLIPPING_PERCENTILE = 99.99
 PATCH_OVERLAP_RATIO = 0.2
 
 ORGANISMS = ["human"]
 SAMPLES = [["dmso_control", "dtag_v1", "hct116_1",
             "hct116_2", "hela_s3_r1", "hela_s3_r2", "hela_s3_r3"]]
+
+# FILENAME_LIST = [[[["4DNFI7T93SHL_dmso_30m",
+#                    "4DNFICF2Z2TG_dmso_60m",
+#                     "4DNFILL624WG_dmso_90m"]],
+                    
+#                  [["4DNFIY1TCVLX_dtag_v1_30m",
+#                    "4DNFIXWT5U42_dtag_v1_60m",
+#                    "4DNFIHTFIMGG_dtag_v1_90m"]],
+
+#                  [["4DNFIDBFENL7_hct116_20m",
+#                    "4DNFI9ZUXG61_hct116_40m",
+#                    "4DNFIAUMRM2S_hct116_60m"],
+#                   ["4DNFIV56OFE3_hct116_auxin20m",
+#                    "4DNFIBCIA62Q_hct116_auxin40m",
+#                      "4DNFIQRTP7NM_hct116_auxin60m"]],
+
+#                  [["4DNFIAAH19VM_hct116_2_20m",
+#                    "4DNFI7QUSU5J_hct116_2_40m",
+#                    "4DNFIXEB4UZO_hct116_2_60m"],
+#                   ["4DNFIVC8OQPG_hct116_2_noatp30m20m",
+#                    "4DNFI44JLUSL_hct116_2_noatp30m40m",
+#                      "4DNFIBED48O1_hct116_2_noatp30m60m"],
+#                   ["4DNFITUPI4HA_hct116_2_noatp120m20m",
+#                      "4DNFIM7Q2FQQ_hct116_2_noatp120m40m",
+#                      "4DNFISATK9PF_hct116_2_noatp120m60m"],
+#                   ["4DNFIDD9IF9T_hct116_2_noreplication20m",
+#                      "4DNFIQWWATGK_hct116_2_noreplication40m",
+#                      "4DNFI3NTD7B3_hct116_2_noreplication60m"],
+#                   ["4DNFII16KXA7_hct116_2_notranscription60m20m",
+#                      "4DNFIMIMLMD3_hct116_2_notranscription60m40m",
+#                      "4DNFI2LY7B73_hct116_2_notranscription60m60m"],
+#                   ["4DNFI5IZNXIO_hct116_2_notranscription360m20m",
+#                      "4DNFIZK7W8GZ_hct116_2_notranscription360m40m",
+#                      "4DNFISRP84FE_hct116_2_notranscription360m60m"]],
+
+#                  [["4DNFIJMS2ODT_hela_s3_r1_90m",
+#                    "4DNFI49F3LJ4_hela_s3_r1_105m",
+#                    "4DNFI65MQOIJ_hela_s3_r1_120m"],
+#                   ["4DNFIM4KEPRD_hela_s3_r1_135m",
+#                    "4DNFIIXBIZFC_hela_s3_r1_150m",
+#                      "4DNFIWDOOBVE_hela_s3_r1_165m"],
+#                   ["4DNFIDT9EB5M_hela_s3_r1_180m",
+#                      "4DNFIX2VUNV8_hela_s3_r1_195m",
+#                      "4DNFIEQHTV1R_hela_s3_r1_210m"]]
+#                   ]]
+
+
 FILENAME_LIST = [[[["4DNFI7T93SHL_dmso_30m",
                    "4DNFICF2Z2TG_dmso_60m",
                     "4DNFILL624WG_dmso_90m"]],
@@ -29,28 +76,10 @@ FILENAME_LIST = [[[["4DNFI7T93SHL_dmso_30m",
                    "4DNFIHTFIMGG_dtag_v1_90m"]],
                  [["4DNFIDBFENL7_hct116_20m",
                    "4DNFI9ZUXG61_hct116_40m",
-                   "4DNFIAUMRM2S_hct116_60m"],
-                  ["4DNFIV56OFE3_hct116_auxin20m",
-                   "4DNFIBCIA62Q_hct116_auxin40m",
-                     "4DNFIQRTP7NM_hct116_auxin60m"]],
+                   "4DNFIAUMRM2S_hct116_60m"]],
                  [["4DNFIAAH19VM_hct116_2_20m",
                    "4DNFI7QUSU5J_hct116_2_40m",
-                   "4DNFIXEB4UZO_hct116_2_60m"],
-                  ["4DNFIVC8OQPG_hct116_2_noatp30m20m",
-                   "4DNFI44JLUSL_hct116_2_noatp30m40m",
-                     "4DNFIBED48O1_hct116_2_noatp30m60m"],
-                  ["4DNFITUPI4HA_hct116_2_noatp120m20m",
-                     "4DNFIM7Q2FQQ_hct116_2_noatp120m40m",
-                     "4DNFISATK9PF_hct116_2_noatp120m60m"],
-                  ["4DNFIDD9IF9T_hct116_2_noreplication20m",
-                     "4DNFIQWWATGK_hct116_2_noreplication40m",
-                     "4DNFI3NTD7B3_hct116_2_noreplication60m"],
-                  ["4DNFII16KXA7_hct116_2_notranscription60m20m",
-                     "4DNFIMIMLMD3_hct116_2_notranscription60m40m",
-                     "4DNFI2LY7B73_hct116_2_notranscription60m60m"],
-                  ["4DNFI5IZNXIO_hct116_2_notranscription360m20m",
-                     "4DNFIZK7W8GZ_hct116_2_notranscription360m40m",
-                     "4DNFISRP84FE_hct116_2_notranscription360m60m"]],
+                   "4DNFIXEB4UZO_hct116_2_60m"]],
                  [["4DNFIJMS2ODT_hela_s3_r1_90m",
                    "4DNFI49F3LJ4_hela_s3_r1_105m",
                    "4DNFI65MQOIJ_hela_s3_r1_120m"],
@@ -78,9 +107,9 @@ def save_img(chr_mat, r, c, patch, path, img_name):
     np.save(f"{path}/{img_name}.npy", submatrix)
 
 
-def generate_patch(mat_0, mat_y, mat_1, organism, sample, resolution, chromosome, sub_sample, counter):
+def generate_patch(mat_0, mat_y, mat_1, organism, sample, resolution, chromosome, sub_sample, counter, output_root_path):
     for patch, i in zip(PATCHES, range(0, len(counter))):
-        ds_file = f"{OUTPUT_ROOT_PATH}/{patch}/dataset_dict.txt"
+        ds_file = f"{output_root_path}/{patch}/dataset_dict.txt"
         os.makedirs(os.path.dirname(ds_file), exist_ok=True)
         with open(ds_file, "a") as file:
             print(
@@ -101,7 +130,7 @@ def generate_patch(mat_0, mat_y, mat_1, organism, sample, resolution, chromosome
                     folder = f"{counter[i]:08d}"
                     path = f"{organism}/{sample}/{sub_sample}/{str(resolution)}/{chromosome}/{folder}"
                     file.write(path+"\n")
-                    path = f"{OUTPUT_ROOT_PATH}/{patch}/{path}"
+                    path = f"{output_root_path}/{patch}/{path}"
                     os.makedirs(path, exist_ok=True)
                     save_img(mat_0, r, c, patch, path, "img1")
                     save_img(mat_y, r, c, patch, path, "img2")
@@ -213,6 +242,25 @@ def normalization(matrix):
 
     return norm_matrix
 
+def get_norm_mat(matrix, gf: bool = False, log: bool = False, clip: bool = False):
+    mat = np.nan_to_num(matrix, nan=_EPSILON, posinf=_EPSILON, neginf=_EPSILON)
+    if gf:
+        mat = sp_gf(mat, 1.0)
+    if log:
+        mat = np.log1p(matrix)
+    if clip:
+        percentile_val = np.percentile(mat, CLIPPING_PERCENTILE)
+        mat = np.clip(mat, _EPSILON, percentile_val)
+    
+    _min = np.min(mat)
+    _max = np.max(mat)
+    mat = (mat - _min)/(_max - _min)
+    mat[mat == 0] = _EPSILON
+
+    return mat
+
+
+
 
 # def draw_patch():
 #     chr_mat_0 = np.load(
@@ -238,7 +286,7 @@ def normalization(matrix):
 #                  f"hicplus_log_clip_min_max_mat")
 
 
-def generate_ds(organisms, samples, filename_list):
+def generate_ds(organisms, samples, filename_list, output_root_path:str, gf: bool, log:bool, clip: bool):
     for organism, org_samples, org_filenames in zip(organisms, samples, filename_list):
         for sample, sample_filenames in zip(org_samples, org_filenames):
             for resolution in RESOLUTIONS:
@@ -256,20 +304,28 @@ def generate_ds(organisms, samples, filename_list):
                         fetch = f"{chromosome}:{0}-{chr_size}"
                         chr_mat_0 = cool_0.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
-                        chr_mat_0 = gf_norm(chr_mat_0)
+                        chr_mat_0 = get_norm_mat(matrix=chr_mat_0, gf=gf, log=log, clip=clip)
                         chr_mat_y = cool_y.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
-                        chr_mat_y = gf_norm(chr_mat_y)
+                        chr_mat_y = get_norm_mat(matrix=chr_mat_y, gf=gf, log=log, clip=clip)
                         chr_mat_1 = cool_1.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
-                        chr_mat_1 = gf_norm(chr_mat_1)
+                        chr_mat_1 = get_norm_mat(matrix=chr_mat_1, gf=gf, log=log, clip=clip)
                         counter = [1, 1, 1, 1]
                         counter = generate_patch(chr_mat_0, chr_mat_y, chr_mat_1,
-                                                 organism, sample, resolution, chromosome, sub_sample, counter)
+                                                 organism, sample, resolution, chromosome, sub_sample, counter, output_root_path=output_root_path)
 
 
 if __name__ == "__main__":
     try:
-        generate_ds(ORGANISMS, SAMPLES, FILENAME_LIST)
+        output_root_path = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf"
+        generate_ds(ORGANISMS, SAMPLES, FILENAME_LIST, output_root_path=output_root_path, gf=True, log=False, clip=False)
+
+        output_root_path = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_log"
+        generate_ds(ORGANISMS, SAMPLES, FILENAME_LIST, output_root_path=output_root_path, gf=False, log=True, clip=False)
+
+        output_root_path = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf_log"
+        generate_ds(ORGANISMS, SAMPLES, FILENAME_LIST, output_root_path=output_root_path, gf=True, log=True, clip=False)
+        
     except Exception as e:
         print(f"[FATAL ERROR] {e}")
