@@ -150,7 +150,7 @@ class Trainer:
         print(f"[DEBUG] Epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int):
-        best_val = self.val_psnr_per_epoch + self.val_genome_disco_per_epoch
+        best_val = self.val_ssim_per_epoch + self.val_genome_disco_per_epoch
         if best_val > self.best_val:
             self.epochs_no_improve = 0
             self.best_val = best_val
