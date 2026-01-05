@@ -1,3 +1,6 @@
+from torch import mv
+
+
 [
     "4DNFIP9EJSOM_dmso_0m",
     ["4DNFI7T93SHL_dmso_30m",
@@ -156,3 +159,18 @@ FILENAME_LIST = [[[["4DNFI7T93SHL_dmso_30m",
      "4DNFIXGXD67I_hela_s3_r1_270m",
      "4DNFIA7GB1NB_hela_s3_r1_300m"]
 ]
+
+
+
+mv 4DNFIVC8OQPG_hct116_2_noatp30m20m_10000_KR.cool 4DNFIVC8OQPG_hct116_2_noatp30m_20m_10000_KR.cool
+mv 4DNFI44JLUSL_hct116_2_noatp30m40m_10000_KR.cool 4DNFI44JLUSL_hct116_2_noatp30m_40m_10000_KR.cool
+mv 4DNFIBED48O1_hct116_2_noatp30m60m_10000_KR.cool 4DNFIBED48O1_hct116_2_noatp30m_60m_10000_KR.cool
+mv 4DNFITUPI4HA_hct116_2_noatp120m20m_10000_KR.cool 4DNFITUPI4HA_hct116_2_noatp120m_20m_10000_KR.cool
+mv 4DNFIM7Q2FQQ_hct116_2_noatp120m40m_10000_KR.cool 4DNFIM7Q2FQQ_hct116_2_noatp120m_40m_10000_KR.cool
+mv 4DNFISATK9PF_hct116_2_noatp120m60m_10000_KR.cool 4DNFISATK9PF_hct116_2_noatp120m_60m_10000_KR.cool
+mv 4DNFII16KXA7_hct116_2_notranscription60m20m_10000_KR.cool 4DNFII16KXA7_hct116_2_notranscription60m_20m_10000_KR.cool
+mv 4DNFIMIMLMD3_hct116_2_notranscription60m40m_10000_KR.cool 4DNFIMIMLMD3_hct116_2_notranscription60m_40m_10000_KR.cool
+mv 4DNFI2LY7B73_hct116_2_notranscription60m60m_10000_KR.cool 4DNFI2LY7B73_hct116_2_notranscription60m_60m_10000_KR.cool
+mv 4DNFI5IZNXIO_hct116_2_notranscription360m_20m_15889_KR.cool 4DNFI5IZNXIO_hct116_2_notranscription360m_20m_10000_KR.cool
+mv 4DNFIZK7W8GZ_hct116_2_notranscription360m_40m_15889_KR.cool 4DNFIZK7W8GZ_hct116_2_notranscription360m_40m_10000_KR.cool
+mv 4DNFISRP84FE_hct116_2_notranscription360m_60m_15889_KR.cool 4DNFISRP84FE_hct116_2_notranscription360m_60m_10000_KR.cool

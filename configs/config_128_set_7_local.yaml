@@ -28,7 +28,7 @@ file:
   log: ${dir.output}/${model.name}.log
 
 data:
-  patch: 64
+  patch: 128
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
@@ -54,18 +54,18 @@ model:
   ext_feature_level: 3
   unique_levels: 2
   flow:
-    num_of_convs: [7, 5, 7]
+    num_of_convs: [7, 5, 3]
     out_channels: [16, 32, 64]
   fusion_pyramid_level: 4
 
 loss:
   weight_parameters:
     - name: mse
-      boundaries: [100]
+      boundaries: [0]
       values: [1.0, 1.0]
     - name: symmetry
-      boundaries: [100]
-      values: [0.1, 0.5]
+      boundaries: [0]
+      values: [0.1, 0.1]
     - name: vgg
-      boundaries: [100]
-      values: [0.01, 0.1]
+      boundaries: [0]
+      values: [0.01, 0.01]

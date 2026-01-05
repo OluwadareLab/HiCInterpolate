@@ -37,13 +37,13 @@ data:
   batch_size: 64
 
 training:
-  epochs: 300
+  epochs: 600
   restart_every: 100
   save_every: 10
   init_lr: 1e-4
   min_lr: 1e-6
   decay_steps: 100
-  decay_rate: 0.215
+  decay_rate: 0.464
   lr_staircase: true
 
 model:
@@ -54,18 +54,18 @@ model:
   ext_feature_level: 3
   unique_levels: 2
   flow:
-    num_of_convs: [7, 5, 7]
+    num_of_convs: [7, 5, 3]
     out_channels: [16, 32, 64]
   fusion_pyramid_level: 4
 
 loss:
   weight_parameters:
     - name: mse
-      boundaries: [100]
+      boundaries: [0]
       values: [1.0, 1.0]
     - name: symmetry
-      boundaries: [100]
-      values: [0.1, 0.5]
+      boundaries: [0]
+      values: [0.5, 0.5]
     - name: vgg
-      boundaries: [100]
-      values: [0.01, 0.1]
+      boundaries: [0]
+      values: [0.1, 0.1]

@@ -1,3 +1,4 @@
+from threading import local
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -45,6 +46,8 @@ class Tester:
         self.scc = 0
         self.pcc = 0
         self.genome_disco = 0
+        self.hicrep = 0
+        self.ent3c = 0
         # self.ncc = 0
         self.lpips = 0
 
@@ -56,12 +59,14 @@ class Tester:
             new_state_dict[name] = v
         return new_state_dict
 
-    def _update_metrics(self, local_steps, local_psnr, local_ssim, local_scc, local_pcc, local_genome_disco, local_ncc, local_lpips):
+    def _update_metrics(self, local_steps, local_psnr, local_ssim, local_scc, local_pcc, local_genome_disco, local_hicrep, local_ent3, local_ncc, local_lpips):
         self.psnr = local_psnr / local_steps
         self.ssim = local_ssim / local_steps
         self.scc = local_scc / local_steps
         self.pcc = local_pcc / local_steps
         self.genome_disco = local_genome_disco / local_steps
+        self.hicrep = local_hicrep / local_steps
+        self.ent3c = local_ent3 / local_steps
         self.ncc = local_ncc / local_steps
         self.lpips = local_lpips / local_steps
 
@@ -71,6 +76,8 @@ class Tester:
         local_scc = 0
         local_pcc = 0
         local_genome_disco = 0
+        local_hicrep = 0
+        local_ent3c = 0
         local_ncc = 0
         local_lpips = 0
 
@@ -89,6 +96,8 @@ class Tester:
                 # scc_val = eval_metric.get_scc(pred, y)
                 # pcc_val = eval_metric.get_pcc(pred, y)
                 genome_disco_val = eval_metric.get_genome_disco(pred, y)
+                hicrep_val = eval_metric.get_hicrep(pred, y)
+                ent3c_val = eval_metric.get_ent3c(pred, y)
                 # ncc_val = eval_metric.get_ncc(pred, y)
                 lpips_val = eval_metric.get_lpips(pred, y)
 
@@ -97,10 +106,12 @@ class Tester:
                 # local_scc += scc_val.item()
                 # local_pcc += pcc_val.item()
                 local_genome_disco += genome_disco_val
+                local_hicrep += hicrep_val
+                local_ent3c += ent3c_val
                 # local_ncc += ncc_val.item()
                 local_lpips += lpips_val.item()
 
-                if drawn == 10:
+                if drawn == 20:
                     num_examples = min(
                         self.cfg.file.num_visualization_samples, len(y))
                     x0_cpu = x0[:num_examples]
@@ -126,6 +137,10 @@ class Tester:
             #     local_pcc, device=self.device)
             local_genome_disco = torch.tensor(
                 local_genome_disco, device=self.device)
+            local_hicrep = torch.tensor(
+                local_hicrep, device=self.device)
+            local_ent3c = torch.tensor(
+                local_ent3c, device=self.device)
             # local_ncc = torch.tensor(
             #     local_ncc, device=self.device)
             local_lpips = torch.tensor(
@@ -137,6 +152,8 @@ class Tester:
             # dist.all_reduce(local_scc, op=dist.ReduceOp.SUM)
             # dist.all_reduce(local_pcc, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_genome_disco, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_hicrep, op=dist.ReduceOp.SUM)
+            dist.all_reduce(local_ent3c, op=dist.ReduceOp.SUM)
             # dist.all_reduce(local_ncc, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_lpips, op=dist.ReduceOp.SUM)
 
@@ -146,14 +163,16 @@ class Tester:
             # local_scc = local_scc.item()
             # local_pcc = local_pcc.item()
             local_genome_disco = local_genome_disco.item()
+            local_hicrep = local_hicrep.item()
+            local_ent3c = local_ent3c.item()
             # local_ncc = local_ncc.item()
             local_lpips = local_lpips.item()
 
             self._update_metrics(local_steps, local_psnr, local_ssim,
-                                 local_pcc, local_scc, local_genome_disco, local_ncc, local_lpips)
+                                 local_pcc, local_scc, local_genome_disco, local_hicrep, local_ent3c, local_ncc, local_lpips)
         else:
             self._update_metrics(self.test_steps, local_psnr, local_ssim,
-                                 local_pcc, local_scc, local_genome_disco, local_ncc, local_lpips)
+                                 local_pcc, local_scc, local_genome_disco, local_hicrep, local_ent3c, local_ncc, local_lpips)
 
     def test(self):
         self.log.info(f"[{self.device}] ==== Testing Started ====")
@@ -163,12 +182,12 @@ class Tester:
         try:
             self._run()
             if self.isDistributed and self.device == 0:
-                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, GenomeDISCO: {format(self.genome_disco, '.4f')}, LPIPS: {format(self.lpips, '.4f')};"
+                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, GenomeDISCO: {format(self.genome_disco, '.4f')}, HiCRep: {format(self.hicrep, '.4f')}, ENT3C: {format(self.ent3c, '.4f')}, LPIPS: {format(self.lpips, '.4f')};"
                 self.log.info(f"{scores}")
                 print(f"[INFO] {scores}")
 
             elif not self.isDistributed:
-                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, GenomeDISCO: {format(self.genome_disco, '.4f')}, LPIPS: {format(self.lpips, '.4f')};"
+                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, GenomeDISCO: {format(self.genome_disco, '.4f')}, HiCRep: {format(self.hicrep, '.4f')}, ENT3C: {format(self.ent3c, '.4f')}, LPIPS: {format(self.lpips, '.4f')};"
                 self.log.info(f"{scores}")
                 print(f"[INFO] {scores}")
 

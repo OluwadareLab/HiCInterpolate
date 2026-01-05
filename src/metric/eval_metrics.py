@@ -3,6 +3,8 @@ import torch
 from torch import Tensor
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure, LearnedPerceptualImagePatchSimilarity
 from src.metric.genome_disco import compute_reproducibility
+from src.metric.hicrep import hicrepSCC as hicrep_scc
+from src.metric.ent3c import get_similarity as ent3c_similarity
 from scipy.sparse import csr_matrix
 import numpy as np
 
@@ -35,6 +37,33 @@ def get_genome_disco(preds: Tensor, target: Tensor):
     genome_disco_score = torch.tensor(
         genome_disco_score).float().to(preds.device)
     return genome_disco_score
+
+
+def get_hicrep(preds: Tensor, target: Tensor):
+    scc_list = []
+    for p, t in zip(preds, target):
+        p_np = p.squeeze(0).detach().cpu().numpy()
+        y_np = t.squeeze(0).detach().cpu().numpy()
+        scc = hicrep_scc(y_np, p_np)
+        scc_list.append(scc)
+    hicrep_score = np.mean(scc_list)
+    hicrep_score = torch.tensor(
+        hicrep_score).float().to(preds.device)
+    return hicrep_score
+
+def get_ent3c(preds: Tensor, target: Tensor):
+    # similarity_list = []
+    # for p, t in zip(preds, target):
+    #     p_np = p.squeeze(0).detach().cpu().numpy()
+    #     y_np = t.squeeze(0).detach().cpu().numpy()
+    #     similarity = ent3c_similarity(y_np, p_np)
+    #     similarity_list.append(similarity)
+    # ent3c_score = np.mean(similarity_list)
+    # ent3c_score = torch.tensor(
+    #     ent3c_score).float().to(preds.device)
+    ent3c_score = torch.tensor(
+        0.0).float().to(preds.device)
+    return ent3c_score
 
 
 def get_lpips(preds, target):

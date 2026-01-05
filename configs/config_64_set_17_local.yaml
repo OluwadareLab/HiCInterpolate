@@ -7,6 +7,7 @@ dir:
   data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf
   image: ${dir.data}/${data.patch}
 
+
 file:
   dataset_dict: ${dir.image}/dataset_dict.txt
   vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
@@ -24,6 +25,8 @@ file:
   lpips_val_plot: ${dir.output}/${model.name}_lpips_plot.png
   train_val_loss_plot: ${dir.output}/${model.name}_train_val_loss_plot.png
   grad_norm_plot: ${dir.output}/${model.name}_grad_norm_plot.png
+  hicrep_val_plot: ${dir.output}/${model.name}_hicrep_plot.png
+  ent3c_val_plot: ${dir.output}/${model.name}_ent3c_plot.png
   lr_plot: ${dir.output}/${model.name}_lr_plot.png
   log: ${dir.output}/${model.name}.log
 

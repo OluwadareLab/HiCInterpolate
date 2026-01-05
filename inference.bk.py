@@ -102,10 +102,8 @@ FILENAME_LIST = [
     ]
 ]
 
-# CHROMOSOMES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-#                13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 'X', 'Y']
-
-CHROMOSOMES = [11, 13, 15, 17, 19, 21]
+CHROMOSOMES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+               13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 'X', 'Y']
 
 
 _EPSILON = 1e-8
@@ -157,11 +155,28 @@ def reconstruct_matrix(pred_list, patch_size, h, w):
     n = int(math.ceil(h / patch_size) * patch_size)
     n_patches_per_side = n // patch_size
 
-    patches = np.array([pred.squeeze().cpu().numpy()
-                       for batch in pred_list for pred in batch])
-    reconstructed = patches.reshape(n_patches_per_side, n_patches_per_side, patch_size, patch_size) \
-        .transpose(0, 2, 1, 3) \
-        .reshape(n, n)
+    reconstructed = np.zeros((n, n), dtype=np.float32)
+    idx = 0
+    for batch in pred_list:
+        # batch may be a torch.Tensor on CPU or a numpy array
+        if isinstance(batch, torch.Tensor):
+            # expected shapes: (B,1,patch,patch) or (B,patch,patch)
+            if batch.dim() == 4:
+                arr = batch.squeeze(1).numpy()
+            else:
+                arr = batch.numpy()
+        else:
+            arr = np.array(batch)
+
+        if arr.ndim == 2:
+            arr = arr[np.newaxis, ...]
+
+        for p in arr:
+            row = idx // n_patches_per_side
+            col = idx % n_patches_per_side
+            reconstructed[row*patch_size:(row+1)*patch_size, col*patch_size:(col+1)*patch_size] = p
+            idx += 1
+
     pred = reconstructed[:h, :w]
     return pred
 
@@ -188,7 +203,7 @@ def filter_negative(matrix):
     return matrix
 
 
-def log_clip_min_max(matrix, percentile: float = CLIPPING_PERCENTILE):
+def log_clip_min_max(matrix, pv=-1, percentile: float = CLIPPING_PERCENTILE):
     matrix = np.nan_to_num(matrix, nan=_EPSILON,
                            posinf=_EPSILON, neginf=_EPSILON)
     matrix[matrix < _EPSILON] = _EPSILON
@@ -197,7 +212,16 @@ def log_clip_min_max(matrix, percentile: float = CLIPPING_PERCENTILE):
     clip_matrix = np.clip(log_matrix, _EPSILON, percentile_val)
     norm_matrix = clip_matrix / percentile_val
 
-    return norm_matrix
+    # _min = np.min(log_matrix)
+    # if max != -1:
+    #     _max = max
+    # else:
+    #     _max = np.max(log_matrix)
+
+    # mat = (log_matrix - _min)/(_max - _min)
+    # mat[mat == 0] = _EPSILON
+
+    return norm_matrix, percentile_val
 
 
 def get_score_matrix(preds, target, device, patch_size, batch_size):
@@ -353,8 +377,8 @@ def main(config_filename: str, isDistributed: bool = False):
                             np.save(f"{MATRIX_DIR}/{chromosome}_y.npy", y)
                             np.save(f"{MATRIX_DIR}/{chromosome}_yt.npy", pred)
 
-                            n_y = log_clip_min_max(y)
-                            n_pred = log_clip_min_max(pred)
+                            n_y, _max = log_clip_min_max(y)
+                            n_pred, _ = log_clip_min_max(up_pred, pv=_max)
                             print(f"Ploating heatmap...")
                             plot.draw_inf_hic_map(
                                 y=n_y[3328:3584, 3328:3584], pred=n_pred[3328:3584, 3328:3584], file=f"{RES_DIR}/{chromosome}_hic_map")

@@ -7,6 +7,7 @@ dir:
   data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf
   image: ${dir.data}/${data.patch}
 
+
 file:
   dataset_dict: ${dir.image}/dataset_dict.txt
   vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
@@ -61,11 +62,11 @@ model:
 loss:
   weight_parameters:
     - name: mse
-      boundaries: [100]
+      boundaries: [300]
       values: [1.0, 1.0]
     - name: symmetry
-      boundaries: [100]
+      boundaries: [300]
       values: [0.1, 0.5]
     - name: vgg
-      boundaries: [100]
+      boundaries: [300]
       values: [0.01, 0.1]

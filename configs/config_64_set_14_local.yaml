@@ -7,6 +7,7 @@ dir:
   data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf
   image: ${dir.data}/${data.patch}
 
+
 file:
   dataset_dict: ${dir.image}/dataset_dict.txt
   vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat

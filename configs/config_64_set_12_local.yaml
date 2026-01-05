@@ -54,18 +54,18 @@ model:
   ext_feature_level: 3
   unique_levels: 2
   flow:
-    num_of_convs: [7, 5, 7]
+    num_of_convs: [7, 7, 7]
     out_channels: [16, 32, 64]
   fusion_pyramid_level: 4
 
 loss:
   weight_parameters:
     - name: mse
-      boundaries: [100]
+      boundaries: [300]
       values: [1.0, 1.0]
     - name: symmetry
-      boundaries: [100]
+      boundaries: [300]
       values: [0.1, 0.5]
     - name: vgg
-      boundaries: [100]
+      boundaries: [300]
       values: [0.01, 0.1]
