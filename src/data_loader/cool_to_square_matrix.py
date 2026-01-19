@@ -10,7 +10,7 @@ from sklearn.preprocessing import MinMaxScaler
 ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/time_series_data"
 RESOLUTIONS = [10000]
 BALANCE_COOL = True
-PATCHES = [64, 128, 256, 512]
+PATCHES = [64]
 # _CMAP = "YlOrRd"
 _CMAP = "Reds"
 _EPSILON = 1e-8
