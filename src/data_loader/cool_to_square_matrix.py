@@ -18,8 +18,15 @@ CLIPPING_PERCENTILE = 99.99
 PATCH_OVERLAP_RATIO = 0.2
 
 ORGANISMS = ["human"]
-SAMPLES = [["dmso_control", "dtag_v1", "hct116_1",
-            "hct116_2", "hela_s3_r1", "hela_s3_r2", "hela_s3_r3"]]
+SAMPLES = [[
+    "dmso_control", 
+    "dtag_v1", 
+    "hct116_1",
+    "hct116_2", 
+    "hela_s3_r1", 
+    # "hela_s3_r2", 
+    # "hela_s3_r3"
+    ]]
 
 # FILENAME_LIST = [[[["4DNFI7T93SHL_dmso_30m",
 #                    "4DNFICF2Z2TG_dmso_60m",
@@ -67,6 +74,29 @@ SAMPLES = [["dmso_control", "dtag_v1", "hct116_1",
 #                   ]]
 
 
+# FILENAME_LIST = [[[["4DNFI7T93SHL_dmso_30m",
+#                    "4DNFICF2Z2TG_dmso_60m",
+#                     "4DNFILL624WG_dmso_90m"]],
+#                  [["4DNFIY1TCVLX_dtag_v1_30m",
+#                    "4DNFIXWT5U42_dtag_v1_60m",
+#                    "4DNFIHTFIMGG_dtag_v1_90m"]],
+#                  [["4DNFIDBFENL7_hct116_20m",
+#                    "4DNFI9ZUXG61_hct116_40m",
+#                    "4DNFIAUMRM2S_hct116_60m"]],
+#                  [["4DNFIAAH19VM_hct116_2_20m",
+#                    "4DNFI7QUSU5J_hct116_2_40m",
+#                    "4DNFIXEB4UZO_hct116_2_60m"]],
+#                  [["4DNFIJMS2ODT_hela_s3_r1_90m",
+#                    "4DNFI49F3LJ4_hela_s3_r1_105m",
+#                    "4DNFI65MQOIJ_hela_s3_r1_120m"],
+#                   ["4DNFIM4KEPRD_hela_s3_r1_135m",
+#                    "4DNFIIXBIZFC_hela_s3_r1_150m",
+#                      "4DNFIWDOOBVE_hela_s3_r1_165m"],
+#                   ["4DNFIDT9EB5M_hela_s3_r1_180m",
+#                      "4DNFIX2VUNV8_hela_s3_r1_195m",
+#                      "4DNFIEQHTV1R_hela_s3_r1_210m"]]
+#                   ]]
+
 FILENAME_LIST = [[[["4DNFI7T93SHL_dmso_30m",
                    "4DNFICF2Z2TG_dmso_60m",
                     "4DNFILL624WG_dmso_90m"]],
@@ -79,12 +109,12 @@ FILENAME_LIST = [[[["4DNFI7T93SHL_dmso_30m",
                  [["4DNFIAAH19VM_hct116_2_20m",
                    "4DNFI7QUSU5J_hct116_2_40m",
                    "4DNFIXEB4UZO_hct116_2_60m"]],
-                 [["4DNFIJMS2ODT_hela_s3_r1_90m",
-                   "4DNFI49F3LJ4_hela_s3_r1_105m",
-                   "4DNFI65MQOIJ_hela_s3_r1_120m"],
-                  ["4DNFIM4KEPRD_hela_s3_r1_135m",
-                   "4DNFIIXBIZFC_hela_s3_r1_150m",
-                     "4DNFIWDOOBVE_hela_s3_r1_165m"],
+                 [["4DNFIJMS2ODT_hela_s3_r1_105m",
+                   "4DNFI49F3LJ4_hela_s3_r1_120m",
+                   "4DNFI65MQOIJ_hela_s3_r1_135m"],
+                  ["4DNFIM4KEPRD_hela_s3_r1_150m",
+                   "4DNFIIXBIZFC_hela_s3_r1_165m",
+                     "4DNFIWDOOBVE_hela_s3_r1_180m"],
                   ["4DNFIDT9EB5M_hela_s3_r1_180m",
                      "4DNFIX2VUNV8_hela_s3_r1_195m",
                      "4DNFIEQHTV1R_hela_s3_r1_210m"]]
@@ -310,21 +340,21 @@ def generate_ds(organisms, samples, filename_list, output_root_path:str, gf: boo
                         chr_mat_1 = cool_1.matrix(
                             balance=BALANCE_COOL).fetch(fetch)
                         chr_mat_1 = get_norm_mat(matrix=chr_mat_1, gf=gf, log=log, clip=clip)
-                        counter = [1, 1, 1, 1]
+                        counter = [1]
                         counter = generate_patch(chr_mat_0, chr_mat_y, chr_mat_1,
                                                  organism, sample, resolution, chromosome, sub_sample, counter, output_root_path=output_root_path)
 
 
 if __name__ == "__main__":
     try:
-        output_root_path = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf"
+        output_root_path = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/upload"
         generate_ds(ORGANISMS, SAMPLES, FILENAME_LIST, output_root_path=output_root_path, gf=True, log=False, clip=False)
 
-        output_root_path = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_log"
-        generate_ds(ORGANISMS, SAMPLES, FILENAME_LIST, output_root_path=output_root_path, gf=False, log=True, clip=False)
+        # output_root_path = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_log"
+        # generate_ds(ORGANISMS, SAMPLES, FILENAME_LIST, output_root_path=output_root_path, gf=False, log=True, clip=False)
 
-        output_root_path = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf_log"
-        generate_ds(ORGANISMS, SAMPLES, FILENAME_LIST, output_root_path=output_root_path, gf=True, log=True, clip=False)
+        # output_root_path = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf_log"
+        # generate_ds(ORGANISMS, SAMPLES, FILENAME_LIST, output_root_path=output_root_path, gf=True, log=True, clip=False)
         
     except Exception as e:
         print(f"[FATAL ERROR] {e}")

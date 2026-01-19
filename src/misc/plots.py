@@ -13,6 +13,10 @@ plt.rcParams['figure.dpi'] = 600
 CMAP_ = mcolors.LinearSegmentedColormap.from_list(
     'juicebox', ['#FFFFFF', '#FF0000']
 )
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 
 def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, x1: np.ndarray, file):
     data_groups = [x0, y, pred, x1]
