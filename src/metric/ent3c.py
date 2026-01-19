@@ -26,33 +26,17 @@ def vN_entropy(M, SUB_M_SIZE_FIX, CHRSPLIT, PHI_MAX, phi, BIN_TABLE) -> float:
     R2 = R2[0:WN]
     R = np.stack((R1, R2), axis=1).astype(int)
 
-    # if R[0, 1] < R[1, 0]:
-    #     warnings.warn(f"Careful! Parameter choice will result in missing regions.\n\
-    #         -- Input matrix size {N}; SUB_M_SIZE PHI: {SUB_M_SIZE}; window shift phi: {phi}\n\
-    #         -- First submatrix coordinates: {R[0, :]} and {R[1, :]}.\n\n\
-    #             Please change the SUB_M_SIZE, phi and/or PHI_MAX.")
 
-    M = M.astype(float)  # cannot fill with nan otherwise
+    M = M.astype(float)
     M[M == 0] = np.nan
     M = np.log(M)
-    # with open("outputPY.txt", "w") as FN:
+
     for rr in range(0, WN):
-        # Python slicing is EXCLUSIVE of the stop index
-
         m = M[R[rr, 0] : R[rr, 1] + 1, R[rr, 0] : R[rr, 1] + 1].copy()
-
-        # A view is a new array object that looks like a separate array but
-        # shares the same data in memory as the original array. If you modify m,
-        # you’re also modifying M in-place.
-        # np.savetxt("matrix_python.isolated.txt", m, fmt="%.15g", delimiter="\t")
-
-        # see GIT: NormM=0 and ChrY
-        # print(np.any(np.sum((np.isnan(m) | (m == 0)), axis=1) >= (m.shape[0] - 1)))
 
         if np.all(np.isnan(m) | (m == 0)):
             ENT = np.nan
         else:
-            # if any row/column is nan/0, ignore this column (0 comes from log(1)!)
             mask = np.sum((np.isnan(m) | (m == 0)), axis=1) < (SUB_M_SIZE)
             m = m[mask, :]
             m = m[:, mask]
@@ -60,19 +44,12 @@ def vN_entropy(M, SUB_M_SIZE_FIX, CHRSPLIT, PHI_MAX, phi, BIN_TABLE) -> float:
             m[np.isnan(m)] = np.nanmin(m.flatten())
             P = np.corrcoef(m, rowvar=False)
             if not np.all(np.isnan(P)):
-                # problems with corrcoef and const. columns.
-                # m = np.array([[12, 3, 2], [2, 3, 11], [1, 3, 7]])
-                # m = np.array([[12, 0.3, 2], [2, 0.3, 11], [1, 0.3, 7]])
-                # print(np.std(m, axis=0, ddof=1))
-                # NumPy computes population std (N in denom), matlab the sample std ((N-1) in denom)!
-                # I need np.std(m, axis=0, ddof)
                 SDs = np.nanstd(m, axis=0, ddof=0) < np.finfo(float).eps
                 P[SDs, :] = 0
                 P[:, SDs] = 0
                 P[np.isnan(P)] = 0  #
                 np.fill_diagonal(P, 1.0)
                 rho = P / P.shape[0]
-                # Compute the eigenvalues of a complex Hermitian or real symmetric matrix.
                 vals = np.linalg.eigvalsh(rho)
                 vals = vals[vals > np.finfo(float).eps]
                 vals = np.real(vals)
@@ -81,7 +58,6 @@ def vN_entropy(M, SUB_M_SIZE_FIX, CHRSPLIT, PHI_MAX, phi, BIN_TABLE) -> float:
                 ENT = np.nan
 
         S.append(ENT)
-        # print(f"Step {rr}: S = {ENT:.7f}")  # , file=FN)
 
         BIN_TABLE_NEW.append(
             [

@@ -2,11 +2,7 @@ device: cuda
 
 dir:
   root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data
-<<<<<<< Updated upstream
-  model_state: ${dir.root}/HiCInterpolate/models/config_64_set_19_local
-=======
   model_state: ${dir.root}/HiCInterpolateV2/models/config_64_set_18_local
->>>>>>> Stashed changes
   output: ${dir.root}/HiCInterpolate/inference
   data: ${dir.root}/pairs/kr_log_clip_norm
   image: ${dir.data}/${data.patch}

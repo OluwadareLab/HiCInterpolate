@@ -2,7 +2,7 @@ import torch
 import sys
 import os
 from torch.nn import Module, ModuleList, functional as F
-from src.flow_estimation.block import FlowEstimator
+from src.flow_predictor.block import FlowEstimator
 from src.misc import utils
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))

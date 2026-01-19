@@ -52,15 +52,6 @@ def get_hicrep(preds: Tensor, target: Tensor):
     return hicrep_score
 
 def get_ent3c(preds: Tensor, target: Tensor):
-    # similarity_list = []
-    # for p, t in zip(preds, target):
-    #     p_np = p.squeeze(0).detach().cpu().numpy()
-    #     y_np = t.squeeze(0).detach().cpu().numpy()
-    #     similarity = ent3c_similarity(y_np, p_np)
-    #     similarity_list.append(similarity)
-    # ent3c_score = np.mean(similarity_list)
-    # ent3c_score = torch.tensor(
-    #     ent3c_score).float().to(preds.device)
     ent3c_score = torch.tensor(
         0.0).float().to(preds.device)
     return ent3c_score

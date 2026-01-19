@@ -40,9 +40,6 @@ class Trainer:
         self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
                                           decay_rate=self.cfg.training.decay_rate, staircase=self.cfg.training.lr_staircase)
 
-        # self.scheduler = CosineAnnealingWarmRestarts(
-        #     self.optimizer, T_0=self.cfg.training.restart_every, T_mult=1, eta_min=self.cfg.training.min_lr)
-
         self.train_dl = train_dl
         self.train_steps = len(self.train_dl)
         self.batch_size = train_dl.batch_size
@@ -55,18 +52,14 @@ class Trainer:
         self.val_loss_per_epoch = 0
         self.val_psnr_per_epoch = 0
         self.val_ssim_per_epoch = 0
-        self.val_scc_per_epoch = 0
-        self.val_pcc_per_epoch = 0
         self.val_genome_disco_per_epoch = 0
         self.val_hicrep_per_epoch = 0
-        self.val_ent3c_per_epoch = 0
         self.val_lpips_per_epoch = 0
-        self.grad_norm = 0
 
         self.state = {'epoch': [], 'lr': [], 'train_loss': [], 'val_loss': [],
-                      'val_psnr': [], 'val_ssim': [], 'val_scc': [], 'val_pcc': [], 'val_genome_disco': [], 'val_hicrep': [], 'val_ent3c': [], 'val_lpips': [], 'best_val': [], 'grad_norms': []}
+                      'val_psnr': [], 'val_ssim': [], 'val_genome_disco': [], 'val_hicrep': [], 'val_lpips': [], 'best_val': []}
         self.metric_columns = ['epoch', 'lr', 'train_loss',
-                               'val_loss', 'val_psnr', 'val_ssim', 'val_scc', 'val_pcc', 'val_genome_disco', 'val_hicrep', 'val_ent3c', 'val_lpips', 'best_val', 'grad_norms']
+                               'val_loss', 'val_psnr', 'val_ssim', 'val_genome_disco', 'val_hicrep', 'val_lpips', 'best_val']
         self.patience = 20
         self.epochs_no_improve = 0
         self.best_val = -float('inf')
@@ -112,19 +105,15 @@ class Trainer:
         print(
             f"[INFO] Resuming training from snapshot at epoch {self.epochs_run}")
 
-    def _update_metrics(self, epoch, local_train_steps, local_train_loss, local_val_steps, local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_hicrep, local_val_ent3c, local_val_lpips, local_grad_norm):
+    def _update_metrics(self, epoch, local_train_steps, local_train_loss, local_val_steps, local_val_loss, local_val_psnr, local_val_ssim, local_val_genome_disco, local_val_hicrep, local_val_lpips):
 
         self.train_loss_per_epoch = local_train_loss / local_train_steps
         self.val_loss_per_epoch = local_val_loss / local_val_steps
         self.val_psnr_per_epoch = local_val_psnr / local_val_steps
         self.val_ssim_per_epoch = local_val_ssim / local_val_steps
-        self.val_scc_per_epoch = local_val_scc / local_val_steps
-        self.val_pcc_per_epoch = local_val_pcc / local_val_steps
         self.val_genome_disco_per_epoch = local_val_genome_disco / local_val_steps
         self.val_hicrep_per_epoch = local_val_hicrep / local_val_steps
-        self.val_ent3c_per_epoch = local_val_ent3c / local_val_steps
         self.val_lpips_per_epoch = local_val_lpips / local_val_steps
-        self.grad_norm = (local_grad_norm / self.train_steps) ** 0.5
 
         self.state['epoch'].append(epoch+1)
         self.state['lr'].append(self.optimizer.param_groups[0]['lr'])
@@ -132,13 +121,9 @@ class Trainer:
         self.state['val_loss'].append(self.val_loss_per_epoch)
         self.state['val_psnr'].append(self.val_psnr_per_epoch)
         self.state['val_ssim'].append(self.val_ssim_per_epoch)
-        self.state['val_scc'].append(self.val_scc_per_epoch)
-        self.state['val_pcc'].append(self.val_pcc_per_epoch)
         self.state['val_genome_disco'].append(self.val_genome_disco_per_epoch)
         self.state['val_hicrep'].append(self.val_hicrep_per_epoch)
-        self.state['val_ent3c'].append(self.val_ent3c_per_epoch)
         self.state['val_lpips'].append(self.val_lpips_per_epoch)
-        self.state['grad_norms'].append(self.grad_norm)
 
     def _get_model_stats(self, epoch: int):
         snapshot = {
@@ -156,7 +141,8 @@ class Trainer:
         print(f"[DEBUG] Epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int):
-        best_val = self.val_ssim_per_epoch + self.val_genome_disco_per_epoch + self.val_psnr_per_epoch
+        best_val = self.val_ssim_per_epoch + \
+            self.val_genome_disco_per_epoch + self.val_psnr_per_epoch
         if best_val > self.best_val:
             self.epochs_no_improve = 0
             self.best_val = best_val
@@ -177,14 +163,10 @@ class Trainer:
             'val_loss': self.state["val_loss"],
             'val_psnr':  self.state["val_psnr"],
             'val_ssim':  self.state["val_ssim"],
-            'val_scc':  self.state["val_scc"],
-            'val_pcc':  self.state["val_pcc"],
             'val_genome_disco':  self.state["val_genome_disco"],
             'val_hicrep':  self.state["val_hicrep"],
-            'val_ent3c':  self.state["val_ent3c"],
             'val_lpips':  self.state["val_lpips"],
-            'best_val': self.state["best_val"],
-            'grad_norms': self.state["grad_norms"]
+            'best_val': self.state["best_val"]
         }, columns=self.metric_columns)
 
         metrics_df.to_csv(self.cfg.file.val_metrics, index=False)
@@ -196,21 +178,15 @@ class Trainer:
         self.val_loss_per_epoch = 0
         self.val_psnr_per_epoch = 0
         self.val_ssim_per_epoch = 0
-        self.val_scc_per_epoch = 0
-        self.val_pcc_per_epoch = 0
         self.val_genome_disco_per_epoch = 0
         self.val_hicrep_per_epoch = 0
-        self.val_ent3c_per_epoch = 0
-        self.val_ncc_per_epoch = 0
         self.val_lpips_per_epoch = 0
-        self.grad_norm = 0
 
         self.model.train()
         if self.isDistributed:
             self.train_dl.sampler.set_epoch(epoch)
 
         local_train_loss = 0.0
-        local_grad_norm = 0.0
 
         for step, (x0, y, x1, time_frame) in enumerate(tqdm(self.train_dl)):
             x0, y, x1, time_frame = [t.to(self.device)
@@ -222,13 +198,6 @@ class Trainer:
             train_loss.backward()
             self.optimizer.step()
 
-            total_norm_sq = 0.0
-            for p in self.model.parameters():
-                if p.grad is not None:
-                    total_norm_sq += torch.linalg.vector_norm(
-                        p.grad.detach(), ord=2).item() ** 2
-            local_grad_norm += total_norm_sq
-
             del x0, y, x1, time_frame
 
         self.scheduler.step()
@@ -236,11 +205,8 @@ class Trainer:
         local_val_loss = 0
         local_val_psnr = 0
         local_val_ssim = 0
-        local_val_scc = 0
-        local_val_pcc = 0
         local_val_genome_disco = 0
         local_val_hicrep = 0
-        local_val_ent3c = 0
         local_val_lpips = 0
 
         with torch.no_grad():
@@ -256,20 +222,14 @@ class Trainer:
 
                 psnr_val = eval_metric.get_psnr(pred, y)
                 ssim_val = eval_metric.get_ssim(pred, y)
-                # scc_val = eval_metric.get_scc(pred, y)
-                # pcc_val = eval_metric.get_pcc(pred, y)
                 genome_disco_val = eval_metric.get_genome_disco(pred, y)
                 hicrep_val = eval_metric.get_hicrep(pred, y)
-                ent3c_val = eval_metric.get_ent3c(pred, y)
                 lpips_val = eval_metric.get_lpips(pred, y)
 
                 local_val_psnr += psnr_val.item()
                 local_val_ssim += ssim_val.item()
-                # local_val_scc += scc_val.item()
-                # local_val_pcc += pcc_val.item()
                 local_val_genome_disco += genome_disco_val.item()
                 local_val_hicrep += hicrep_val.item()
-                local_val_ent3c += ent3c_val.item()
                 local_val_lpips += lpips_val.item()
 
                 del x0, y, x1, time_frame
@@ -286,20 +246,12 @@ class Trainer:
                 local_val_psnr, device=self.device)
             local_val_ssim = torch.tensor(
                 local_val_ssim, device=self.device)
-            # local_val_scc = torch.tensor(
-            #     local_val_scc, device=self.device)
-            # local_val_pcc = torch.tensor(
-            #     local_val_pcc, device=self.device)
             local_val_genome_disco = torch.tensor(
                 local_val_genome_disco, device=self.device)
             local_val_hicrep = torch.tensor(
                 local_val_hicrep, device=self.device)
-            local_val_ent3c = torch.tensor(
-                local_val_ent3c, device=self.device)
             local_val_lpips = torch.tensor(
                 local_val_lpips, device=self.device)
-            local_grad_norm = torch.tensor(
-                local_grad_norm, device=self.device)
 
             dist.all_reduce(local_train_steps, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_val_steps, op=dist.ReduceOp.SUM)
@@ -307,13 +259,9 @@ class Trainer:
             dist.all_reduce(local_val_loss, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_val_psnr, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_val_ssim, op=dist.ReduceOp.SUM)
-            # dist.all_reduce(local_val_scc, op=dist.ReduceOp.SUM)
-            # dist.all_reduce(local_val_pcc, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_val_genome_disco, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_val_hicrep, op=dist.ReduceOp.SUM)
-            dist.all_reduce(local_val_ent3c, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_val_lpips, op=dist.ReduceOp.SUM)
-            dist.all_reduce(local_grad_norm, op=dist.ReduceOp.SUM)
 
             local_train_steps = local_train_steps.item()
             local_val_steps = local_val_steps.item()
@@ -321,18 +269,14 @@ class Trainer:
             local_val_loss = local_val_loss.item()
             local_val_psnr = local_val_psnr.item()
             local_val_ssim = local_val_ssim.item()
-            # local_val_scc = local_val_scc.item()
-            # local_val_pcc = local_val_pcc.item()
             local_val_genome_disco = local_val_genome_disco.item()
             local_val_hicrep = local_val_hicrep.item()
-            local_val_ent3c = local_val_ent3c.item()
             local_val_lpips = local_val_lpips.item()
-            local_grad_norm = local_grad_norm.item()
             self._update_metrics(self.epochs_run, local_train_steps, local_train_loss, local_val_steps,
-                                 local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_hicrep, local_val_ent3c, local_val_lpips, local_grad_norm)
+                                 local_val_loss, local_val_psnr, local_val_ssim, local_val_genome_disco, local_val_hicrep, local_val_lpips)
         else:
             self._update_metrics(self.epochs_run, self.train_steps, local_train_loss, self.val_steps,
-                                 local_val_loss, local_val_psnr, local_val_ssim, local_val_scc, local_val_pcc, local_val_genome_disco, local_val_hicrep, local_val_ent3c, local_val_lpips, local_grad_norm)
+                                 local_val_loss, local_val_psnr, local_val_ssim, local_val_genome_disco, local_val_hicrep, local_val_lpips)
 
     def train(self, max_epochs: int):
         self.log.info(f"==== Training Started ({self.device}) ====")
@@ -353,7 +297,7 @@ class Trainer:
                     if (self.epochs_run+1) % self.save_every == 0:
                         self._save_snapshot(epoch)
                     self._save_and_draw_metrics()
-                    scores = f"[{(self.epochs_run+1)}/{max_epochs}] LR: {self.optimizer.param_groups[0]['lr']}; Batch Size: {self.batch_size}; Grad Norm: {format(self.grad_norm, '.4f')}; Train Loss: {format(self.train_loss_per_epoch, '.6f')}; Val (Loss: {format(self.val_loss_per_epoch, '.6f')}, PSNR: {format(self.val_psnr_per_epoch, '.4f')}, SSIM: {format(self.val_ssim_per_epoch, '.4f')}, GenomeDISCO: {format(self.val_genome_disco_per_epoch, '.4f')}, HiCRep: {format(self.val_hicrep_per_epoch, '.4f')}, ENT3C: {format(self.val_ent3c_per_epoch, '.4f')}, LPIPS: {format(self.val_lpips_per_epoch, '.4f')};"
+                    scores = f"[{(self.epochs_run+1)}/{max_epochs}] LR: {self.optimizer.param_groups[0]['lr']}; Batch Size: {self.batch_size}; Train Loss: {format(self.train_loss_per_epoch, '.6f')}; Val (Loss: {format(self.val_loss_per_epoch, '.6f')}, PSNR: {format(self.val_psnr_per_epoch, '.4f')}, SSIM: {format(self.val_ssim_per_epoch, '.4f')}, GenomeDISCO: {format(self.val_genome_disco_per_epoch, '.4f')}, HiCRep: {format(self.val_hicrep_per_epoch, '.4f')}, LPIPS: {format(self.val_lpips_per_epoch, '.4f')};"
 
                     self.log.info(f"{scores}")
                     print(f"[INFO] {scores}")
@@ -364,7 +308,7 @@ class Trainer:
                     if (self.epochs_run+1) % self.save_every == 0:
                         self._save_snapshot(epoch)
                     self._save_and_draw_metrics()
-                    scores = f"[{(self.epochs_run+1)}/{max_epochs}] LR: {self.optimizer.param_groups[0]['lr']}; Batch Size: {self.batch_size}; Grad Norm: {format(self.grad_norm, '.4f')}; Train Loss: {format(self.train_loss_per_epoch, '.6f')}; Val (Loss: {format(self.val_loss_per_epoch, '.6f')}, PSNR: {format(self.val_psnr_per_epoch, '.4f')}, SSIM: {format(self.val_ssim_per_epoch, '.4f')}, GenomeDISCO: {format(self.val_genome_disco_per_epoch, '.4f')}, HiCRep: {format(self.val_hicrep_per_epoch, '.4f')}, ENT3C: {format(self.val_ent3c_per_epoch, '.4f')}, LPIPS: {format(self.val_lpips_per_epoch, '.4f')};"
+                    scores = f"[{(self.epochs_run+1)}/{max_epochs}] LR: {self.optimizer.param_groups[0]['lr']}; Batch Size: {self.batch_size}; Train Loss: {format(self.train_loss_per_epoch, '.6f')}; Val (Loss: {format(self.val_loss_per_epoch, '.6f')}, PSNR: {format(self.val_psnr_per_epoch, '.4f')}, SSIM: {format(self.val_ssim_per_epoch, '.4f')}, GenomeDISCO: {format(self.val_genome_disco_per_epoch, '.4f')}, HiCRep: {format(self.val_hicrep_per_epoch, '.4f')}, LPIPS: {format(self.val_lpips_per_epoch, '.4f')};"
 
                     self.log.info(f"{scores}")
                     print(f"[INFO] {scores}")

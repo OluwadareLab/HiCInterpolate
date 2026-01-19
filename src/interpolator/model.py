@@ -1,9 +1,9 @@
 import os
 import sys
 import torch
-from src.feature_extractor import FeatureExtractor
-from src.flow_estimation import PyramidFlowEstimator
-from src.fusion import Fusion
+from src.feature_encoder import FeatureExtractor
+from src.flow_predictor import PyramidFlowEstimator
+from src.feature_decoder import Fusion
 from torch import Tensor
 from torch.nn import Module
 from src.misc import utils

@@ -7,16 +7,17 @@ import torch
 
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['figure.dpi'] = 600
-# CMAP_ = "hot_r"
-# CMAP_ = "Reds"
-# CMAP_ = "YlOrRd"
 CMAP_ = mcolors.LinearSegmentedColormap.from_list(
-    'juicebox', ['#FFFFFF', '#FF0000']
+    "juicebox",
+    [
+        "#fee8c8",
+        "#fdbb84",
+        "#e34a33",
+        "#b30000"
+    ],
+    N=256
 )
-<<<<<<< Updated upstream
-=======
 
->>>>>>> Stashed changes
 
 def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, x1: np.ndarray, file):
     data_groups = [x0, y, pred, x1]
@@ -41,6 +42,7 @@ def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, 
     plt.tight_layout()
     plt.savefig(f"{file}", dpi=300, format='png')
     plt.close()
+
 
 def draw_inf_hic_map(y: np.ndarray, pred: np.ndarray, file):
     data_groups = [y, pred]
@@ -68,28 +70,6 @@ def draw_inf_hic_map(y: np.ndarray, pred: np.ndarray, file):
     plt.savefig(f"{file}.png", dpi=300, format='png')
     plt.savefig(f"{file}.pdf", dpi=300, format='pdf')
     plt.close()
-
-# def draw_inf_hic_map(y: np.ndarray, pred: np.ndarray, file):
-#     data_groups = [y, pred]
-#     titles = ["$y_{t=0.5}$", "$\hat{y}_{t=0.5}$"]
-
-#     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-#     axes = np.atleast_2d(axes)
-
-#     for i in range(len(data_groups)):
-#         ax = axes[0, i]
-#         matrix = data_groups[i][0].squeeze().cpu()
-#         min_ = torch.min(matrix)
-#         max_ = torch.max(matrix)
-#         im = ax.imshow(matrix, cmap=CMAP_, vmin=min_, vmax=max_)
-#         ax.set_title(titles[i])
-#         ax.axis("off")
-#         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
-#     plt.tight_layout()
-#     plt.savefig(f"{file}.pdf", dpi=300, format='pdf')
-#     plt.savefig(f"{file}.png", dpi=300, format='png')
-#     plt.close()
 
 
 def draw_metric(cfg, state):
@@ -129,22 +109,6 @@ def draw_metric(cfg, state):
     plt.savefig(cfg.file.ssim_val_plot, dpi=300, format='png')
     plt.close()
 
-    # plt.figure()
-    # plt.plot(state["val_scc"])
-    # plt.title("SCC on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("value")
-    # plt.savefig(cfg.file.scc_val_plot, dpi=300, format='png')
-    # plt.close()
-
-    # plt.figure()
-    # plt.plot(state["val_pcc"])
-    # plt.title("PCC on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("value")
-    # plt.savefig(cfg.file.pcc_val_plot, dpi=300, format='png')
-    # plt.close()
-
     plt.figure()
     plt.plot(state["val_genome_disco"])
     plt.title("GenomeDISCO on validation set")
@@ -160,14 +124,6 @@ def draw_metric(cfg, state):
     plt.ylabel("HiCRep")
     plt.savefig(cfg.file.hicrep_val_plot, dpi=300, format='png')
     plt.close()
-
-    # plt.figure()
-    # plt.plot(state["val_ent3c"])
-    # plt.title("ENT3C on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("ENT3C")
-    # plt.savefig(cfg.file.ent3c_plot, dpi=300, format='png')
-    # plt.close()
 
     plt.figure()
     plt.plot(state["val_lpips"])

@@ -82,7 +82,6 @@ class LPIPSLoss(nn.Module):
 def psnr(pred, target, max_val=1.0):
     mse = F.mse_loss(pred, target, reduction='none')
     mse = mse.mean(dim=[1, 2, 3])
-    # Convert max_val to tensor on the same device
     max_val = torch.tensor(max_val, device=pred.device, dtype=pred.dtype)
     psnr_val = 20 * torch.log10(max_val) - 10 * torch.log10(mse + 1e-8)
     return psnr_val.mean()
@@ -92,7 +91,6 @@ def ssim(pred, target, window_size=11, max_val=1.0):
     C1 = (0.01 * max_val) ** 2
     C2 = (0.03 * max_val) ** 2
 
-    # Gaussian window
     def gaussian_window(window_size, sigma=1.5):
         coords = torch.arange(window_size).float() - window_size // 2
         g = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
