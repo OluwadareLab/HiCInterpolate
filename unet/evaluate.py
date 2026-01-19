@@ -24,14 +24,16 @@ def evaluate(net, dataloader, device, amp, epoch):
             x3 = x3.to(device=device, dtype=torch.float32,
                        memory_format=torch.channels_last)
             pred = net(x1, x3)
+            del x1, x3
             loss_list.append(F.mse_loss(
                 input=pred, target=y, reduction='mean'))
             ssim_list.append(eval_metric.get_ssim(pred=pred, target=y))
             psnr_list.append(eval_metric.get_psnr(pred=pred, target=y))
 
-            if drawn == 3:
+            if drawn == 5:
                 plot.draw_hic_map(y=y, pred=pred,
                                   filename=f"unet_hic_map_{epoch}")
+            del y, pred
             drawn += 1
 
     mean_loss = torch.stack(loss_list).mean(

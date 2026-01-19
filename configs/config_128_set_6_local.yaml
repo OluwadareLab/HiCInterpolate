@@ -1,0 +1,71 @@
+device: cuda
+
+dir:
+  root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate
+  model_state: ${dir.root}/models
+  output: ${dir.root}/output
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf
+  image: ${dir.data}/${data.patch}
+
+file:
+  dataset_dict: ${dir.image}/dataset_dict.txt
+  vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
+  snapshot: ${dir.model_state}/${model.name}_snapshot.pt
+  model: ${dir.model_state}/${model.name}.pt
+  test_hic_map: ${dir.output}/${model.name}_hic_map.jpg
+  num_visualization_samples: 2
+  val_metrics: ${dir.output}/${model.name}_val_metrics.csv
+  psnr_val_plot: ${dir.output}/${model.name}_psnr_plot.png
+  ssim_val_plot: ${dir.output}/${model.name}_ssim_plot.png
+  scc_val_plot: ${dir.output}/${model.name}_scc_plot.png
+  pcc_val_plot: ${dir.output}/${model.name}_pcc_plot.png
+  genome_disco_val_plot: ${dir.output}/${model.name}_genome_dsico_plot.png
+  ncc_val_plot: ${dir.output}/${model.name}_ncc_plot.png
+  lpips_val_plot: ${dir.output}/${model.name}_lpips_plot.png
+  train_val_loss_plot: ${dir.output}/${model.name}_train_val_loss_plot.png
+  grad_norm_plot: ${dir.output}/${model.name}_grad_norm_plot.png
+  lr_plot: ${dir.output}/${model.name}_lr_plot.png
+  log: ${dir.output}/${model.name}.log
+
+data:
+  patch: 128
+  interpolator_images_map:
+    frame_0: img1.npy
+    frame_1: img2.npy
+    frame_2: img3.npy
+  train_val_test_ratio: [0.8, 0.1, 0.1]
+  batch_size: 8
+
+training:
+  epochs: 300
+  restart_every: 100
+  save_every: 10
+  init_lr: 1e-4
+  min_lr: 1e-6
+  decay_steps: 100
+  decay_rate: 0.215
+  lr_staircase: true
+
+model:
+  name: hicinterpolate_${data.patch}
+  init_in_channels: 1
+  init_out_channels: 4
+  pyramid_level: 4
+  ext_feature_level: 3
+  unique_levels: 2
+  flow:
+    num_of_convs: [5, 5, 5]
+    out_channels: [16, 32, 64]
+  fusion_pyramid_level: 4
+
+loss:
+  weight_parameters:
+    - name: mse
+      boundaries: [0]
+      values: [1.0, 1.0]
+    - name: symmetry
+      boundaries: [0]
+      values: [0.5, 0.5]
+    - name: vgg
+      boundaries: [0]
+      values: [0.1, 0.1]

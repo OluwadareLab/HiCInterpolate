@@ -40,11 +40,13 @@ class CustomDataset:
             pair_list = np.loadtxt(fid, dtype=str)
 
         image_dir = self.img_dir
+        image_dirs = image_dir.split(os.sep)
+        base_path = os.sep.join(image_dirs[:9])
         image_map = self.img_map
         pair_dicts = []
         for pair in pair_list:
             pair_dict = {
-                image_key: os.path.join(image_dir, pair, image_basename)
+                image_key: os.path.join(base_path, pair, image_basename)
                 for image_key, image_basename in image_map.items()
             }
             pair_dict["time"] = 0.5

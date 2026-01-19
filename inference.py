@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import random
+import csv
 import sys
 import logging
 import torch
@@ -10,10 +11,105 @@ import math
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from omegaconf import OmegaConf
-from src.misc import plots as plot, eval_metrics as eval_metric
+from src.metric import eval_metrics as eval_metric
+from src.misc import plots as plot
 from src.inference import InfConfig, InfCustomDataset
 from src import InferenceLib
+from scipy.ndimage import gaussian_filter as sp_gf
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data"
+RESOLUTIONS = [10000]
+
+ORGANISMS = [
+    "human"
+]
+
+SAMPLES = [
+    [
+        "dmso_control",
+        "dtag_v1",
+        "hela_s3_r1",
+        "hct116_2"
+    ]
+]
+
+SUBSAMPLES = [
+    [
+        [
+            "control"
+        ],
+        [
+            "v1"
+        ],
+        [
+            "r1"
+        ],
+        [
+            "noatp30m",
+            "noatp120m",
+            "notranscription60m",
+            "notranscription360m"
+        ]
+    ]
+]
+
+FILENAME_LIST = [
+    [
+        [
+            [
+                "4DNFIP9EJSOM_dmso_0m",
+                "4DNFI7T93SHL_dmso_30m",
+                "4DNFICF2Z2TG_dmso_60m"
+            ]
+        ],
+        [
+            [
+                "4DNFI5EAPQTI_dtag_v1_0m",
+                "4DNFIY1TCVLX_dtag_v1_30m",
+                "4DNFIXWT5U42_dtag_v1_60m"
+            ]
+        ],
+        [
+            [
+                "4DNFIZZ77KD2_hela_s3_r1_30m",
+                "4DNFIOLO226X_hela_s3_r1_60m",
+                "4DNFIJMS2ODT_hela_s3_r1_90m"
+            ]
+        ],
+        [
+            [
+                "4DNFIVC8OQPG_hct116_2_noatp30m_20m",
+                "4DNFI44JLUSL_hct116_2_noatp30m_40m",
+                "4DNFIBED48O1_hct116_2_noatp30m_60m"
+            ],
+            [
+                "4DNFITUPI4HA_hct116_2_noatp120m_20m",
+                "4DNFIM7Q2FQQ_hct116_2_noatp120m_40m",
+                "4DNFISATK9PF_hct116_2_noatp120m_60m"
+            ],
+            [
+                "4DNFII16KXA7_hct116_2_notranscription60m_20m",
+                "4DNFIMIMLMD3_hct116_2_notranscription60m_40m",
+                "4DNFI2LY7B73_hct116_2_notranscription60m_60m"
+            ],
+            [
+                "4DNFI5IZNXIO_hct116_2_notranscription360m_20m",
+                "4DNFIZK7W8GZ_hct116_2_notranscription360m_40m",
+                "4DNFISRP84FE_hct116_2_notranscription360m_60m"
+            ]
+        ]
+    ]
+]
+
+# CHROMOSOMES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+#                13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 'X', 'Y']
+
+CHROMOSOMES = [11, 13, 15, 17, 19, 21]
+
+
+_EPSILON = 1e-8
+CLIPPING_PERCENTILE = 99.99
 
 
 def base_logger(file):
@@ -57,28 +153,144 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, isDistributed: bool = False
         )
 
 
-def reconstruct_matrix(pred_list, pad_h, pad_w, patch_size, h, w):
-    pred_patches = []
-    for batch in pred_list:
-        for pred in batch:
-            pred_patches.append(pred.squeeze(0))
+def reconstruct_matrix(pred_list, patch_size, h, w):
+    n = int(math.ceil(h / patch_size) * patch_size)
+    n_patches_per_side = n // patch_size
 
-    pad_size = pad_h * patch_size
-    pred_padded = torch.zeros(pad_size, pad_size)
-    num_patches_h = pad_h
-    num_patches_w = pad_w
-    i = 0
-    for r in range(num_patches_h):
-        for c in range(num_patches_w):
-            pred_padded[
-                r * patch_size:(r + 1) * patch_size,
-                c * patch_size:(c + 1) * patch_size
-            ] = pred_patches[i]
-            i += 1
+    patches = np.array([pred.squeeze().cpu().numpy()
+                       for batch in pred_list for pred in batch])
+    reconstructed = patches.reshape(n_patches_per_side, n_patches_per_side, patch_size, patch_size) \
+        .transpose(0, 2, 1, 3) \
+        .reshape(n, n)
+    pred = reconstructed[:h, :w]
+    return pred
 
-    pred_matrix = pred_padded[:h, :w]
 
-    return pred_matrix
+def get_norm_mat(matrix, gf: bool = False, log: bool = False, clip: bool = False, percentile: float = CLIPPING_PERCENTILE):
+    mat = np.nan_to_num(matrix, nan=_EPSILON, posinf=_EPSILON, neginf=_EPSILON)
+    mat[mat <= _EPSILON] = _EPSILON
+    if gf:
+        mat = sp_gf(mat, 1.0)
+    if log:
+        mat = np.log1p(mat)
+    if clip:
+        percentile_val = np.percentile(mat, percentile)
+        mat = np.clip(mat, _EPSILON, percentile_val)
+
+    _min = np.min(mat)
+    _max = np.max(mat)
+    mat = (mat - _min)/(_max - _min)
+    return mat
+
+
+def filter_negative(matrix):
+    matrix[matrix <= _EPSILON] = _EPSILON
+    return matrix
+
+
+def log_clip_min_max(matrix, percentile: float = CLIPPING_PERCENTILE):
+    matrix = np.nan_to_num(matrix, nan=_EPSILON,
+                           posinf=_EPSILON, neginf=_EPSILON)
+    matrix[matrix < _EPSILON] = _EPSILON
+    log_matrix = np.log1p(matrix)
+    percentile_val = np.percentile(log_matrix, percentile)
+    clip_matrix = np.clip(log_matrix, _EPSILON, percentile_val)
+    norm_matrix = clip_matrix / percentile_val
+
+    return norm_matrix
+
+
+def get_score_matrix(preds, target, device, patch_size, batch_size):
+    patches_y = []
+    patches_pred = []
+    h, w = target.shape
+    n_y = get_norm_mat(target, gf=True)
+    n_pred = preds
+
+    bin = 0
+    while (bin+patch_size <= h and bin+patch_size <= w):
+        temp_y = n_y[bin:bin+patch_size, bin:bin+patch_size]
+        temp_pred = n_pred[bin:bin+patch_size, bin:bin+patch_size]
+
+        if temp_y.shape == (patch_size, patch_size):
+            patches_y.append(temp_y)
+            patches_pred.append(temp_pred)
+        bin += patch_size
+
+    patches_y = torch.from_numpy(np.stack(patches_y)).to(
+        device).unsqueeze(1).float()
+    patches_pred = torch.from_numpy(
+        np.stack(patches_pred)).to(device).unsqueeze(1).float()
+
+    num_patches = len(patches_y)
+
+    psnr_values = []
+    ssim_values = []
+    genome_disco_values = []
+    hicrep_values = []
+    lpips_values = []
+
+    for batch_start in range(0, num_patches, batch_size):
+        batch_end = min(batch_start + batch_size, num_patches)
+
+        batch_y = patches_y[batch_start:batch_end]
+        batch_pred = patches_pred[batch_start:batch_end]
+
+        psnr_values.append(eval_metric.get_psnr(batch_pred, batch_y))
+        ssim_values.append(eval_metric.get_ssim(batch_pred, batch_y))
+        genome_disco_values.append(
+            eval_metric.get_genome_disco(batch_pred, batch_y))
+        hicrep_values.append(eval_metric.get_hicrep(batch_pred, batch_y))
+        lpips_values.append(eval_metric.get_lpips(batch_pred, batch_y))
+
+    psnr = np.mean([v.cpu().item() if torch.is_tensor(v)
+                   else v for v in psnr_values])
+    ssim = np.mean([v.cpu().item() if torch.is_tensor(v)
+                   else v for v in ssim_values])
+    genome_disco = np.mean([v.cpu().item() if torch.is_tensor(
+        v) else v for v in genome_disco_values])
+    hicrep = np.mean([v.cpu().item() if torch.is_tensor(v)
+                     else v for v in hicrep_values])
+    lpips = np.mean([v.cpu().item() if torch.is_tensor(v)
+                    else v for v in lpips_values])
+
+    return psnr, ssim, genome_disco, hicrep, lpips
+
+
+# def get_score_matrix(preds, target, device, patch_size):
+#     n_y = get_norm_mat(target)
+#     n_pred = get_norm_mat(preds)
+
+#     h, w = target.shape
+#     bin = 0
+
+#     psnr_values = []
+#     ssim_values = []
+#     genome_disco_values = []
+#     hicrep_values = []
+#     lpips_values = []
+#     while(bin+patch_size <= h and bin+patch_size <= w):
+#         temp_y = n_y[bin:bin+patch_size, bin:bin+patch_size]
+#         temp_pred = n_pred[bin:bin+patch_size, bin:bin+patch_size]
+#         patche_y = torch.from_numpy(temp_y).to(device).unsqueeze(0).unsqueeze(0).float()
+#         patche_pred = torch.from_numpy(temp_pred).to(device).unsqueeze(0).unsqueeze(0).float()
+
+#         psnr_values.append(eval_metric.get_psnr(patche_pred, patche_y))
+#         ssim_values.append(eval_metric.get_ssim(patche_pred, patche_y))
+#         genome_disco_values.append(eval_metric.get_genome_disco(patche_pred, patche_y))
+#         hicrep_values.append(eval_metric.get_hicrep(patche_pred, patche_y))
+#         lpips_values.append(eval_metric.get_lpips(patche_pred, patche_y))
+
+#         bin += patch_size
+
+
+#     psnr = np.mean([v.cpu().item() if torch.is_tensor(v) else v for v in psnr_values])
+#     ssim = np.mean([v.cpu().item() if torch.is_tensor(v) else v for v in ssim_values])
+#     genome_disco = np.mean([v.cpu().item() if torch.is_tensor(v) else v for v in genome_disco_values])
+#     hicrep = np.mean([v.cpu().item() if torch.is_tensor(v) else v for v in hicrep_values])
+#     lpips = np.mean([v.cpu().item() if torch.is_tensor(v) else v for v in lpips_values])
+
+#     return psnr, ssim, genome_disco, hicrep, lpips
 
 
 def main(config_filename: str, isDistributed: bool = False):
@@ -91,65 +303,93 @@ def main(config_filename: str, isDistributed: bool = False):
     os.makedirs(f"{output_dir}", exist_ok=True)
     os.makedirs(f"{model_state_dir}", exist_ok=True)
     OmegaConf.update(cfg, "dir.output", output_dir)
-    # OmegaConf.update(cfg, "dir.model_state", model_state_dir)
 
     log = base_logger(cfg.file.log)
     if isDistributed:
         ddp_setup()
 
     batch_size = cfg.data.batch_size
+    patch_size = cfg.data.patch
     device = cfg.device
+    csv_file = 'scores.csv'
+    fieldnames = ['chromosome', 'psnr', 'ssim',
+                  'genome_disco', 'hicrep', 'lpips']
     if os.path.exists(cfg.file.model):
-        cds = InfCustomDataset(record_file=cfg.file.inference, img_dir=cfg.dir.image,
-                               img_map=cfg.data.interpolator_images_map)
-        ds = cds._get_inference_dl()
-        dl = get_dataloader(
-            ds=ds, batch_size=batch_size, isDistributed=isDistributed)
-        inference = InferenceLib.HiCInterpolate(
-            cfg=cfg, log=log, model=cfg.file.model, dl=dl, isDistributed=isDistributed)
-        inference._inference()
+        for organism, org_samples, org_subsamples, org_filenames in zip(ORGANISMS, SAMPLES, SUBSAMPLES, FILENAME_LIST):
+            for sample, sam_sub_sample, sam_sample_filenames in zip(org_samples, org_subsamples, org_filenames):
+                for sub_sample, sample_filenames in zip(sam_sub_sample, sam_sample_filenames):
+                    for resolution in RESOLUTIONS:
+                        for chromosome in CHROMOSOMES:
+                            timeframe_name = "_".join(name.split(
+                                '_')[-1] for name in sample_filenames[:3])
+                            print(
+                                f"Processing {patch_size}/{organism}/{sample}/{sub_sample}/{timeframe_name}/{str(resolution)}/{chromosome}...")
+                            data_dict = f"{ROOT_PATH}/inference/kr_gf/{patch_size}/{organism}/{sample}/{sub_sample}/{timeframe_name}/{str(resolution)}/{chromosome}"
+                            OmegaConf.update(cfg, "dir.image", data_dict)
 
-        pred_list = inference._get_prediction()
-        patch_size = cfg.data.patch
-        path = cfg.file.inference_raw
-        with open(path, "r") as file:
-            original_path = [line.rstrip() for line in file]
+                            cds = InfCustomDataset(record_file=cfg.file.inference, img_dir=cfg.dir.image,
+                                                   img_map=cfg.data.interpolator_images_map)
+                            ds = cds._get_inference_dl()
+                            dl = get_dataloader(
+                                ds=ds, batch_size=batch_size, isDistributed=isDistributed)
+                            inference = InferenceLib.HiCInterpolate(
+                                cfg=cfg, log=log, model=cfg.file.model, dl=dl, isDistributed=isDistributed)
+                            inference._inference()
 
-        y = np.load(f"{original_path[0]}/img_2.npy")
+                            pred_list = inference._get_prediction()
 
-        h, w = y.shape
-        _extension = math.ceil(h/patch_size)
-        pad_h = _extension
-        pad_w = _extension
-        pred = reconstruct_matrix(
-            pred_list, pad_h, pad_w, patch_size, h, w)
+                            y = np.load(f"{data_dict}/y.npy")
+                            h, w = y.shape
+                            pred = reconstruct_matrix(
+                                pred_list, patch_size, h, w)
+                            up_pred = pred * np.max(y)
 
-        y = torch.from_numpy(y).to(device).unsqueeze(0).unsqueeze(0).float()
-        pred = pred.to(device).unsqueeze(0).unsqueeze(0).float()
+                            ROOT_OUTPUT = f"{cfg.dir.output}/{patch_size}/{organism}/{sample}/{sub_sample}"
+                            os.makedirs(ROOT_OUTPUT, exist_ok=True)
+                            MATRIX_DIR = f"{ROOT_OUTPUT}/matrix"
+                            os.makedirs(MATRIX_DIR, exist_ok=True)
+                            RES_DIR = f"{ROOT_OUTPUT}/{timeframe_name}/{str(resolution)}"
+                            os.makedirs(RES_DIR, exist_ok=True)
+                            np.save(f"{MATRIX_DIR}/{chromosome}_y.npy", y)
+                            np.save(f"{MATRIX_DIR}/{chromosome}_yt.npy", pred)
 
-        print(f"Ploating heatmap...")
-        plot.draw_inf_hic_map(y=y, pred=pred, file=f"{cfg.file.hic_map}")
-        psnr = eval_metric.get_psnr(pred, y).item()
-        ssim = eval_metric.get_ssim(pred, y).item()
-        scc = eval_metric.get_scc(pred, y).item()
-        pcc = eval_metric.get_pcc(pred, y).item()
-        genome_disco = eval_metric.get_genome_disco(pred, y).item()
-        ncc = eval_metric.get_ncc(pred, y).item()
-        lpips = eval_metric.get_lpips(pred, y).item()
+                            n_y = log_clip_min_max(y)
+                            n_pred = log_clip_min_max(pred)
+                            print(f"Ploating heatmap...")
+                            plot.draw_inf_hic_map(
+                                y=n_y[3328:3584, 3328:3584], pred=n_pred[3328:3584, 3328:3584], file=f"{RES_DIR}/{chromosome}_hic_map")
 
-        scores = f"PSNR: {format(psnr, '.4f')}, SSIM: {format(ssim, '.4f')}, PCC: {format(pcc, '.4f')}, SCC: {format(scc, '.4f')}, GenomeDISCO: {format(genome_disco, '.4f')}, NCC: {format(ncc, '.4f')}, LPIPS: {format(lpips, '.4f')};"
+                            print(f"Calculating scores...")
+                            psnr, ssim, genome_disco, hicrep, lpips = get_score_matrix(
+                                pred, y, device, patch_size, batch_size)
+                            scores = f"PSNR: {format(psnr, '.4f')}, SSIM: {format(ssim, '.4f')}, GenomeDISCO: {format(genome_disco, '.4f')}, HiCRep: {format(hicrep, '.4f')}, LPIPS: {format(lpips, '.4f')};"
 
-        metric_file = cfg.file.metrics
-        os.makedirs(os.path.dirname(metric_file), exist_ok=True)
-        with open(metric_file, "a") as file:
-            file.write(scores+"\n")
-            file.close()
+                            csv_file = f"{ROOT_OUTPUT}/scores.csv"
+                            if not os.path.exists(csv_file):
+                                with open(csv_file, 'w', newline='') as f:
+                                    writer = csv.DictWriter(
+                                        f, fieldnames=fieldnames)
+                                    writer.writeheader()
+                            with open(csv_file, 'a', newline='') as f:
+                                writer = csv.DictWriter(
+                                    f, fieldnames=fieldnames)
+                                writer.writerow({
+                                    'chromosome': chromosome,
+                                    'psnr': psnr,
+                                    'ssim': ssim,
+                                    'genome_disco': genome_disco,
+                                    'hicrep': hicrep,
+                                    'lpips': lpips
+                                })
+                                f.close()
 
-        log.info(f"{scores}")
-        print(f"[INFO] {scores}")
+                            print(f"Saved scores for {chromosome}")
 
-    if isDistributed:
-        dist.destroy_process_group()
+                            log.info(f"{scores}")
+                            print(f"[INFO] {scores}")
+
+                        if isDistributed:
+                            dist.destroy_process_group()
 
 
 if __name__ == "__main__":

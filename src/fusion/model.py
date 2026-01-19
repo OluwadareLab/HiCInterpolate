@@ -1,6 +1,6 @@
 import torch
 from typing import List
-from torch.nn import Module, Conv2d, LeakyReLU, ReLU, functional as F, ModuleList
+from torch.nn import Module, Conv2d, ReLU, functional as F, ModuleList
 from torch import Tensor
 
 
@@ -9,10 +9,10 @@ class Block(Module):
         super().__init__()
         self.conv1 = Conv2d(in_channels=in_channels,
                             out_channels=out_channels, kernel_size=kernel_size, padding='same')
-        self.relu1 = LeakyReLU(negative_slope=0.2)
+        self.relu1 = ReLU()
         self.conv2 = Conv2d(in_channels=out_channels,
                             out_channels=out_channels, kernel_size=kernel_size, padding='same')
-        self.relu2 = LeakyReLU(negative_slope=0.2)
+        self.relu2 = ReLU()
 
     def forward(self, input):
         x = input
@@ -52,6 +52,11 @@ class Fusion(Module):
 
         self.output_conv = Conv2d(
             in_channels=init_out_channels, out_channels=init_in_channels, kernel_size=1)
+<<<<<<< Updated upstream
+        self.output_activation = ReLU()
+=======
+        # self.output_relu = ReLU()
+>>>>>>> Stashed changes
 
     def forward(self, pyramid: List[Tensor]) -> Tensor:
         if len(pyramid) != self.levels:
@@ -60,10 +65,15 @@ class Fusion(Module):
         net = pyramid[-1]
         for i in reversed(range(0, self.levels-1)):
             level_size = (pyramid[i].shape)[2:4]
-            net = F.interpolate(net, size=level_size, mode='bilinear')
+            net = F.interpolate(net, size=level_size, mode='nearest')
             net = self.convs[i][0](net)
             net = torch.cat([pyramid[i], net], dim=1)
             net = self.convs[i][1](net)
         net = self.output_conv(net)
+<<<<<<< Updated upstream
+        net = self.output_activation(net)
+=======
+        # net = self.output_relu(net)
 
+>>>>>>> Stashed changes
         return net

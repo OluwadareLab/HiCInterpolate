@@ -2,14 +2,18 @@ device: cuda
 
 dir:
   root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data
-  model_state: ${dir.root}/HiCInterpolate/models/config_256_set_1_kr_log_clip_norm_AdamW_cosin
+<<<<<<< Updated upstream
+  model_state: ${dir.root}/HiCInterpolate/models/config_64_set_19_local
+=======
+  model_state: ${dir.root}/HiCInterpolateV2/models/config_64_set_18_local
+>>>>>>> Stashed changes
   output: ${dir.root}/HiCInterpolate/inference
   data: ${dir.root}/pairs/kr_log_clip_norm
   image: ${dir.data}/${data.patch}
 
 file:
-  inference: ${dir.image}/inference.txt
-  inference_raw: ${dir.image}/inference_raw.txt
+  inference: ${dir.image}/dataset_dict.txt
+  inference_raw: ${dir.image}/info.txt
   vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
   model: ${dir.model_state}/${model.name}.pt
   hic_map: ${dir.output}/${model.name}_inference_hic_map.jpg
@@ -17,29 +21,32 @@ file:
   log: ${dir.output}/${model.name}_inference.log
 
 data:
-  patch: 256
+  patch: 64
   interpolator_images_map:
     frame_0: img1.npy
     frame_2: img3.npy
-  batch_size: 8
+  batch_size: 64
 
 model:
   name: hicinterpolate_${data.patch}
   init_in_channels: 1
   init_out_channels: 4
-  pyramid_level: 6
-  ext_feature_level: 4
-  unique_levels: 3
+  pyramid_level: 4
+  ext_feature_level: 3
+  unique_levels: 2
   flow:
-    num_of_convs: [3, 3, 3, 3, 3, 3]
-    out_channels: [8, 16, 32, 64, 128, 256]
-  fusion_pyramid_level: 5
+    num_of_convs: [7, 5, 7]
+    out_channels: [16, 32, 64]
+  fusion_pyramid_level: 4
 
 loss:
   weight_parameters:
     - name: mse
-      boundaries: [250]
-      values: [0.9, 0.5]
-    - name: vgg
-      boundaries: [250]
+      boundaries: [100]
+      values: [1.0, 1.0]
+    - name: symmetry
+      boundaries: [100]
       values: [0.1, 0.5]
+    - name: vgg
+      boundaries: [100]
+      values: [0.01, 0.1]

@@ -4,11 +4,13 @@ import torch.nn.functional as F
 from torch import nn
 from lpips import LPIPS
 from scipy import stats
-from src.misc.genome_disco import get_avg_genome_disco
+from src.metric.genome_disco import compute_reproducibility
 from torchmetrics import PearsonCorrCoef, SpearmanCorrCoef
 from torchmetrics.functional.regression import pearson_corrcoef, spearman_corrcoef
 import sys
 import os
+from scipy.sparse import csr_matrix
+import numpy as np
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -35,8 +37,19 @@ def get_scc(pred, target):
     return spearman_corrcoef(pred.flatten(), target.flatten())
 
 
-def get_genome_disco(pred, target):
-    return get_avg_genome_disco(pred, target)
+def get_genome_disco(preds, target):
+    repro_list = []
+    for p, t in zip(preds, target):
+        p_np = p.squeeze(0).numpy()
+        p_csr = csr_matrix(p_np)
+        y_np = t.squeeze(0).numpy()
+        y_csr = csr_matrix(y_np)
+        repro = compute_reproducibility(p_csr, y_csr)
+        repro_list.append(repro)
+    genome_disco_score = np.mean(repro_list)
+    genome_disco_score = torch.from_numpy(
+        genome_disco_score).float().to(preds.device)
+    return genome_disco_score
 
 
 def get_ncc(pred, target, eps=1e-8):

@@ -1,5 +1,5 @@
 from typing import List
-from torch.nn import Module, Conv2d, AvgPool2d, Sequential, LeakyReLU, ModuleList
+from torch.nn import Module, Conv2d, AvgPool2d, Sequential, ReLU, ModuleList
 from torch import Tensor
 import torch
 
@@ -14,10 +14,10 @@ class SubTreeExtractor(Module):
         for i in range(n):
             out_channels = self.cfg.model.init_out_channels << i
             seq1 = Sequential(Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding="same"),
-                              LeakyReLU(negative_slope=0.2))
+                              ReLU())
             self.convs.append(seq1)
             seq2 = Sequential(Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding="same"),
-                              LeakyReLU(negative_slope=0.2))
+                              ReLU())
             self.convs.append(seq2)
             in_channels = out_channels
 

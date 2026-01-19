@@ -133,25 +133,10 @@ class UNet(nn.Module):
 
     def forward(self, img1, img3):
         img2 = self._get_flow_img(img1, img3)
-
-        x11, x12, x13, x14, x15 = self.encoder(img1)
-        x31, x32, x33, x34, x35 = self.encoder(img3)
-
-        img_paris = [[x11, x31], [x12, x32], [
-            x13, x33], [x14, x34], [x15, x35]]
-        encoded_imgs = []
-        for i1, i3 in img_paris:
-            i2 = self.time * torch.add(i1, i3)
-            encoded_imgs.append(i2)
-
-        x1, x2, x3, x4, x5 = encoded_imgs
-        fwd_flow = self.flow(x1, x31)
-        fwd_img = ofw.warp(x11, fwd_flow)
-        bwd_flow = self.flow(x31, x1)
-        bwd_img = ofw.warp(x31, bwd_flow)
-        flow_img = self.time * torch.add(fwd_img, bwd_img)
-
+        x1, x2, x3, x4, x5 = self.encoder(img2)
+        del img3
         res = self.decoder(x5, x4, x3, x2, x1)
+        del x1, x2, x3, x4, x5,
         return res
 
     def use_checkpointing(self):

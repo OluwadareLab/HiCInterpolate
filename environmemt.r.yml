@@ -1,0 +1,29 @@
+name: hici
+channels:
+  - conda-forge
+  - bioconda
+  - nvidia
+  - pytorch
+dependencies:
+  - python=3.9
+  - pytorch=2.1.1
+  - torchvision=0.16.1
+  - torchaudio=2.1.1
+  - pytorch-cuda=11.8
+  - numpy=1.26
+  - cupy
+  - torchmetrics=1.7.1
+  - matplotlib=3.9.4
+  - pandas=2.2.3
+  - scipy=1.13.1
+  - tqdm=4.67.1
+  - cooler
+  - seaborn
+  - omegaconf=2.3.0
+  - lpips
+  - scikit-learn
+  - wandb
+  # R and dependencies
+  - r-base=4.1
+  - r-devtools
+  - bioconductor-rhdf5

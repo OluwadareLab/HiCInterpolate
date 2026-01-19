@@ -4,15 +4,8 @@ dir:
   root: /mmfs1/home/hchowdhu/data/hicinterpolate
   model_state: ${dir.root}/models
   output: ${dir.root}/output
-  data: /mmfs1/home/hchowdhu/data/triplets/kr_log_clip_norm_diag
+  data: /mmfs1/home/hchowdhu/data/time_series/kr_gf
   image: ${dir.data}/${data.patch}
-
-# dir:
-#   root: /mmfs1/home/hchowdhu/data/hicinterpolate
-#   model_state: ${dir.root}/models
-#   output: ${dir.root}/output
-#   data: /mmfs1/home/hchowdhu/data/triplets/kr_log_clip_norm_diag
-#   image: ${dir.data}/${data.patch}
 
 file:
   dataset_dict: ${dir.image}/dataset_dict.txt
@@ -30,12 +23,12 @@ file:
   ncc_val_plot: ${dir.output}/${model.name}_ncc_plot.png
   lpips_val_plot: ${dir.output}/${model.name}_lpips_plot.png
   train_val_loss_plot: ${dir.output}/${model.name}_train_val_loss_plot.png
-  lr_plot: ${dir.output}/${model.name}_lr_plot.png
   grad_norm_plot: ${dir.output}/${model.name}_grad_norm_plot.png
+  lr_plot: ${dir.output}/${model.name}_lr_plot.png
   log: ${dir.output}/${model.name}.log
 
 data:
-  patch: 256
+  patch: 64
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
@@ -44,26 +37,26 @@ data:
   batch_size: 8
 
 training:
-  epochs: 1000
-  restart_every: 100
+  epochs: 600
+  restart_every: 150
   save_every: 10
-  init_lr: 5e-4
+  init_lr: 1e-4
   min_lr: 1e-6
-  decay_steps: 10
-  decay_rate: 0.631
+  decay_steps: 150
+  decay_rate: 0.398
   lr_staircase: true
 
 model:
   name: hicinterpolate_${data.patch}
   init_in_channels: 1
   init_out_channels: 4
-  pyramid_level: 6
-  ext_feature_level: 4
-  unique_levels: 3
+  pyramid_level: 4
+  ext_feature_level: 3
+  unique_levels: 2
   flow:
-    num_of_convs: [3, 3, 3, 3]
-    out_channels: [32, 64, 128, 256]
-  fusion_pyramid_level: 5
+    num_of_convs: [3, 3, 3]
+    out_channels: [16, 32, 64]
+  fusion_pyramid_level: 4
 
 loss:
   weight_parameters:
@@ -71,26 +64,8 @@ loss:
       boundaries: [0]
       values: [1.0, 1.0]
     - name: symmetry
-      boundaries: [250]
+      boundaries: [150]
       values: [0.1, 0.5]
     - name: vgg
-      boundaries: [250]
+      boundaries: [150]
       values: [0.01, 0.1]
-    # - name: style
-    #   boundaries: [250]
-    #   values: [0.0, 0.8]
-
-# loss:
-#   weight_parameters:
-#     - name: mse
-#       boundaries: [0]
-#       values: [1.0, 1.0]
-#     - name: genome_disco
-#       boundaries: [0]
-#       values: [1.0, 1.0]
-#     - name: vgg
-#       boundaries: [150]
-#       values: [0.5, 1.0]
-#     - name: style
-#       boundaries: [250]
-#       values: [0.0, 0.8]

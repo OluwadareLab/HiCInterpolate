@@ -1,0 +1,57 @@
+# DMSO control data at 30 minutes using 0 minutes and 60 minutes. Chromosome: 11, Resolution: 10kb
+
+Path: 
+y: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/dmso_control/control/matrix/11_y.npy
+hici: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/dmso_control/control/matrix/11_yt.npy
+4dmax: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/dmso_control/control/0m_30m_60m/10000/11/yt.npy
+
+y: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/dmso_control/control/matrix/21_y.npy
+hici: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/dmso_control/control/matrix/21_yt.npy
+4dmax: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/dmso_control/control/0m_30m_60m/10000/21/yt.npy
+
+# DTAG v1 data at 30 minutes using 0 minutes and 60 minutes. Chromosome: 11, Resolution: 10kb
+
+Path: 
+y: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/dtag_v1/v1/matrix/11_y.npy
+hici: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/dtag_v1/v1/matrix/11_yt.npy
+4dmax: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/dtag_v1/v1/0m_30m_60m/10000/11/yt.npy
+
+y: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/dtag_v1/v1/matrix/21_y.npy
+hici: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/dtag_v1/v1/matrix/21_yt.npy
+4dmax: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/dtag_v1/v1/0m_30m_60m/10000/21/yt.npy
+
+# HCT116 noatp 30 minutes data at 40 minutes using 20 minutes and 60 minutes. Chromosome: 11, Resolution: 10kb
+
+Path:
+y: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hct116_2/noatp30m/matrix/11_y.npy
+hici: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hct116_2/noatp30m/matrix/11_yt.npy
+4dmax: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/hct116_2/noatp30m/20m_40m_60m/10000/11/yt.npy
+
+y: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hct116_2/noatp30m/matrix/21_y.npy
+hici: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hct116_2/noatp30m/matrix/21_yt.npy
+4dmax: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/hct116_2/noatp30m/20m_40m_60m/10000/21/yt.npy
+
+# HCT116 notranscription60m 30 minutes data at 40 minutes using 20 minutes and 60 minutes. Chromosome: 11, Resolution: 10kb
+
+Path:
+y: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hct116_2/notranscription60m/matrix/11_y.npy
+hici: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hct116_2/notranscription60m/matrix/11_yt.npy
+4dmax: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/hct116_2/notranscription60m/20m_40m_60m/10000/11/yt.npy
+
+y: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hct116_2/notranscription60m/matrix/21_y.npy
+hici: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hct116_2/notranscription60m/matrix/21_yt.npy
+4dmax: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/hct116_2/notranscription60m/20m_40m_60m/10000/21/yt.npy
+
+
+# Hela S3 data at 60 minutes using 30 minutes and 60 minutes. Chromosome: 11, Resolution: 10kb
+
+Path:
+y:/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hela_s3_r1/r1/matrix/11_y.npy
+hici:/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hela_s3_r1/r1/matrix/11_yt.npy
+4dmax:/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/hela_s3_r1/r1/30m_60m_90m/10000/11/yt.npy
+
+y:/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hela_s3_r1/r1/matrix/21_y.npy
+hici:/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/result_v2/v2/human/hela_s3_r1/r1/matrix/21_yt.npy
+4dmax:/home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/4DMax/data/results/human/hela_s3_r1/r1/30m_60m_90m/10000/21/yt.npy
+
+Output Path: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolate/inference/analysis_result
