@@ -11,15 +11,17 @@ dependencies:
   - torchaudio=2.1.1
   - pytorch-cuda=11.8
   - numpy=1.26
-  - cupy
   - torchmetrics=1.7.1
   - matplotlib=3.9.4
   - pandas=2.2.3
-  - scipy=1.13.1
-  - tqdm=4.67.1
   - cooler
-  - seaborn
   - omegaconf=2.3.0
   - lpips
-  - scikit-learn
   - wandb
+  - openjdk=8
+  - cupy-cuda12x==13.3.0
+  - cugraph-cu12 --extra-index-url=https://pypi.nvidia.com
+  - scipy==1.15.1
+  - scikit-learn==1.6.1
+  - tqdm==4.65.0
+  - seaborn==0.13.2
