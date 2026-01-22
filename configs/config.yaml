@@ -2,8 +2,8 @@ device: cuda
 
 dir:
   root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolateV2
-  model_state: ${dir.root}/models
-  output: ${dir.root}/output
+  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing
+  output: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing
   data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf
   image: ${dir.data}/${data.patch}
 
@@ -40,7 +40,7 @@ data:
   batch_size: 64
 
 training:
-  epochs: 300
+  epochs: 10
   restart_every: 100
   save_every: 10
   init_lr: 1e-4

@@ -7,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 
 # =========================
-# System deps
+# System dependencies
 # =========================
 RUN apt-get update && apt-get install -y \
     software-properties-common \
@@ -23,6 +23,12 @@ RUN apt-get update && apt-get install -y \
     libblas-dev \
     liblapack-dev \
     gfortran \
+    libreadline-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    libbz2-dev \
+    liblzma-dev \
+    libpcre2-dev \
     openjdk-8-jdk \
     && rm -rf /var/lib/apt/lists/*
 
@@ -36,56 +42,63 @@ RUN add-apt-repository ppa:deadsnakes/ppa && \
     python3.9-venv \
     && rm -rf /var/lib/apt/lists/*
 
-RUN ln -sf /usr/bin/python3.9 /usr/bin/python \
- && curl -sS https://bootstrap.pypa.io/get-pip.py | python
+RUN ln -sf /usr/bin/python3.9 /usr/bin/python && \
+    curl -sS https://bootstrap.pypa.io/get-pip.py | python
 
 # =========================
-# R 4.1.0
+# R 4.1.0 (build from source)
 # =========================
 RUN wget https://cran.r-project.org/src/base/R-4/R-4.1.0.tar.gz && \
     tar -xzf R-4.1.0.tar.gz && \
     cd R-4.1.0 && \
-    ./configure --enable-R-shlib --with-blas --with-lapack && \
+    ./configure \
+        --enable-R-shlib \
+        --with-blas \
+        --with-lapack \
+        --with-readline \
+        --with-x=no && \
     make -j$(nproc) && \
     make install && \
     cd / && rm -rf R-4.1.0*
 
 ENV R_HOME=/usr/local/lib/R
-ENV PATH="${R_HOME}/bin:${PATH}"
+ENV PATH=/usr/local/lib/R/bin:$PATH
 
 # =========================
-# Install recommended R packages
+# Recommended R packages
 # =========================
-RUN Rscript -e "install.packages(c('KernSmooth','MASS','Matrix','boot','class','cluster','codetools','foreign','lattice','mgcv','nlme','nnet','rpart','spatial','survival'), repos='https://cloud.r-project.org/')"
+RUN Rscript -e "install.packages( \
+    c('KernSmooth','MASS','Matrix','boot','class','cluster', \
+      'codetools','foreign','lattice','mgcv','nlme','nnet', \
+      'rpart','spatial','survival'), \
+    repos='https://cloud.r-project.org/')"
 
 # =========================
 # Python packages
 # =========================
 RUN pip install --upgrade pip setuptools wheel
 
-# PyTorch first
+# PyTorch (CUDA 11.8)
 RUN pip install \
     torch==2.1.1+cu118 \
     torchvision==0.16.1+cu118 \
     torchaudio==2.1.1+cu118 \
     --index-url https://download.pytorch.org/whl/cu118
 
-# NVIDIA RAPIDS (CUDA 12)
+# RAPIDS / CuPy (CUDA 11)
 RUN pip install \
-    cupy-cuda12x==13.3.0 \
-    cugraph-cu12 \
+    cupy-cuda11x==13.3.0 \
+    cugraph-cu11 \
     --extra-index-url https://pypi.nvidia.com
 
-# Remaining Python packages
+# PyTorch Geometric (precompiled wheels)
 RUN pip install \
     torch-geometric==2.5.3 \
-    torch-scatter==2.1.2 \
-    torch-sparse==0.6.18 \
-    torch-cluster==1.6.3 \
-    torch-spline-conv==1.2.2 \
-    tensorflow==2.15.0 \
-    numpy==1.26.0 \
-    scipy==1.15.1 \
+    --find-links https://data.pyg.org/whl/torch-2.1.1+cu118.html
+
+# Remaining Python packages (compatible with Python 3.9)
+RUN pip install \
+    tensorflow==2.13.0 \
     pandas==2.2.3 \
     matplotlib==3.9.4 \
     scikit-learn==1.6.1 \
@@ -96,7 +109,8 @@ RUN pip install \
     omegaconf==2.3.0 \
     lpips \
     wandb \
-    cooler
+    cooler \
+    scipy==1.10.1
 
 # =========================
 # Environment variables
@@ -104,5 +118,10 @@ RUN pip install \
 ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
+# =========================
+# Working directory
+# =========================
 WORKDIR /workspace
+
+# Default shell
 CMD ["/bin/bash"]

@@ -1,15 +1,15 @@
 device: cuda
 
 dir:
-  root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data
-  model_state: ${dir.root}/HiCInterpolateV2/models/config_64_set_18_local
-  output: ${dir.root}/HiCInterpolate/inference
-  data: ${dir.root}/pairs/kr_log_clip_norm
-  image: ${dir.data}/${data.patch}
+  root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing
+  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing/config
+  output: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing/inference
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/inference/kr_gf
+  image: ${dir.data}/${data.patch}/
 
 file:
-  inference: ${dir.image}/dataset_dict.txt
-  inference_raw: ${dir.image}/info.txt
+  inference: ${dir.image}/human/dmso_control/control/0m_30m_60m/10000/21/dataset_dict.txt
+  inference_raw: ${dir.image}/human/dmso_control/control/0m_30m_60m/10000/21/info.txt
   vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
   model: ${dir.model_state}/${model.name}.pt
   hic_map: ${dir.output}/${model.name}_inference_hic_map.jpg

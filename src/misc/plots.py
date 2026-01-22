@@ -132,11 +132,3 @@ def draw_metric(cfg, state):
     plt.ylabel("LPIPS")
     plt.savefig(cfg.file.lpips_val_plot, dpi=300, format='png')
     plt.close()
-
-    plt.figure()
-    plt.plot(state["grad_norms"])
-    plt.title("Grad Norm During Training")
-    plt.xlabel("epoch")
-    plt.ylabel("Gradient Norm")
-    plt.savefig(cfg.file.grad_norm_plot, dpi=300, format='png')
-    plt.close()
