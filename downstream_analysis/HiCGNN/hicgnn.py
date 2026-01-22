@@ -14,33 +14,36 @@ import argparse
 import sys
 import pdb
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description='Generate embeddings and train a HiC-GNN model.')
-    parser.add_argument('filepath', type=str, help='Input text file path. The file should be either a tab-delimeted interaction frequency matrix, or a  tab-delimeted\
-    coordinate list of the form [position1, position2, interaction_frequency].')
-    parser.add_argument('-c', '--conversions',  type=str, default='[.1,.1, 2]', help='List of conversion constants of the form [lowest, interval, highest] for an set of\
-        equally spaced conversion factors, or of the form [conversion] for a single conversion factor.')
-    parser.add_argument('-bs', '--batchsize',  type=int,
-                        default=128, help='Batch size for embeddings generation.')
-    parser.add_argument('-ep', '--epochs', type=int, default=10,
-                        help='Number of epochs used for embeddings generation')
-    parser.add_argument('-lr', '--learningrate',  type=float,
-                        default=.01, help='Learning rate for training GCNN.')
-    parser.add_argument('-th', '--threshold', type=float, default=1e-8,
-                        help='Loss threshold for training termination.')
-    parser.add_argument('-o', '--outpath',  type=str,
-                        default='Outputs', help='Output path')
 
-    args = parser.parse_args()
+# if __name__ == "__main__":
+#     parser = argparse.ArgumentParser(
+#         description='Generate embeddings and train a HiC-GNN model.')
+#     parser.add_argument('filepath', type=str, help='Input text file path. The file should be either a tab-delimeted interaction frequency matrix, or a  tab-delimeted\
+#     coordinate list of the form [position1, position2, interaction_frequency].')
+#     parser.add_argument('-c', '--conversions',  type=str, default='[.1,.1, 2]', help='List of conversion constants of the form [lowest, interval, highest] for an set of\
+#         equally spaced conversion factors, or of the form [conversion] for a single conversion factor.')
+#     parser.add_argument('-bs', '--batchsize',  type=int,
+#                         default=128, help='Batch size for embeddings generation.')
+#     parser.add_argument('-ep', '--epochs', type=int, default=10,
+#                         help='Number of epochs used for embeddings generation')
+#     parser.add_argument('-lr', '--learningrate',  type=float,
+#                         default=.01, help='Learning rate for training GCNN.')
+#     parser.add_argument('-th', '--threshold', type=float, default=1e-8,
+#                         help='Loss threshold for training termination.')
+#     parser.add_argument('-o', '--outpath',  type=str,
+#                         default='Outputs', help='Output path')
 
-    filepath = args.filepath
-    conversions = args.conversions
-    batch_size = args.batchsize
-    epochs = args.epochs
-    lr = args.learningrate
-    thresh = args.threshold
-    out_path = args.outpath
+#     args = parser.parse_args()
+
+
+def hicgnn(input, epoch, output):
+    filepath = input
+    conversions = [.1, .1, 2]
+    batch_size = 128
+    epochs = epoch
+    lr = 0.01
+    thresh = 1e-8
+    out_path = output
 
     if not (os.path.exists(out_path)):
         os.makedirs(out_path)

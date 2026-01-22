@@ -104,8 +104,6 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
 if __name__ == "__main__":
     set_seed(42)
 
-    print("sys.argv:", sys.argv)
-
     parser = argparse.ArgumentParser(
         description='ap film distributed training job')
     parser.add_argument('-cfg', '--config', dest="config",  type=str, default="config",

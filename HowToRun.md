@@ -36,6 +36,22 @@
     2. After a successful training, you will find all the outputs in the output folder mentioned in config file. We create subfolder `inference` and another subfolder inside `inference` folder with the same name as config.yaml file itself. Under config folder, you will find `inferenced.npy` file.
 
 ## Run Downstream analysis:
-    1. Run A/B conpartment
-     
-
+* Run A/B conpartment
+```
+python dsa.py -ab -i /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/analysis_data/raw_data/dmso/chr21_yt.txt -o /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing -r 10000 -sc 500 -ec 1000
+```
+* Run chromatin loops:
+```
+python dsa.py -l -i /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/analysis_data/raw_data/dmso/chr21_yt.txt -o /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing -r 10000 -c 21 -g hg38
+```
+* Run tads:
+```
+python dsa.py -t -i /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/analysis_data/raw_data/dmso/chr21_yt.txt -o /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing -r 10000
+```
+* Run 3D structure:
+```
+docker pull oluwadarelab/hicgnn:latest
+docker run --rm -it --name hicgnn_cont -v ${PWD}:/HiC-GNN oluwadarelab/hicgnn
+python HiC-GNN_main.py /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/analysis_data/raw_data/dmso/chr21_yt.txt
+```
+For more detainsl for 3D structure predictions, visit: https://github.com/OluwadareLab/HiC-GNN

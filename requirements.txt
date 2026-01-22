@@ -1,18 +1,11 @@
 torch==2.1.1+cu118
 torchvision==0.16.1+cu118
 torchaudio==2.1.1+cu118
---extra-index-url https://download.pytorch.org/whl/cu118
 torch-geometric==2.5.3
-torch-scatter==2.1.2
-torch-sparse==0.6.18
-torch-cluster==1.6.3
-torch-spline-conv==1.2.2
-tensorflow==2.15.0
-cupy-cuda12x==13.3.0
-cugraph-cu12
---extra-index-url https://pypi.nvidia.com
-numpy==1.26.0
-scipy==1.15.1
+cupy-cuda11x==13.3.0
+cugraph-cu11
+tensorflow==2.13.0
+scipy==1.10.1
 pandas==2.2.3
 matplotlib==3.9.4
 scikit-learn==1.6.1
