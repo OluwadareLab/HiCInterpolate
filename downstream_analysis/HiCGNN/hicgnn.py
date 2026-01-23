@@ -1,18 +1,16 @@
 import numpy as np
-from ge import LINE
 import sys
 import utils
 import networkx as nx
 import os
-from models import Net
+import models as Net
 import torch
 from torch.nn import MSELoss
 from torch.optim import Adam
 from scipy.stats import spearmanr
 import ast
-import argparse
 import sys
-import pdb
+from ge.models.line import LINE
 
 
 # if __name__ == "__main__":

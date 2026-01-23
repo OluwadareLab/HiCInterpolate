@@ -19,7 +19,6 @@ env/
 .vscode/
 
 # Model files and outputs
-models/
 output/
 runs/
 data/

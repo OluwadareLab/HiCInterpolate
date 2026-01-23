@@ -55,3 +55,6 @@ docker run --rm -it --name hicgnn_cont -v ${PWD}:/HiC-GNN oluwadarelab/hicgnn
 python HiC-GNN_main.py /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/analysis_data/raw_data/dmso/chr21_yt.txt
 ```
 For more detainsl for 3D structure predictions, visit: https://github.com/OluwadareLab/HiC-GNN
+
+
+python dsa.py -s -i /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/analysis_data/raw_data/dmso/chr21_yt.txt -o /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing -sc 2500 -ec 3000
