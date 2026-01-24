@@ -1,10 +1,8 @@
 import os
-import subprocess
-import sys
 import traceback
 import numpy as np
 from downstream_analysis.HiCGNN import hicgnn
-EPOCHS = 50
+EPOCHS = 2
 HICGNN_FILENAME = "./hicgnn/hicgnn.py"
 
 

@@ -50,9 +50,9 @@ def create_model(numNodes, embedding_size, order='second'):
     v_j_context_emb = context_emb(v_j)
 
     first = Lambda(lambda x: tf.reduce_sum(
-        x[0]*x[1], axis=-1, keep_dims=False), name='first_order')([v_i_emb, v_j_emb])
+        x[0]*x[1], axis=-1, keepdims=False), name='first_order')([v_i_emb, v_j_emb])
     second = Lambda(lambda x: tf.reduce_sum(
-        x[0]*x[1], axis=-1, keep_dims=False), name='second_order')([v_i_emb_second, v_j_context_emb])
+        x[0]*x[1], axis=-1, keepdims=False), name='second_order')([v_i_emb_second, v_j_context_emb])
 
     if order == 'first':
         output_list = [first]
@@ -207,7 +207,34 @@ class LINE:
 
     def train(self, batch_size=1024, epochs=1, initial_epoch=0, verbose=1, times=1):
         self.reset_training_config(batch_size, times)
-        hist = self.model.fit_generator(self.batch_it, epochs=epochs, initial_epoch=initial_epoch, steps_per_epoch=self.steps_per_epoch,
-                                        verbose=verbose)
-
-        return hist
+        
+        # Use manual training loop with train_on_batch to avoid TensorFlow data adapter bugs
+        generator = self.batch_iter(self.node2idx)
+        hist_losses = []
+        
+        for epoch in range(initial_epoch, epochs):
+            epoch_losses = []
+            for step in range(self.steps_per_epoch):
+                try:
+                    x_batch, y_batch = next(generator)
+                    loss = self.model.train_on_batch(x_batch, y_batch)
+                    epoch_losses.append(loss)
+                    if verbose == 1 and (step + 1) % max(1, self.steps_per_epoch // 10) == 0:
+                        print(f"Epoch {epoch + 1}/{epochs}, Step {step + 1}/{self.steps_per_epoch}, Loss: {loss:.4f}")
+                except StopIteration:
+                    generator = self.batch_iter(self.node2idx)
+                    x_batch, y_batch = next(generator)
+                    loss = self.model.train_on_batch(x_batch, y_batch)
+                    epoch_losses.append(loss)
+            
+            avg_loss = np.mean(epoch_losses)
+            hist_losses.append(avg_loss)
+            if verbose == 1:
+                print(f"Epoch {epoch + 1}/{epochs} - Loss: {avg_loss:.4f}")
+        
+        # Return a simple history object for compatibility
+        class History:
+            def __init__(self, losses):
+                self.history = {'loss': losses}
+        
+        return History(hist_losses)

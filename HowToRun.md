@@ -58,3 +58,12 @@ For more detainsl for 3D structure predictions, visit: https://github.com/Oluwad
 
 
 python dsa.py -s -i /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/analysis_data/raw_data/dmso/chr21_yt.txt -o /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing -sc 2500 -ec 3000
+
+
+New pkg:
+
+pip install gensim
+pip install fastdtwpip install torch-sparse==0.6.18 \
+  -f https://data.pyg.org/whl/torch-2.1.1+cu118.html
+pip install torch-scatter==2.1.2 \
+  -f https://data.pyg.org/whl/torch-2.1.1+cu118.html

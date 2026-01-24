@@ -118,10 +118,18 @@ RUN pip install \
 ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
-# =========================
-# Working directory
-# =========================
-WORKDIR /workspace
+RUN pip install gensim
+# fastdtw
+RUN pip install fastdtw
 
+# PyTorch Geometric dependencies
+RUN pip install torch-sparse==0.6.18 \
+    -f https://data.pyg.org/whl/torch-2.1.1+cu118.html
+
+RUN pip install torch-scatter==2.1.2 \
+    -f https://data.pyg.org/whl/torch-2.1.1+cu118.html
+
+RUN git clone https://github.com/OluwadareLab/HiCInterpolate.git
+WORKDIR /HiCInterpolate
 # Default shell
 CMD ["/bin/bash"]

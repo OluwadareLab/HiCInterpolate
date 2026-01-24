@@ -33,7 +33,7 @@ def load_input(input, features):
   np.fill_diagonal(adj_mat,0)
   truth = adj_mat
   truth = torch.tensor(truth,dtype=torch.double)
-  graph = nx.from_numpy_matrix(adj_mat).to_undirected()
+  graph = nx.from_numpy_array(adj_mat).to_undirected()
   num_nodes = adj_mat.shape[0]
   edges = list(graph.edges(data=True))
   edge_index = np.empty((len(edges),2))

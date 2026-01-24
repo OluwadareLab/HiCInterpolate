@@ -1,52 +1,35 @@
 import numpy as np
 import sys
-import utils
+from . import utils
 import networkx as nx
 import os
-import models as Net
 import torch
 from torch.nn import MSELoss
 from torch.optim import Adam
 from scipy.stats import spearmanr
 import ast
 import sys
-from ge.models.line import LINE
-
-
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser(
-#         description='Generate embeddings and train a HiC-GNN model.')
-#     parser.add_argument('filepath', type=str, help='Input text file path. The file should be either a tab-delimeted interaction frequency matrix, or a  tab-delimeted\
-#     coordinate list of the form [position1, position2, interaction_frequency].')
-#     parser.add_argument('-c', '--conversions',  type=str, default='[.1,.1, 2]', help='List of conversion constants of the form [lowest, interval, highest] for an set of\
-#         equally spaced conversion factors, or of the form [conversion] for a single conversion factor.')
-#     parser.add_argument('-bs', '--batchsize',  type=int,
-#                         default=128, help='Batch size for embeddings generation.')
-#     parser.add_argument('-ep', '--epochs', type=int, default=10,
-#                         help='Number of epochs used for embeddings generation')
-#     parser.add_argument('-lr', '--learningrate',  type=float,
-#                         default=.01, help='Learning rate for training GCNN.')
-#     parser.add_argument('-th', '--threshold', type=float, default=1e-8,
-#                         help='Loss threshold for training termination.')
-#     parser.add_argument('-o', '--outpath',  type=str,
-#                         default='Outputs', help='Output path')
-
-#     args = parser.parse_args()
+from .ge import LINE
+from .models import Net
 
 
 def hicgnn(input, epoch, output):
     filepath = input
-    conversions = [.1, .1, 2]
+    conversions = "[.1, .1, 2]"
     batch_size = 128
     epochs = epoch
     lr = 0.01
     thresh = 1e-8
     out_path = output
 
+    # Get the directory where this script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(script_dir, 'Data')
+
     if not (os.path.exists(out_path)):
         os.makedirs(out_path)
-    if not (os.path.exists('./Data')):
-        os.makedirs('./Data')
+    if not (os.path.exists(data_dir)):
+        os.makedirs(data_dir)
 
     conversions = ast.literal_eval(conversions)
 
@@ -68,13 +51,20 @@ def hicgnn(input, epoch, output):
         adj = utils.convert_to_matrix(adj)
 
     np.fill_diagonal(adj, 0)
-    np.savetxt('./Data/' + name + '_matrix.txt', adj, delimiter='\t')
-    os.system('Rscript normalize.R ' + name + '_matrix')
-    print('Created normalized matrix form of ' + filepath +
-          ' as Data/' + name + '_matrix_KR_normed.txt')
-    normed = np.loadtxt('./Data/' + name + '_matrix_KR_normed.txt')
+    matrix_file = os.path.join(data_dir, name + '_matrix.txt')
+    np.savetxt(matrix_file, adj, delimiter='\t')
 
-    G = nx.from_numpy_matrix(adj)
+    # Change to script directory to run the R script
+    original_dir = os.getcwd()
+    os.chdir(script_dir)
+    os.system('Rscript normalize.R ' + name + '_matrix')
+    os.chdir(original_dir)
+
+    print('Created normalized matrix form of ' + filepath +
+          ' as ' + os.path.join(data_dir, name + '_matrix_KR_normed.txt'))
+    normed = np.loadtxt(os.path.join(data_dir, name + '_matrix_KR_normed.txt'))
+
+    G = nx.from_numpy_array(adj)
 
     embed = LINE(G, embedding_size=512, order='second')
     embed.train(batch_size=batch_size, epochs=epochs, verbose=1)
@@ -83,9 +73,10 @@ def hicgnn(input, epoch, output):
     embeddings = np.asarray(embeddings)
 
     data = utils.load_input(normed, embeddings)
-    np.savetxt('./Data/' + name + '_embeddings.txt', embeddings)
+    embeddings_file = os.path.join(data_dir, name + '_embeddings.txt')
+    np.savetxt(embeddings_file, embeddings)
     print('Created embeddings corresponding to ' +
-          filepath + ' as ./Data/' + name + '_embeddings.txt')
+          filepath + ' as ' + embeddings_file)
 
     tempmodels = []
     tempspear = []

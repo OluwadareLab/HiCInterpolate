@@ -1,7 +1,7 @@
 import torch
 from torch.nn import Linear
 from torch import cdist
-from layers import SAGEConv
+from .layers import SAGEConv
 
 class Net(torch.nn.Module):
   def __init__(self):
