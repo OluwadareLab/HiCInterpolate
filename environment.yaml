@@ -1,21 +1,13 @@
 name: hici
 channels:
   - pytorch
-  - pyg
-  - nvidia
-  - rapidsai
   - conda-forge
   - defaults
 
 dependencies:
   - python=3.9
   - pip
-  - cudatoolkit=11.8
-  - pytorch=2.1.1
-  - torchvision=0.16.1
-  - torchaudio=2.1.1
-  - cupy
-  - cugraph
+
   - numpy
   - scipy=1.10.1
   - pandas=2.2.3
@@ -27,13 +19,24 @@ dependencies:
   - omegaconf=2.3.0
 
   - pip:
+      - torch==2.1.1+cu118
+      - torchvision==0.16.1+cu118
+      - torchaudio==2.1.1+cu118
       - tensorflow==2.13.0
+
+      # PyG
       - torch-geometric==2.5.3
       - torch-sparse==0.6.18
       - torch-scatter==2.1.2
-      - torchmetrics==1.7.1
-      - lpips
-      - wandb
+
+      # GPU graph (pip wheels, CUDA 11)
+      - cupy-cuda11x==13.3.0
+      - cugraph-cu11
+
+      # HiC / utilities
       - cooler
       - gensim
       - fastdtw
+      - lpips
+      - wandb
+      - torchmetrics==1.7.1
