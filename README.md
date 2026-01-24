@@ -2,7 +2,11 @@
 
 ![HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/figure1.png)
 
-In this study, we developed HiCInterpolate, a 4D spatiotemporal interpolation architecture that accepts two timestamp Hi-C contact matrices to interpolate intermediate Hi-C contact matrices at high resolution. HiCInterpolate predicts the intermediate Hi-C contact map using a deep learning-based flow predictor, and a feature encoder and decoder architecture similar to U-Net. In addition, HiCInterpolate supports downstream analysis of multiple 3D genomic features, including A/B compartments, chromatin loops, TADs, and 3D genome structure, through an integrated analysis pipeline. Across multiple evaluation metrics, including PSNR, SSIM, GenomeDISCO, HiCRep, and LPIPS, HiCInterpolate achieved consistently strong performance. Biological validation further demonstrated preservation of key chromatin organization features, such as chromatin loops, A/B compartments, and TADs. Together, these results indicate that HiCInterpolate provides a robust computer vision–based framework for high-resolution interpolation of intermediate Hi-C contact matrices and facilitates biologically meaningful downstream analyses.
+**HiCInterpolate** is a deep learning–based architecture for **4D spatiotemporal interpolation of Hi-C data**. Given two time-point Hi-C contact matrices, it predicts high-resolution intermediate states while preserving key biological features such as **TADs** and **chromatin loops**.
+
+- **Architecture:** Deep learning flow predictor with a U-Net encoder–decoder.
+- **Analysis:** Integrated pipeline for A/B compartments, chromatin loops, and 3D genome structure.
+- **Performance:** Validated using PSNR, SSIM, GenomeDISCO, and HiCRep.
 
 ---
 
