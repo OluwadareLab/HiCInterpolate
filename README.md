@@ -7,7 +7,7 @@ In this study, we developed HiCInterpolate, a 4D spatiotemporal interpolation ar
 ---
 
 ## Documentation
-Please see the [wiki](https://github.com/OluwadareLab/HiCInterpolate/wiki) for an extensive documentation.
+Please see the [wiki]([https://github.com/OluwadareLab/HiCInterpolate/wiki](https://github.com/OluwadareLab/HiCInterpolate/wiki/HiCInterpolate)) for an extensive documentation.
 
 ---
 
