@@ -2,7 +2,7 @@ import os
 import traceback
 import numpy as np
 from downstream_analysis.HiCGNN import hicgnn
-EPOCHS = 2
+EPOCHS = 50
 HICGNN_FILENAME = "./hicgnn/hicgnn.py"
 
 
