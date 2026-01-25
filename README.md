@@ -1,3 +1,5 @@
+[![Hits](https://hits.sh/github.com/OluwadareLab/HiCInterpolate.svg)](https://hits.sh/github.com/OluwadareLab/HiCInterpolate/)
+
 # HiCInterpolate: 4D Spatiotemporal Interpolation of Hi-C Data for Genome Architecture Analysis.
 
 ![HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/figure1.png)
