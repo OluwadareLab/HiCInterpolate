@@ -1,4 +1,4 @@
-name: hici
+name: hicinterpolate
 channels:
   - pytorch
   - conda-forge
