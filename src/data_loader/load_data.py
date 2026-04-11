@@ -25,8 +25,6 @@ class TripletDataset(Dataset):
 
     def get_image(self, image_file: str) -> Tensor:
         np_img = np.load(image_file)
-        # norm_img = norm.pdf(np_img)
-        # mm_img = np.clip(norm_img, 0.0, 1.0)
         img = torch.from_numpy(np_img).float().unsqueeze(0)
         return img
 

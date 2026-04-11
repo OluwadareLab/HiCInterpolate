@@ -4,14 +4,59 @@ from torch.nn import Module, Conv2d, ReLU, functional as F, ModuleList
 from torch import Tensor
 
 
-class Block(Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3):
+class DiffusionConv2d(Module):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size=3, padding='same',
+                 diffusion_steps: int = 2, diffusion_rate: float = 0.15):
         super().__init__()
-        self.conv1 = Conv2d(in_channels=in_channels,
-                            out_channels=out_channels, kernel_size=kernel_size, padding='same')
+        self.diffusion_steps = max(0, int(diffusion_steps))
+        self.diffusion_rate = float(diffusion_rate)
+        self.channel_proj = Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            padding='same')
+        self.spatial_proj = Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            padding=padding)
+
+        # 4-neighbor discrete Laplacian kernel used for explicit diffusion updates.
+        laplacian = torch.tensor([
+            [0.0, 1.0, 0.0],
+            [1.0, -4.0, 1.0],
+            [0.0, 1.0, 0.0],
+        ], dtype=torch.float32).view(1, 1, 3, 3)
+        self.register_buffer('laplacian_kernel', laplacian)
+
+    def _laplacian(self, x: Tensor) -> Tensor:
+        kernel = self.laplacian_kernel.expand(x.shape[1], 1, 3, 3).to(dtype=x.dtype)
+        return F.conv2d(x, kernel, padding=1, groups=x.shape[1])
+
+    def forward(self, input: Tensor) -> Tensor:
+        x = self.channel_proj(input)
+        for _ in range(self.diffusion_steps):
+            x = x + self.diffusion_rate * self._laplacian(x)
+        return self.spatial_proj(x)
+
+
+class Block(Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3,
+                 diffusion_steps: int = 2, diffusion_rate: float = 0.15):
+        super().__init__()
+        self.conv1 = DiffusionConv2d(in_channels=in_channels,
+                                     out_channels=out_channels,
+                                     kernel_size=kernel_size,
+                                     padding='same',
+                                     diffusion_steps=diffusion_steps,
+                                     diffusion_rate=diffusion_rate)
         self.relu1 = ReLU()
-        self.conv2 = Conv2d(in_channels=out_channels,
-                            out_channels=out_channels, kernel_size=kernel_size, padding='same')
+        self.conv2 = DiffusionConv2d(in_channels=out_channels,
+                                     out_channels=out_channels,
+                                     kernel_size=kernel_size,
+                                     padding='same',
+                                     diffusion_steps=diffusion_steps,
+                                     diffusion_rate=diffusion_rate)
         self.relu2 = ReLU()
 
     def forward(self, input):
@@ -29,6 +74,8 @@ class Fusion(Module):
         super().__init__()
         self.cfg = cfg
         self.convs = ModuleList()
+        diffusion_steps = getattr(self.cfg.model, 'diffusion_steps', 2)
+        diffusion_rate = getattr(self.cfg.model, 'diffusion_rate', 0.15)
         self.levels = self.cfg.model.fusion_pyramid_level
         init_in_channels = self.cfg.model.init_in_channels
         init_out_channels = self.cfg.model.init_out_channels
@@ -42,16 +89,28 @@ class Fusion(Module):
 
             convs = ModuleList()
             channels = out_channels*2 if i < m else in_channels
-            convs.append(Conv2d(in_channels=channels,
-                         out_channels=out_channels, kernel_size=2, padding='same'))
+            convs.append(DiffusionConv2d(in_channels=channels,
+                                         out_channels=out_channels,
+                                         kernel_size=2,
+                                         padding='same',
+                                         diffusion_steps=diffusion_steps,
+                                         diffusion_rate=diffusion_rate))
             channels = in_channels + out_channels
             convs.append(Block(in_channels=channels,
-                         out_channels=out_channels, kernel_size=3))
+                               out_channels=out_channels,
+                               kernel_size=3,
+                               diffusion_steps=diffusion_steps,
+                               diffusion_rate=diffusion_rate))
             self.convs.append(convs)
             prev_out_channels = prev_out_channels + out_channels
 
-        self.output_conv = Conv2d(
-            in_channels=init_out_channels, out_channels=init_in_channels, kernel_size=1)
+        self.output_conv = DiffusionConv2d(
+            in_channels=init_out_channels,
+            out_channels=init_in_channels,
+            kernel_size=1,
+            padding='same',
+            diffusion_steps=diffusion_steps,
+            diffusion_rate=diffusion_rate)
         self.output_relu = ReLU()
 
     def forward(self, pyramid: List[Tensor]) -> Tensor:
