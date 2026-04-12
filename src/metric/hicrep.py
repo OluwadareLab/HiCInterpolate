@@ -50,7 +50,14 @@ def sccByDiag(m1: sp.coo_matrix, m2: sp.coo_matrix, nDiags: int):
         wsNan2Zero = np.nan_to_num(wsD, copy=True, posinf=0.0, neginf=0.0)
         rhoNan2Zero = np.nan_to_num(rhoD, copy=True, posinf=0.0, neginf=0.0)
 
-    return rhoNan2Zero @ wsNan2Zero / wsNan2Zero.sum()
+    denom = wsNan2Zero.sum()
+    if denom == 0:
+        scc = 0.0
+    else:
+        scc = float(rhoNan2Zero @ wsNan2Zero / denom)
+    # Clamp to [-1, 1] to ensure valid correlation range
+    scc = max(-1.0, min(1.0, scc))
+    return scc
 
 
 def hicrepSCC(mat1: np.ndarray, mat2: np.ndarray, h: int = 0):

@@ -1,0 +1,56 @@
+HiCInterpolate: Data Preprocessing Pipeline Summary
+====================================================
+
+What was changed:
+-----------------
+1. **Configurable Data Preprocessing** was added to the data loader for training/validation/testing. This includes:
+   - Optional log1p or signed log1p transformation.
+   - Optional normalization (min-max) using either percentiles (from the train split) or fixed values.
+   - All options are controlled via the config file (YAML/dataclass).
+2. **Config Wiring**: The main entry point (hicinterpolate.py) now passes these config options to the data loader.
+3. **Default Settings**: The config now enables log1p and normalization by default, using train_percentile mode (0.1–99.9th percentile).
+
+Why it was done:
+----------------
+- To stabilize training and improve model performance, especially for structure-aware metrics (GenomeDISCO, HiCRep).
+- Log1p transformation helps with count-like Hi-C data, reducing skew and making the data more Gaussian-like.
+- Min-max normalization (especially using percentiles) prevents outliers from dominating, and ensures the model sees data in a consistent range.
+- Configurability allows easy ablation and tuning for best results.
+
+How to enable/disable and configure:
+------------------------------------
+In your `configs/config.yaml` under the `data:` section, set the following fields:
+
+- `apply_log1p: true`         # Enable log1p transform (recommended for Hi-C)
+- `signed_log1p: false`       # Use signed log1p (set true only if your data has negatives)
+- `apply_normalization: true` # Enable normalization (recommended)
+- `normalization_mode: train_percentile` # Use percentiles from train split (recommended)
+- `normalization_lower_percentile: 0.1`  # Lower percentile for min (default: 0.1)
+- `normalization_upper_percentile: 99.9` # Upper percentile for max (default: 99.9)
+- `normalization_fixed_low: 0.0`         # (If using mode: fixed) set min value
+- `normalization_fixed_high: 1.0`        # (If using mode: fixed) set max value
+- `norm_eps: 1e-8`                      # Small epsilon to avoid divide-by-zero
+
+**To turn off preprocessing:**
+- Set `apply_log1p: false` and/or `apply_normalization: false` as needed.
+
+**Example config block:**
+
+```
+data:
+  ...
+  apply_log1p: true
+  signed_log1p: false
+  apply_normalization: true
+  normalization_mode: train_percentile
+  normalization_lower_percentile: 0.1
+  normalization_upper_percentile: 99.9
+  normalization_fixed_low: 0.0
+  normalization_fixed_high: 1.0
+  norm_eps: 1e-8
+```
+
+**Note:**
+- These settings are already enabled by default in the current config.
+- For ablation, simply toggle the relevant fields.
+- For inference, harmonization of the loader is recommended for strict consistency.

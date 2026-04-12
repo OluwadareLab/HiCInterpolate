@@ -34,6 +34,8 @@ model:
     num_of_convs: [7, 5, 7]
     out_channels: [16, 32, 64]
   fusion_pyramid_level: 4
+  warp_mode: bilinear
+  flow_upsample_mode: bilinear
 
 loss:
   weight_parameters:

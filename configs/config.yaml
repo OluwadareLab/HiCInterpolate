@@ -4,9 +4,8 @@ dir:
   root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
   model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
   output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplates/human/alpha_75/5000
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplates/human/25000
   image: ${dir.data}/${data.patch}
-
 
 file:
   dataset_dict: ${dir.image}/dataset_dict.txt
@@ -20,7 +19,7 @@ file:
   ssim_val_plot: ${dir.output}/${model.name}_ssim_plot.png
   scc_val_plot: ${dir.output}/${model.name}_scc_plot.png
   pcc_val_plot: ${dir.output}/${model.name}_pcc_plot.png
-  genome_disco_val_plot: ${dir.output}/${model.name}_genome_dsico_plot.png
+  genome_disco_val_plot: ${dir.output}/${model.name}_genome_disco_plot.png
   ncc_val_plot: ${dir.output}/${model.name}_ncc_plot.png
   lpips_val_plot: ${dir.output}/${model.name}_lpips_plot.png
   train_val_loss_plot: ${dir.output}/${model.name}_train_val_loss_plot.png
@@ -37,7 +36,22 @@ data:
     frame_1: img2.npy
     frame_2: img3.npy
   train_val_test_ratio: [0.8, 0.1, 0.1]
-  batch_size: 512
+  batch_size: 256
+  apply_log1p: true
+  signed_log1p: false
+  apply_normalization: true
+  normalization_mode: train_percentile
+  normalization_lower_percentile: 0.1
+  normalization_upper_percentile: 99.9
+  normalization_max_files: 0
+  normalization_sample_values_per_file: 4096
+  normalization_fixed_low: 0.0
+  normalization_fixed_high: 1.0
+  norm_eps: 1e-8
+  sparse_sampling_enabled: true
+  sparse_sampling_nonzero_threshold: 1e-6
+  sparse_sampling_informative_ratio: 0.02
+  sparse_sampling_informative_boost: 3.0
 
 training:
   epochs: 300
@@ -45,9 +59,26 @@ training:
   save_every: 10
   init_lr: 1e-4
   min_lr: 1e-6
+  optimizer_name: adamw
+  weight_decay: 1e-4
+  scheduler_name: reduce_on_plateau
+  warmup_epochs: 5
+  plateau_factor: 0.5
+  plateau_patience: 8
+  plateau_threshold: 1e-4
+  plateau_cooldown: 2
+  lr_metric_weights:
+    genome_disco: 0.5
+    hicrep: 0.5
+    ssim: 0.0
   decay_steps: 100
   decay_rate: 0.215
   lr_staircase: true
+  best_model_metric_weights:
+    genome_disco: 0.45
+    hicrep: 0.45
+    ssim: 0.10
+  best_model_metric_norm_eps: 1e-8
 
 model:
   name: hicinterpolate_${data.patch}
@@ -60,15 +91,26 @@ model:
     num_of_convs: [7, 5, 7]
     out_channels: [16, 32, 64]
   fusion_pyramid_level: 4
+  warp_mode: bilinear
+  flow_upsample_mode: bilinear
 
 loss:
+  sparse_weight_enabled: true
+  sparse_weight_nonzero_threshold: 1e-6
+  sparse_weight_nonzero_boost: 4.0
   weight_parameters:
     - name: mse
       boundaries: [100]
-      values: [1.0, 1.0]
+      values: [0.8, 0.6]
+    - name: charbonnier
+      boundaries: [100]
+      values: [0.35, 0.45]
+    - name: ssim
+      boundaries: [100]
+      values: [0.12, 0.20]
     - name: symmetry
       boundaries: [100]
-      values: [0.1, 0.5]
+      values: [0.20, 0.45]
     - name: vgg
       boundaries: [100]
-      values: [0.01, 0.1]
+      values: [0.002, 0.01]

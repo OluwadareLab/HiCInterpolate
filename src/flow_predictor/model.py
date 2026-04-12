@@ -35,12 +35,19 @@ class PyramidFlowEstimator(Module):
 
     def forward(self, ftr_pyr_a: list[torch.Tensor], ftr_pyr_b: list[torch.Tensor]):
         levels = len(ftr_pyr_a)
+        flow_upsample_mode = getattr(self.cfg.model, 'flow_upsample_mode', 'nearest')
+        warp_mode = getattr(self.cfg.model, 'warp_mode', 'nearest')
         v = self.levels[-1](ftr_pyr_a[-1], ftr_pyr_b[-1])
         residuals = [v]
         for i in reversed(range(0, levels-1)):
             level_size = (ftr_pyr_a[i].shape)[2:4]
-            v = F.interpolate(input=2*v, size=level_size, mode='nearest')
-            warper = utils.warp(ftr_pyr_b[i], v)
+            if flow_upsample_mode in ['linear', 'bilinear', 'bicubic', 'trilinear']:
+                v = F.interpolate(input=2*v, size=level_size,
+                                  mode=flow_upsample_mode, align_corners=False)
+            else:
+                v = F.interpolate(input=2*v, size=level_size,
+                                  mode=flow_upsample_mode)
+            warper = utils.warp(ftr_pyr_b[i], v, mode=warp_mode)
             v_residual = self.levels[i](ftr_pyr_a[i], warper)
             residuals.append(v_residual)
             v = v_residual + v

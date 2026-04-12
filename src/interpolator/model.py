@@ -21,6 +21,8 @@ class Interpolator(Module):
     def forward(self, x0: Tensor, x2: Tensor, time: Tensor) -> Tensor:
         pyramid_levels = self.cfg.model.pyramid_level
         fusion_pyramid_levels = self.cfg.model.fusion_pyramid_level
+        flow_upsample_mode = getattr(self.cfg.model, 'flow_upsample_mode', 'nearest')
+        warp_mode = getattr(self.cfg.model, 'warp_mode', 'nearest')
         if pyramid_levels < fusion_pyramid_levels:
             raise ValueError(
                 '[Error] pyramid level must be greater than or equal to fusion level')
@@ -46,9 +48,9 @@ class Interpolator(Module):
 
         fusion_pyramid_levels = fusion_pyramid_levels
         forward_flow_pyramid = utils.flow_pyramid_synthesis(
-            forward_residual_flow_pyramid)[:fusion_pyramid_levels]
+            forward_residual_flow_pyramid, upsample_mode=flow_upsample_mode)[:fusion_pyramid_levels]
         backward_flow_pyramid = utils.flow_pyramid_synthesis(
-            backward_residual_flow_pyramid)[:fusion_pyramid_levels]
+            backward_residual_flow_pyramid, upsample_mode=flow_upsample_mode)[:fusion_pyramid_levels]
         mid_time = torch.ones_like(time, device=time.device) * 0.5
         backward_flow = utils.multiply_pyramid(
             backward_flow_pyramid, mid_time[:, 0])
@@ -59,9 +61,9 @@ class Interpolator(Module):
                             utils.concatenate_pyramids(image_pyramid[1][:fusion_pyramid_levels], feature_pyramids[1][:fusion_pyramid_levels])]
 
         forward_warped_pyramid = utils.pyramid_warp(
-            pyramids_to_warp[0], backward_flow)
+            pyramids_to_warp[0], backward_flow, warp_mode=warp_mode)
         backward_warped_pyramid = utils.pyramid_warp(
-            pyramids_to_warp[1], forward_flow)
+            pyramids_to_warp[1], forward_flow, warp_mode=warp_mode)
 
         aligned_pyramid = utils.concatenate_pyramids(
             forward_warped_pyramid, backward_warped_pyramid)

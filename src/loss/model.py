@@ -29,8 +29,13 @@ class _MSELoss(Module):
         super().__init__()
         self.criterion = MSELoss()
 
-    def forward(self, pred: Tensor, y: Tensor):
-        loss = self.criterion(pred, y)
+    def forward(self, pred: Tensor, y: Tensor, weight_map: Tensor = None):
+        if weight_map is None:
+            loss = self.criterion(pred, y)
+            return loss
+
+        loss_map = (pred - y) ** 2
+        loss = (loss_map * weight_map).mean()
         return loss
 
 
@@ -38,9 +43,13 @@ class CharbonnierLoss(Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, pred: Tensor, y: Tensor, epsilon=1e-3):
+    def forward(self, pred: Tensor, y: Tensor, epsilon=1e-3, weight_map: Tensor = None):
         diff = pred - y
-        loss = torch.mean(torch.sqrt(diff ** 2 + epsilon ** 2))
+        loss_map = torch.sqrt(diff ** 2 + epsilon ** 2)
+        if weight_map is None:
+            loss = loss_map.mean()
+        else:
+            loss = (loss_map * weight_map).mean()
         return loss
 
 
@@ -174,6 +183,18 @@ class CombinedLoss(Module):
         self.symmetry_loss = SymmetryLoss()
         self.ssim_loss = SSIMLoss()
 
+    def _sparse_weight_map(self, y: Tensor):
+        if not getattr(self.cfg.loss, "sparse_weight_enabled", False):
+            return None
+
+        threshold = float(getattr(self.cfg.loss,
+                          "sparse_weight_nonzero_threshold", 1e-6))
+        nonzero_boost = float(getattr(self.cfg.loss,
+                             "sparse_weight_nonzero_boost", 4.0))
+        nonzero_boost = max(1.0, nonzero_boost)
+        nonzero_mask = (y > threshold).to(dtype=y.dtype)
+        return 1.0 + (nonzero_boost - 1.0) * nonzero_mask
+
     def weight_schedule(self, weight_params: tuple, epoch: int) -> float:
         i = 0
         limit = len(weight_params["boundaries"])
@@ -185,6 +206,7 @@ class CombinedLoss(Module):
 
     def forward(self, pred: Tensor, y: Tensor, epoch: int):
         loss = torch.tensor(0.0, device=pred.device, dtype=torch.float32)
+        sparse_weight_map = self._sparse_weight_map(y)
         for weight_params in self.cfg.loss.weight_parameters:
             weight = self.weight_schedule(
                 weight_params=weight_params, epoch=epoch)
@@ -200,11 +222,12 @@ class CombinedLoss(Module):
                 l1_loss = l1_loss * weight
                 loss += l1_loss
             elif weight_params["name"] == "mse" and weight > 0.0:
-                mse_loss = self.mse_loss(pred, y)
+                mse_loss = self.mse_loss(pred, y, weight_map=sparse_weight_map)
                 mse_loss = mse_loss * weight
                 loss += mse_loss
             elif weight_params["name"] == "charbonnier" and weight > 0.0:
-                charbonnier_loss = self.charbonnier_loss(pred, y)
+                charbonnier_loss = self.charbonnier_loss(
+                    pred, y, weight_map=sparse_weight_map)
                 charbonnier_loss = charbonnier_loss * weight
                 loss += charbonnier_loss
             elif weight_params["name"] == "ssim" and weight > 0.0:

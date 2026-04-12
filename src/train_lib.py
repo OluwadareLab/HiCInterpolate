@@ -35,10 +35,12 @@ class Trainer:
             self.model = self.model.to(self.device)
 
         self.loss_fn = CombinedLoss(self.cfg)
-        self.optimizer = Adam(self.model.parameters(),
-                              lr=self.cfg.training.init_lr)
-        self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
-                                          decay_rate=self.cfg.training.decay_rate, staircase=self.cfg.training.lr_staircase)
+        self.optimizer_name = str(
+            self.cfg.training.get("optimizer_name", "adamw")).lower()
+        self.scheduler_name = str(
+            self.cfg.training.get("scheduler_name", "reduce_on_plateau")).lower()
+        self.optimizer = self._build_optimizer()
+        self.scheduler = self._build_scheduler()
 
         self.train_dl = train_dl
         self.train_steps = len(self.train_dl)
@@ -71,6 +73,83 @@ class Trainer:
             print(f"[INFO] Loading snapshot...")
             self._load_snapshot(self.snapshot)
 
+    def _build_optimizer(self):
+        init_lr = float(self.cfg.training.init_lr)
+        weight_decay = float(self.cfg.training.get("weight_decay", 1e-4))
+
+        if self.optimizer_name == "adamw":
+            return AdamW(self.model.parameters(), lr=init_lr, weight_decay=weight_decay)
+        if self.optimizer_name == "adam":
+            return Adam(self.model.parameters(), lr=init_lr)
+        if self.optimizer_name == "sgd":
+            return SGD(self.model.parameters(), lr=init_lr)
+        if self.optimizer_name == "rmsprop":
+            return RMSprop(self.model.parameters(), lr=init_lr)
+
+        raise ValueError(f"Unsupported optimizer_name: {self.optimizer_name}")
+
+    def _build_scheduler(self):
+        if self.scheduler_name == "reduce_on_plateau":
+            return ReduceLROnPlateau(
+                optimizer=self.optimizer,
+                mode='max',
+                factor=float(self.cfg.training.get("plateau_factor", 0.5)),
+                patience=int(self.cfg.training.get("plateau_patience", 8)),
+                threshold=float(self.cfg.training.get(
+                    "plateau_threshold", 1e-4)),
+                cooldown=int(self.cfg.training.get("plateau_cooldown", 2)),
+                min_lr=float(self.cfg.training.min_lr),
+            )
+
+        if self.scheduler_name == "exponential":
+            return ExponentialDecay(
+                optimizer=self.optimizer,
+                decay_steps=self.cfg.training.decay_steps,
+                decay_rate=self.cfg.training.decay_rate,
+                staircase=self.cfg.training.lr_staircase)
+
+        raise ValueError(f"Unsupported scheduler_name: {self.scheduler_name}")
+
+    def _structure_lr_score(self):
+        score_weights = self.cfg.training.get("lr_metric_weights", {
+            "genome_disco": 0.5,
+            "hicrep": 0.5,
+        })
+        metric_values = {
+            "genome_disco": self.val_genome_disco_per_epoch,
+            "hicrep": self.val_hicrep_per_epoch,
+            "ssim": self.val_ssim_per_epoch,
+        }
+
+        numerator = 0.0
+        denominator = 0.0
+        for metric_name, metric_value in metric_values.items():
+            weight = float(score_weights.get(metric_name, 0.0))
+            numerator += weight * metric_value
+            denominator += weight
+
+        return numerator / max(denominator, 1e-8)
+
+    def _step_scheduler(self, epoch: int):
+        warmup_epochs = int(self.cfg.training.get("warmup_epochs", 0))
+        init_lr = float(self.cfg.training.init_lr)
+        min_lr = float(self.cfg.training.min_lr)
+
+        if epoch < warmup_epochs:
+            warmup_lr = init_lr * float(epoch + 1) / \
+                float(max(1, warmup_epochs))
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = warmup_lr
+            return
+
+        if self.scheduler_name == "reduce_on_plateau":
+            self.scheduler.step(self._structure_lr_score())
+        else:
+            self.scheduler.step()
+
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = max(float(param_group['lr']), min_lr)
+
     def _remove_module_prefix(self, state_dict):
         new_state_dict = OrderedDict()
         for k, v in state_dict.items():
@@ -83,9 +162,19 @@ class Trainer:
             loc = f"cuda:{self.device}"
             snapshot = torch.load(snapshot, map_location=loc)
             self.epochs_run = snapshot['epoch']
-            self.model.load_state_dict(snapshot['model'])
+            model_state = snapshot['model']
+            if not all(k.startswith("module.") for k in model_state.keys()):
+                model_state = {f"module.{k}": v for k,
+                               v in model_state.items()}
+            self.model.load_state_dict(model_state)
             self.optimizer.load_state_dict(snapshot['optimizer'])
-            self.scheduler.load_state_dict(snapshot['scheduler'])
+            try:
+                self.scheduler.load_state_dict(snapshot['scheduler'])
+            except Exception as ex:
+                self.log.warning(
+                    f"Scheduler state load failed, using fresh scheduler: {ex}")
+                print(
+                    f"[WARN] Scheduler state load failed, using fresh scheduler: {ex}")
             self.state = snapshot['state']
             self.best_val = snapshot['state']['best_val'][-1]
         else:
@@ -96,7 +185,13 @@ class Trainer:
             state_dict = self._remove_module_prefix(snapshot['optimizer'])
             self.optimizer.load_state_dict(state_dict)
             state_dict = self._remove_module_prefix(snapshot['scheduler'])
-            self.scheduler.load_state_dict(state_dict)
+            try:
+                self.scheduler.load_state_dict(state_dict)
+            except Exception as ex:
+                self.log.warning(
+                    f"Scheduler state load failed, using fresh scheduler: {ex}")
+                print(
+                    f"[WARN] Scheduler state load failed, using fresh scheduler: {ex}")
             state_dict = self._remove_module_prefix(snapshot['state'])
             self.state = state_dict
             self.best_val = state_dict['best_val'][-1]
@@ -141,8 +236,38 @@ class Trainer:
         print(f"[DEBUG] Epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int):
-        best_val = self.val_ssim_per_epoch + \
-            self.val_genome_disco_per_epoch + self.val_psnr_per_epoch
+        default_weights = {
+            "genome_disco": 0.45,
+            "hicrep": 0.45,
+            "ssim": 0.10,
+        }
+        metric_weights = self.cfg.training.get(
+            "best_model_metric_weights", default_weights)
+        eps = float(self.cfg.training.get("best_model_metric_norm_eps", 1e-8))
+
+        metric_values = {
+            "genome_disco": self.val_genome_disco_per_epoch,
+            "hicrep": self.val_hicrep_per_epoch,
+            "ssim": self.val_ssim_per_epoch,
+        }
+
+        weighted_score = 0.0
+        weight_sum = 0.0
+        for metric_name, metric_value in metric_values.items():
+            series = self.state.get(f"val_{metric_name}", [])
+            if len(series) == 0:
+                norm_value = 0.0
+            else:
+                min_v = min(series)
+                max_v = max(series)
+                denom = max(max_v - min_v, eps)
+                norm_value = (metric_value - min_v) / denom
+
+            weight = float(metric_weights.get(metric_name, 0.0))
+            weighted_score += weight * norm_value
+            weight_sum += weight
+
+        best_val = weighted_score / max(weight_sum, eps)
         if best_val > self.best_val:
             self.epochs_no_improve = 0
             self.best_val = best_val
@@ -152,6 +277,36 @@ class Trainer:
                 f"Epoch {self.epochs_run+1} saved best model.")
             print(
                 f"[DEBUG] Epoch {self.epochs_run+1} saved best model.")
+
+
+            try:
+                import random
+                self.model.eval()
+                val_iter = iter(self.val_dl)
+                x0, y, x1, time_frame = next(val_iter)
+                batch_size = x0.shape[0]
+                if batch_size == 1:
+                    idxs = [0]
+                else:
+                    idxs = random.sample(range(batch_size), min(2, batch_size))
+                x0 = x0[idxs].to(self.device)
+                y = y[idxs].to(self.device)
+                x1 = x1[idxs].to(self.device)
+                time_frame = time_frame[idxs].to(self.device)
+                with torch.no_grad():
+                    pred = self.model(x0, x1, time_frame)
+
+                x0_np = x0.detach().cpu().numpy()
+                y_np = y.detach().cpu().numpy()
+                pred_np = pred.detach().cpu().numpy()
+                x1_np = x1.detach().cpu().numpy()
+
+                vis_file = os.path.join(os.path.dirname(
+                    self.best_model), f"best_model_visualization_epoch{self.epochs_run+1}.png")
+                plot.draw_hic_map(len(idxs), x0_np, y_np, pred_np, x1_np, vis_file)
+                print(f"[DEBUG] Saved best model visualization to {vis_file}")
+            except Exception as e:
+                print(f"[WARN] Could not save best model visualization: {e}")
         elif self.epochs_run > int(self.cfg.training.epochs/4):
             self.epochs_no_improve += 1
 
@@ -199,8 +354,6 @@ class Trainer:
             self.optimizer.step()
 
             del x0, y, x1, time_frame
-
-        self.scheduler.step()
 
         local_val_loss = 0
         local_val_psnr = 0
@@ -278,6 +431,8 @@ class Trainer:
             self._update_metrics(self.epochs_run, self.train_steps, local_train_loss, self.val_steps,
                                  local_val_loss, local_val_psnr, local_val_ssim, local_val_genome_disco, local_val_hicrep, local_val_lpips)
 
+        self._step_scheduler(epoch)
+
     def train(self, max_epochs: int):
         self.log.info(f"==== Training Started ({self.device}) ====")
         print(f"[INFO] ==== Training Started ({self.device}) ====")
@@ -289,6 +444,7 @@ class Trainer:
                 if self.epochs_no_improve > self.patience:
                     self.log.info(f"No improvement in last 20 epoch!")
                     print(f"No improvement in last 20 epoch!")
+                    break
 
                 self._run_epoch(epoch)
                 if self.isDistributed and self.device == 0:

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets"
 RESOLUTIONS = [5000, 10000, 25000]
 BALANCE_COOL = True
-PATCHES = [64]
+PATCHES = [512, 256, 128]
 _CMAP = "Reds"
 PATCH_OVERLAP_RATIO = 0.2
 WRITE_BUFFER_LINES = 4096

@@ -14,7 +14,7 @@ def build_image_pyramid(image: torch.Tensor, levels: int) -> List[torch.Tensor]:
     return pyramid
 
 
-def warp(image: torch.Tensor, flow: torch.Tensor):
+def warp(image: torch.Tensor, flow: torch.Tensor, mode: str = 'nearest'):
     B, _, H, W = image.size()
 
     y, x = torch.meshgrid(
@@ -30,20 +30,24 @@ def warp(image: torch.Tensor, flow: torch.Tensor):
     flowed_grid_x = 2.0 * flowed_grid[..., 0] / (W - 1) - 1.0
     flowed_grid_y = 2.0 * flowed_grid[..., 1] / (H - 1) - 1.0
     normalized_grid = torch.stack((flowed_grid_x, flowed_grid_y), dim=-1)
-    warped = F.grid_sample(image, normalized_grid, mode='nearest',
+    warped = F.grid_sample(image, normalized_grid, mode=mode,
                            padding_mode='border', align_corners=True)
 
     return warped
 
 
-def flow_pyramid_synthesis(residual_pyramid: List[torch.Tensor]) -> List[torch.Tensor]:
+def flow_pyramid_synthesis(residual_pyramid: List[torch.Tensor], upsample_mode: str = 'nearest') -> List[torch.Tensor]:
     flow = residual_pyramid[-1]
     flow_pyramid = [flow]
 
     for residual_flow in reversed(residual_pyramid[:-1]):
         level_size = (residual_flow.shape)[2:4]
-        flow = F.interpolate(2 * flow, size=level_size,
-                             mode='nearest')
+        if upsample_mode in ['linear', 'bilinear', 'bicubic', 'trilinear']:
+            flow = F.interpolate(2 * flow, size=level_size,
+                                 mode=upsample_mode, align_corners=False)
+        else:
+            flow = F.interpolate(2 * flow, size=level_size,
+                                 mode=upsample_mode)
         flow = residual_flow + flow
         flow_pyramid.append(flow)
 
@@ -67,9 +71,9 @@ def concatenate_pyramids(pyramid1: List[torch.Tensor], pyramid2: List[torch.Tens
     return result
 
 
-def pyramid_warp(feature_pyramid: List[torch.Tensor], flow_pyramid: List[torch.Tensor]) -> List[torch.Tensor]:
+def pyramid_warp(feature_pyramid: List[torch.Tensor], flow_pyramid: List[torch.Tensor], warp_mode: str = 'nearest') -> List[torch.Tensor]:
     warped_feature_pyramid = []
     for features, flow in zip(feature_pyramid, flow_pyramid):
-        warped_feature_pyramid.append(warp(image=features, flow=flow))
+        warped_feature_pyramid.append(warp(image=features, flow=flow, mode=warp_mode))
 
     return warped_feature_pyramid

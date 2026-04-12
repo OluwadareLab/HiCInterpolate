@@ -1,4 +1,3 @@
-from threading import local
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -28,7 +27,10 @@ class Tester:
             self.model = DDP(self.model, device_ids=[self.device])
             loc = f"cuda:{self.device}"
             snapshot = torch.load(model, map_location=loc)
-            self.model.load_state_dict(snapshot['model'])
+            state_dict = snapshot['model']
+            if not all(k.startswith("module.") for k in state_dict.keys()):
+                state_dict = {f"module.{k}": v for k, v in state_dict.items()}
+            self.model.load_state_dict(state_dict)
 
         else:
             self.device = self.cfg.device
@@ -46,6 +48,12 @@ class Tester:
         self.genome_disco = 0
         self.hicrep = 0
         self.lpips = 0
+
+    @staticmethod
+    def _as_float(value):
+        if isinstance(value, torch.Tensor):
+            return float(value.item())
+        return float(value)
 
     def _remove_module_prefix(self, state_dict):
         from collections import OrderedDict
@@ -85,13 +93,13 @@ class Tester:
                 hicrep_val = eval_metric.get_hicrep(pred, y)
                 lpips_val = eval_metric.get_lpips(pred, y)
 
-                local_psnr += psnr_val.item()
-                local_ssim += ssim_val.item()
-                local_genome_disco += genome_disco_val
-                local_hicrep += hicrep_val
-                local_lpips += lpips_val.item()
+                local_psnr += self._as_float(psnr_val)
+                local_ssim += self._as_float(ssim_val)
+                local_genome_disco += self._as_float(genome_disco_val)
+                local_hicrep += self._as_float(hicrep_val)
+                local_lpips += self._as_float(lpips_val)
 
-                if drawn == 20:
+                if drawn == 20 and (not self.isDistributed or self.device == 0):
                     num_examples = min(
                         self.cfg.file.num_visualization_samples, len(y))
                     x0_cpu = x0[:num_examples]
