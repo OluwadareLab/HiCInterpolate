@@ -11,12 +11,9 @@ RESOLUTIONS = [5000, 10000, 25000]
 BALANCE_COOL = True
 PATCHES = [64]
 _CMAP = "Reds"
-_EPSILON = 1e-8
-CLIPPING_PERCENTILE = 99.99
 PATCH_OVERLAP_RATIO = 0.2
-
+WRITE_BUFFER_LINES = 4096
 RESOLUTION_STR = ["5000", "10000", "25000"]
-ALPHA = [0.5, 0.75, 1.0, 1.25]
 
 ORGANISMS = ["human"]
 SAMPLES = [
@@ -203,151 +200,42 @@ def plot_hic_map(matrix, filename):
 
 
 def save_img(chr_mat, r, c, patch, path, img_name):
-    submatrix = chr_mat[r:r+patch, c:c+patch]
-    submatrix = submatrix.astype(np.float32)
+    submatrix = np.asarray(chr_mat[r:r+patch, c:c+patch], dtype=np.float32)
     np.save(f"{path}/{img_name}.npy", submatrix)
 
 
-def generate_patch(mat_0, mat_y, mat_1, organism, sample, resolution, chromosome, sub_sample, counter, output_root_path):
+def generate_patch(mat_0, mat_y, mat_1, organism, sample, resolution, chromosome, sub_sample, counter, output_root_path, ds_file_handles, created_dirs):
     for patch, i in zip(PATCHES, range(0, len(counter))):
-        ds_file = f"{output_root_path}/{resolution}/{patch}/dataset_dict.txt"
-        os.makedirs(os.path.dirname(ds_file), exist_ok=True)
-        with open(ds_file, "a") as file:
-            print(
-                f"[INFO] generating patches({patch}X{patch}) for {organism} > {sample} > {sub_sample} > {resolution} > chr{chromosome}")
-            row, col = mat_y.shape
-            bin_inc = int(patch*(1-PATCH_OVERLAP_RATIO))
-            window = [0]
-            for win in window:
-                r = win
-                c = 0
-                while (r+patch <= row and c+patch <= col):
-                    if r < 0 or c < 0:
-                        c += bin_inc
-                        r += bin_inc
-                        continue
-                    folder = f"{counter[i]:08d}"
-                    path = f"{organism}/{sample}/{sub_sample}/{str(resolution)}/{chromosome}/{folder}"
-                    file.write(path+"\n")
-                    path = f"{output_root_path}/{resolution}/{patch}/{path}"
-                    os.makedirs(path, exist_ok=True)
-                    save_img(mat_0, r, c, patch, path, "img1")
-                    save_img(mat_y, r, c, patch, path, "img2")
-                    save_img(mat_1, r, c, patch, path, "img3")
-                    counter[i] += 1
-                    c += bin_inc
-                    r += bin_inc
+        ds_handle = ds_file_handles[patch]
+        print(
+            f"[INFO] generating patches({patch}X{patch}) for {organism} > {sample} > {sub_sample} > {resolution} > chr{chromosome}")
+        row, col = mat_y.shape
+        bin_inc = int(patch * (1 - PATCH_OVERLAP_RATIO))
+        r = 0
+        c = 0
+        line_buffer = []
+        while (r + patch <= row and c + patch <= col):
+            folder = f"{counter[i]:08d}"
+            rel_path = f"{organism}/{sample}/{sub_sample}/{str(resolution)}/{chromosome}/{folder}"
+            line_buffer.append(rel_path + "\n")
+            if len(line_buffer) >= WRITE_BUFFER_LINES:
+                ds_handle.writelines(line_buffer)
+                line_buffer.clear()
+            abs_path = f"{output_root_path}/{resolution}/{patch}/{rel_path}"
+            if abs_path not in created_dirs:
+                os.makedirs(abs_path, exist_ok=True)
+                created_dirs.add(abs_path)
+            save_img(mat_0, r, c, patch, abs_path, "img1")
+            save_img(mat_y, r, c, patch, abs_path, "img2")
+            save_img(mat_1, r, c, patch, abs_path, "img3")
+            counter[i] += 1
+            c += bin_inc
+            r += bin_inc
+
+        if line_buffer:
+            ds_handle.writelines(line_buffer)
 
     return counter
-
-
-def get_cp_gf(matrix, sigma=0.75):
-    try:
-        with cp.cuda.Device(0):
-            matrix_gpu = cp.asarray(matrix)
-            result_gpu = cp_gf(matrix_gpu, sigma=sigma, mode='nearest')
-            result_cpu = cp.asnumpy(result_gpu)
-            del matrix_gpu, result_gpu
-
-            cp._default_memory_pool.free_all_blocks()
-            return result_cpu
-    except cp.cuda.memory.OutOfMemoryError:
-        print("[ERROR] CuPy ran out of GPU memory.")
-        raise cp.cuda.memory.OutOfMemoryError
-
-
-def raw_matrix(matrix):
-    matrix = np.nan_to_num(matrix, nan=_EPSILON,
-                           posinf=_EPSILON, neginf=_EPSILON)
-    return matrix
-
-
-def gf_norm(matrix):
-    matrix = np.nan_to_num(matrix, nan=_EPSILON,
-                           posinf=_EPSILON, neginf=_EPSILON)
-    gf_matrix = sp_gf(matrix, 0.75)
-    _min = np.min(gf_matrix)
-    _max = np.max(gf_matrix)
-    denom = _max - _min
-    if denom <= _EPSILON:
-        mm_matrix = np.full_like(gf_matrix, _EPSILON)
-        return mm_matrix
-    mm_matrix = (gf_matrix - _min)/denom
-    mm_matrix[mm_matrix == 0] = _EPSILON
-    return mm_matrix
-
-
-def min_max_norm(matrix):
-    matrix = np.nan_to_num(matrix, nan=_EPSILON,
-                           posinf=_EPSILON, neginf=_EPSILON)
-    _min = np.min(matrix)
-    _max = np.max(matrix)
-    denom = _max - _min
-    if denom <= _EPSILON:
-        mm_matrix = np.full_like(matrix, _EPSILON)
-        return mm_matrix
-    mm_matrix = (matrix - _min)/denom
-    mm_matrix[mm_matrix == 0] = _EPSILON
-    return mm_matrix
-
-
-def log_clip(matrix):
-    matrix = np.nan_to_num(matrix, nan=_EPSILON,
-                           posinf=_EPSILON, neginf=_EPSILON)
-    log_matrix = np.log1p(matrix)
-    percentile_val = np.percentile(log_matrix, CLIPPING_PERCENTILE)
-    clip_matrix = np.clip(log_matrix, _EPSILON, percentile_val)
-
-    return clip_matrix
-
-
-def rev_log_clip_min_max(matrix):
-    mat = np.expm1(matrix)
-    log_matrix = np.log1p(mat)
-    return log_matrix
-
-
-def log_clip_min_max(matrix):
-    matrix = np.nan_to_num(matrix, nan=_EPSILON,
-                           posinf=_EPSILON, neginf=_EPSILON)
-    log_matrix = np.log1p(matrix)
-    percentile_val = np.percentile(log_matrix, CLIPPING_PERCENTILE)
-    clip_matrix = np.clip(log_matrix, _EPSILON, percentile_val)
-    norm_matrix = clip_matrix / percentile_val
-
-    return norm_matrix
-
-
-def normalization(matrix):
-    matrix = np.nan_to_num(matrix, nan=_EPSILON,
-                           posinf=_EPSILON, neginf=_EPSILON)
-    log_matrix = np.log1p(matrix)
-    percentile_val = np.percentile(log_matrix, CLIPPING_PERCENTILE)
-    clip_matrix = np.clip(log_matrix, _EPSILON, percentile_val)
-    norm_matrix = clip_matrix / percentile_val
-
-    return norm_matrix
-
-
-def get_norm_mat(matrix, gf: bool = False, log: bool = False, clip: bool = False):
-    mat = np.nan_to_num(matrix, nan=_EPSILON, posinf=_EPSILON, neginf=_EPSILON)
-    if gf:
-        mat = sp_gf(mat, 1.0)
-    if log:
-        mat = np.log1p(mat)
-    if clip:
-        percentile_val = np.percentile(mat, CLIPPING_PERCENTILE)
-        mat = np.clip(mat, _EPSILON, percentile_val)
-
-    _min = np.min(mat)
-    _max = np.max(mat)
-    denom = _max - _min
-    if denom <= _EPSILON:
-        return np.full_like(mat, _EPSILON)
-    mat = (mat - _min)/denom
-    mat[mat == 0] = _EPSILON
-
-    return mat
 
 
 def _unwrap_singleton_lists(items):
@@ -364,7 +252,6 @@ def _sample_matches_filename(sample, filename):
     if sample_lower in filename_lower:
         return True
 
-    # Handle known naming mismatch in input lists: dmsol vs dmso.
     aliases = {
         "dmsol": "dmso",
         "dmso": "dmsol",
@@ -499,64 +386,68 @@ def generate_ds(organisms, samples, subsamples, filename_list, output_root_path:
         resolution_output_path = f"{output_root_path}/{resolution}"
         os.makedirs(resolution_output_path, exist_ok=True)
 
-        # Start each run with a fresh dataset index file per patch size and resolution.
+        # Keep one open index file per patch for this resolution.
+        ds_file_handles = {}
+        created_dirs = set()
         for patch in PATCHES:
             patch_output_path = f"{resolution_output_path}/{patch}"
             os.makedirs(patch_output_path, exist_ok=True)
             ds_file = f"{patch_output_path}/dataset_dict.txt"
-            with open(ds_file, "w"):
-                pass
+            ds_file_handles[patch] = open(ds_file, "w")
 
-        # Keep counters unique across all datasets/chromosomes for this resolution,
-        # then reset automatically when moving to the next resolution.
-        counter = [1] * len(PATCHES)
-        for organism, org_samples, org_subsamples, org_filenames in zip(organisms, samples, subsamples, filename_list):
-            triplet_groups = _unwrap_singleton_lists(org_filenames)
+        try:
+            counter = [1] * len(PATCHES)
+            for organism, org_samples, org_subsamples, org_filenames in zip(organisms, samples, subsamples, filename_list):
+                triplet_groups = _unwrap_singleton_lists(org_filenames)
 
-            sample_to_subsamples, grouped_triplets = _group_triplets_by_sample_subsample(
-                org_samples, org_subsamples, triplet_groups
-            )
+                sample_to_subsamples, grouped_triplets = _group_triplets_by_sample_subsample(
+                    org_samples, org_subsamples, triplet_groups
+                )
 
-            for sample in org_samples:
-                for sub_sample in sample_to_subsamples.get(sample, []):
-                    sample_triplets = grouped_triplets.get(
-                        (sample, sub_sample), [])
-                    for filenames in sample_triplets:
-                        if len(filenames) < 3:
-                            print(
-                                "[WARN] Skipping invalid triplet (expected 3 files): "
-                                f"{filenames}"
-                            )
-                            continue
+                for sample in org_samples:
+                    for sub_sample in sample_to_subsamples.get(sample, []):
+                        sample_triplets = grouped_triplets.get(
+                            (sample, sub_sample), [])
+                        for filenames in sample_triplets:
+                            if len(filenames) < 3:
+                                print(
+                                    "[WARN] Skipping invalid triplet (expected 3 files): "
+                                    f"{filenames}"
+                                )
+                                continue
 
-                        cool_0 = cool.Cooler(
-                            f"{ROOT_PATH}/{organism}/{sample}/{sub_sample}/{filenames[0]}_{resolution}_KR.cool")
-                        cool_y = cool.Cooler(
-                            f"{ROOT_PATH}/{organism}/{sample}/{sub_sample}/{filenames[1]}_{resolution}_KR.cool")
-                        cool_1 = cool.Cooler(
-                            f"{ROOT_PATH}/{organism}/{sample}/{sub_sample}/{filenames[2]}_{resolution}_KR.cool")
+                            cool_0 = cool.Cooler(
+                                f"{ROOT_PATH}/{organism}/{sample}/{sub_sample}/{filenames[0]}_{resolution}_KR.cool")
+                            cool_y = cool.Cooler(
+                                f"{ROOT_PATH}/{organism}/{sample}/{sub_sample}/{filenames[1]}_{resolution}_KR.cool")
+                            cool_1 = cool.Cooler(
+                                f"{ROOT_PATH}/{organism}/{sample}/{sub_sample}/{filenames[2]}_{resolution}_KR.cool")
 
-                        for chromosome, chr_size in zip(cool_y.chromnames, cool_y.chromsizes):
-                            fetch = f"{chromosome}:{0}-{chr_size}"
-                            chr_mat_0 = cool_0.matrix(
-                                balance=BALANCE_COOL).fetch(fetch)
-                            chr_mat_0 = get_norm_mat(
-                                matrix=chr_mat_0, gf=gf, log=log, clip=clip)
-                            chr_mat_y = cool_y.matrix(
-                                balance=BALANCE_COOL).fetch(fetch)
-                            chr_mat_y = get_norm_mat(
-                                matrix=chr_mat_y, gf=gf, log=log, clip=clip)
-                            chr_mat_1 = cool_1.matrix(
-                                balance=BALANCE_COOL).fetch(fetch)
-                            chr_mat_1 = get_norm_mat(
-                                matrix=chr_mat_1, gf=gf, log=log, clip=clip)
-                            counter = generate_patch(chr_mat_0, chr_mat_y, chr_mat_1,
-                                                     organism, sample, resolution, chromosome, sub_sample, counter, output_root_path=output_root_path)
+                            mat_0_selector = cool_0.matrix(
+                                balance=BALANCE_COOL)
+                            mat_y_selector = cool_y.matrix(
+                                balance=BALANCE_COOL)
+                            mat_1_selector = cool_1.matrix(
+                                balance=BALANCE_COOL)
+
+                            for chromosome, chr_size in zip(cool_y.chromnames, cool_y.chromsizes):
+                                fetch = f"{chromosome}:0-{chr_size}"
+                                chr_mat_0 = mat_0_selector.fetch(fetch)
+                                chr_mat_y = mat_y_selector.fetch(fetch)
+                                chr_mat_1 = mat_1_selector.fetch(fetch)
+                                counter = generate_patch(chr_mat_0, chr_mat_y, chr_mat_1,
+                                                         organism, sample, resolution, chromosome, sub_sample, counter,
+                                                         output_root_path=output_root_path,
+                                                         ds_file_handles=ds_file_handles,
+                                                         created_dirs=created_dirs)
+        finally:
+            for ds_handle in ds_file_handles.values():
+                ds_handle.close()
 
 
 if __name__ == "__main__":
     try:
-        output_root_path = f"{ROOT_PATH}/triplates/human/alpha_75"
+        output_root_path = f"{ROOT_PATH}/triplates/human"
         generate_ds(ORGANISMS, SAMPLES, SUBSAMPLES, FILENAME_LIST,
                     output_root_path=output_root_path, gf=True, log=False, clip=False)
     except Exception as e:

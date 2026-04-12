@@ -1,10 +1,10 @@
 device: cuda
 
 dir:
-  root: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/HiCInterpolateV2
-  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing
-  output: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/testing
-  data: /home/hc0783.unt.ad.unt.edu/workspace/hic_interpolation/data/new_triplets/kr_gf
+  root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
+  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
+  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplates/human/alpha_75/5000
   image: ${dir.data}/${data.patch}
 
 
@@ -37,10 +37,10 @@ data:
     frame_1: img2.npy
     frame_2: img3.npy
   train_val_test_ratio: [0.8, 0.1, 0.1]
-  batch_size: 64
+  batch_size: 512
 
 training:
-  epochs: 10
+  epochs: 300
   restart_every: 100
   save_every: 10
   init_lr: 1e-4
