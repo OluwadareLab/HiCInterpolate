@@ -3,8 +3,8 @@ device: cuda
 dir:
   root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
   model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
-  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/ap1_test
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplates/5000/human
+  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplates/10000/human
   image: ${dir.data}/${data.patch}
 
 

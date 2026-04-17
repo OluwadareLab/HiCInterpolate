@@ -25,9 +25,9 @@ class Trainer:
         self.log = log
         self.model = Interpolator(self.cfg)
 
-        self.isDistributed = dist.is_available() and dist.is_initialized()
-        if isDistributed:
-            self.device = int(os.environ['LOCAL_RANK'])
+        self.isDistributed = isDistributed and dist.is_available() and dist.is_initialized()
+        if self.isDistributed:
+            self.device = int(os.environ.get('LOCAL_RANK', 0))
             self.model = self.model.to(self.device)
             self.model = DDP(self.model, device_ids=[self.device])
         else:
@@ -87,33 +87,41 @@ class Trainer:
             self.optimizer.load_state_dict(snapshot['optimizer'])
             self.scheduler.load_state_dict(snapshot['scheduler'])
             self.state = snapshot['state']
-            self.best_val = snapshot['state']['best_val'][-1]
+            best_val_list = snapshot['state'].get('best_val', [])
+            self.best_val = best_val_list[-1] if best_val_list else - \
+                float('inf')
         else:
             snapshot = torch.load(snapshot, map_location=self.device)
             self.epochs_run = snapshot['epoch']
-            state_dict = self._remove_module_prefix(snapshot['model'])
-            self.model.load_state_dict(state_dict)
-            state_dict = self._remove_module_prefix(snapshot['optimizer'])
-            self.optimizer.load_state_dict(state_dict)
-            state_dict = self._remove_module_prefix(snapshot['scheduler'])
-            self.scheduler.load_state_dict(state_dict)
-            state_dict = self._remove_module_prefix(snapshot['state'])
-            self.state = state_dict
-            self.best_val = state_dict['best_val'][-1]
+            model_state_dict = self._remove_module_prefix(snapshot['model'])
+            self.model.load_state_dict(model_state_dict)
+            self.optimizer.load_state_dict(snapshot['optimizer'])
+            self.scheduler.load_state_dict(snapshot['scheduler'])
+            self.state = snapshot['state']
+            best_val_list = self.state.get('best_val', [])
+            self.best_val = best_val_list[-1] if best_val_list else - \
+                float('inf')
         self.log.info(
             f"Resuming training from snapshot at epoch {self.epochs_run}")
         print(
             f"[INFO] Resuming training from snapshot at epoch {self.epochs_run}")
 
     def _update_metrics(self, epoch, local_train_steps, local_train_loss, local_val_steps, local_val_loss, local_val_psnr, local_val_ssim, local_val_genome_disco, local_val_hicrep, local_val_lpips):
-
-        self.train_loss_per_epoch = local_train_loss / local_train_steps
-        self.val_loss_per_epoch = local_val_loss / local_val_steps
-        self.val_psnr_per_epoch = local_val_psnr / local_val_steps
-        self.val_ssim_per_epoch = local_val_ssim / local_val_steps
-        self.val_genome_disco_per_epoch = local_val_genome_disco / local_val_steps
-        self.val_hicrep_per_epoch = local_val_hicrep / local_val_steps
-        self.val_lpips_per_epoch = local_val_lpips / local_val_steps
+        # Zero-division protection
+        self.train_loss_per_epoch = local_train_loss / \
+            local_train_steps if local_train_steps else 0
+        self.val_loss_per_epoch = local_val_loss / \
+            local_val_steps if local_val_steps else 0
+        self.val_psnr_per_epoch = local_val_psnr / \
+            local_val_steps if local_val_steps else 0
+        self.val_ssim_per_epoch = local_val_ssim / \
+            local_val_steps if local_val_steps else 0
+        self.val_genome_disco_per_epoch = local_val_genome_disco / \
+            local_val_steps if local_val_steps else 0
+        self.val_hicrep_per_epoch = local_val_hicrep / \
+            local_val_steps if local_val_steps else 0
+        self.val_lpips_per_epoch = local_val_lpips / \
+            local_val_steps if local_val_steps else 0
 
         self.state['epoch'].append(epoch+1)
         self.state['lr'].append(self.optimizer.param_groups[0]['lr'])
@@ -141,8 +149,8 @@ class Trainer:
         print(f"[DEBUG] Epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int):
-        best_val = self.val_ssim_per_epoch + \
-            self.val_genome_disco_per_epoch + self.val_psnr_per_epoch
+        best_val = 0.2 * self.val_ssim_per_epoch + 0.35 * \
+            self.val_genome_disco_per_epoch + 0.45 * self.val_hicrep_per_epoch
         if best_val > self.best_val:
             self.epochs_no_improve = 0
             self.best_val = best_val
@@ -191,6 +199,7 @@ class Trainer:
         for step, (x0, y, x1, time_frame) in enumerate(tqdm(self.train_dl)):
             x0, y, x1, time_frame = [t.to(self.device)
                                      for t in (x0, y, x1, time_frame)]
+            # For efficiency, consider: self.optimizer.zero_grad(set_to_none=True) in recent PyTorch
             self.optimizer.zero_grad()
             pred = self.model(x0, x1, time_frame)
             train_loss = self.loss_fn(pred, y, self.epochs_run)
@@ -231,6 +240,10 @@ class Trainer:
                 local_val_genome_disco += genome_disco_val.item()
                 local_val_hicrep += hicrep_val.item()
                 local_val_lpips += lpips_val.item()
+
+                plot_file = os.path.join(
+                    self.cfg.dir.model_state, f"epoch_{epoch+1}_output.png")
+                plot.draw_hic_map(2, x0, y, pred, x1, plot_file)
 
                 del x0, y, x1, time_frame
 
@@ -284,11 +297,13 @@ class Trainer:
 
         start_time = time.time()
         try:
-
             for epoch in range(self.epochs_run, max_epochs):
                 if self.epochs_no_improve > self.patience:
-                    self.log.info(f"No improvement in last 20 epoch!")
-                    print(f"No improvement in last 20 epoch!")
+                    self.log.info(
+                        f"No improvement in last {self.patience} epochs! Stopping early.")
+                    print(
+                        f"No improvement in last {self.patience} epochs! Stopping early.")
+                    break
 
                 self._run_epoch(epoch)
                 if self.isDistributed and self.device == 0:

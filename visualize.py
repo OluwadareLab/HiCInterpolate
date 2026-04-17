@@ -6,7 +6,7 @@ import cooler as cool
 from norm_visualize import COUTER
 
 ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets"
-OUTPUT_ROOT_PATH = f"{ROOT_PATH}/triplates/"
+OUTPUT_ROOT_PATH = f"{ROOT_PATH}/triplates/raw/"
 _EPSILON = 1e-8
 RESOLUTIONS = [25000, 10000, 5000]
 BALANCE_COOL = False
@@ -45,6 +45,25 @@ DATA = {
             }
         },
 
+        "dtag": {
+            "v1": {
+                "triplets":
+                [
+                    ["4DNFI5EAPQTI_dtag_v1_0m",
+                     "4DNFIY1TCVLX_dtag_v1_30m",
+                     "4DNFIXWT5U42_dtag_v1_60m"],
+
+                    ["4DNFIY1TCVLX_dtag_v1_30m",
+                     "4DNFIXWT5U42_dtag_v1_60m",
+                     "4DNFIHTFIMGG_dtag_v1_90m"],
+
+                    ["4DNFIXWT5U42_dtag_v1_60m",
+                     "4DNFIHTFIMGG_dtag_v1_90m",
+                     "4DNFIPZCCTV6_dtag_v1_120m"]
+                ]
+            }
+        },
+
         "hct116": {
             "1": {
                 "triplets":
@@ -58,7 +77,35 @@ DATA = {
                      "4DNFIBCIA62Q_hct116_1_auxin_40m",
                      "4DNFIQRTP7NM_hct116_1_auxin_60m"]
                 ]
-            }
+            },
+            "2": {
+                "triplets":
+                [
+                    ["4DNFIAAH19VM_hct116_2_20m",
+                     "4DNFI7QUSU5J_hct116_2_40m",
+                     "4DNFIXEB4UZO_hct116_2_60m"],
+
+                    ["4DNFI5IZNXIO_hct116_2_no_transcription_360m_20m",
+                     "4DNFIZK7W8GZ_hct116_2_no_transcription_360m_40m",
+                     "4DNFISRP84FE_hct116_2_no_transcription_360m_60m"],
+
+                    ["4DNFII16KXA7_hct116_2_no_transcription_60m_20m",
+                     "4DNFIMIMLMD3_hct116_2_no_transcription_60m_40m",
+                     "4DNFI2LY7B73_hct116_2_no_transcription_60m_60m"],
+
+                    ["4DNFITUPI4HA_hct116_2_no_atp_120m_20m",
+                     "4DNFIM7Q2FQQ_hct116_2_no_atp_120m_40m",
+                     "4DNFISATK9PF_hct116_2_no_atp_120m_60m"],
+
+                    ["4DNFIVC8OQPG_hct116_2_no_atp_30m_20m",
+                     "4DNFI44JLUSL_hct116_2_no_atp_30m_40m",
+                     "4DNFIBED48O1_hct116_2_no_atp_30m_60m"],
+
+                    ["4DNFIDD9IF9T_hct116_2_no_replication_20m",
+                     "4DNFIQWWATGK_hct116_2_no_replication_40m",
+                     "4DNFI3NTD7B3_hct116_2_no_replication_60m"]
+                ]
+            },
         },
 
         "hela_s3": {
@@ -197,13 +244,11 @@ def save_img(chr_mat, r, c, patch, path, img_name):
 
 
 def generate_patch(mat_0, mat_y, mat_1, organism, sample, subsample, resolution, chromosome, output_root_path, uuid):
-    data_plot_path = f"{OUTPUT_ROOT_PATH}/data_plots"
-    os.makedirs(data_plot_path, exist_ok=True)
     for patch in PATCHES:
         patch_path = f"{output_root_path}/{patch}"
         os.makedirs(patch_path, exist_ok=True)
 
-        ds_dict_file = f"{output_root_path}/{patch}/dataset_dict.txt"
+        ds_dict_file = f"{patch_path}/dataset_dict_{resolution}.txt"
         os.makedirs(os.path.dirname(ds_dict_file), exist_ok=True)
 
         with open(ds_dict_file, "a") as dict_file:
@@ -225,7 +270,7 @@ def generate_patch(mat_0, mat_y, mat_1, organism, sample, subsample, resolution,
                     folder = f"{COUTER[resolution][patch]:08d}"
                     record = f"{organism}/{sample}/{subsample}/{str(resolution)}/{chromosome}/{folder}"
                     dict_file.write(record + "\n")
-                    image_path = f"{patch_path}/{patch}/{record}"
+                    image_path = f"{patch_path}/{record}"
                     os.makedirs(image_path, exist_ok=True)
                     save_img(mat_0, r, c, patch, image_path, "img1")
                     save_img(mat_y, r, c, patch, image_path, "img2")
@@ -234,17 +279,16 @@ def generate_patch(mat_0, mat_y, mat_1, organism, sample, subsample, resolution,
                     r += bin_inc
 
 
-def nan_to_eps(matrix):
-    return np.nan_to_num(matrix, nan=_EPSILON, posinf=_EPSILON, neginf=_EPSILON)
+def nan_zero_to_eps(matrix):
+    matrix = np.nan_to_num(matrix, nan=_EPSILON,
+                           posinf=_EPSILON, neginf=_EPSILON)
+    matrix[matrix == 0] = _EPSILON
+    return matrix
 
 
 def prepare_triplates():
     for resolution in RESOLUTIONS:
-        res_path = f"{OUTPUT_ROOT_PATH}/{resolution}"
-        os.makedirs(res_path, exist_ok=True)
         for organism, samples in DATA.items():
-            org_path = f"{res_path}/{organism}"
-            os.makedirs(org_path, exist_ok=True)
             for sample, subsamples in samples.items():
                 for subsample, content in subsamples.items():
                     for triplet in content["triplets"]:
@@ -261,14 +305,14 @@ def prepare_triplates():
                         uuid = triplet[0] + "_" + triplet[1] + "_" + triplet[2]
                         for chromosome, chr_size in zip(cool_y.chromnames, cool_y.chromsizes):
                             fetch = f"{chromosome}:{0}-{chr_size}"
-                            mat_0 = nan_to_eps(cool_0.matrix(
+                            mat_0 = nan_zero_to_eps(cool_0.matrix(
                                 balance=BALANCE_COOL).fetch(fetch))
-                            mat_y = nan_to_eps(cool_y.matrix(
+                            mat_y = nan_zero_to_eps(cool_y.matrix(
                                 balance=BALANCE_COOL).fetch(fetch))
-                            mat_1 = nan_to_eps(cool_1.matrix(
+                            mat_1 = nan_zero_to_eps(cool_1.matrix(
                                 balance=BALANCE_COOL).fetch(fetch))
                             generate_patch(mat_0=mat_0, mat_y=mat_y, mat_1=mat_1,
-                                           organism=organism, sample=sample, subsample=subsample, resolution=resolution, chromosome=chromosome, output_root_path=org_path, uuid=uuid)
+                                           organism=organism, sample=sample, subsample=subsample, resolution=resolution, chromosome=chromosome, output_root_path=OUTPUT_ROOT_PATH, uuid=uuid)
 
 
 if __name__ == "__main__":
