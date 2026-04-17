@@ -58,7 +58,7 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False, isDi
 
 
 def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool = False, train: bool = False, test: bool = False):
-    yaml_cfg = OmegaConf.load(f"./configs/{config_filename}.yaml")
+    yaml_cfg = OmegaConf.load(f"./configs/{config_filename}.yml")
     structured_cfg = OmegaConf.structured(Config)
     cfg = OmegaConf.merge(structured_cfg, yaml_cfg)
 
