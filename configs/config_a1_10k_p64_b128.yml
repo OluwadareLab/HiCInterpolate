@@ -4,7 +4,7 @@ dir:
   root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
   model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
   output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplates/10000/human
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplates/5000/human
   image: ${dir.data}/${data.patch}
 
 
@@ -40,7 +40,7 @@ data:
   batch_size: 128
 
 training:
-  epochs: 1000
+  epochs: 400
   restart_every: 100
   save_every: 10
   init_lr: 1e-4

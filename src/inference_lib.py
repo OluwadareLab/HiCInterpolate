@@ -36,6 +36,9 @@ class HiCInterpolate:
         self.batch_size = dl.batch_size
         self.pred_list = []
 
+    def _get_model(self):
+        return self.model, self.device
+    
     def _remove_module_prefix(self, state_dict):
         from collections import OrderedDict
         new_state_dict = OrderedDict()

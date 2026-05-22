@@ -33,7 +33,7 @@ class ExponentialDecay(_LRScheduler):
         self.decay_steps = decay_steps
         self.decay_rate = decay_rate
         self.staircase = staircase
-        super(ExponentialDecay, self).__init__(optimizer, last_epoch, verbose)
+        super(ExponentialDecay, self).__init__(optimizer, last_epoch)
 
     def get_lr(self):
         if self.staircase:

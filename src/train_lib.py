@@ -37,8 +37,13 @@ class Trainer:
         self.loss_fn = CombinedLoss(self.cfg)
         self.optimizer = Adam(self.model.parameters(),
                               lr=self.cfg.training.init_lr)
+
+        decay_rate = (self.cfg.training.min_lr / self.cfg.training.init_lr) ** (1/
+            (self.cfg.training.epochs // self.cfg.training.decay_steps))
+        print(f"[DEBUG] Calculated decay_rate: {decay_rate}")
+        self.log.info(f"Calculated decay_rate: {decay_rate}")
         self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
-                                          decay_rate=self.cfg.training.decay_rate, staircase=self.cfg.training.lr_staircase)
+                                          decay_rate=decay_rate, staircase=self.cfg.training.lr_staircase)
 
         self.train_dl = train_dl
         self.train_steps = len(self.train_dl)
@@ -156,7 +161,7 @@ class Trainer:
             self.best_val = best_val
             snapshot = self._get_model_stats(epoch)
             torch.save(snapshot, self.best_model)
-            self.log.debug(
+            self.log.info(
                 f"Epoch {self.epochs_run+1} saved best model.")
             print(
                 f"[DEBUG] Epoch {self.epochs_run+1} saved best model.")

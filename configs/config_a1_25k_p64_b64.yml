@@ -2,14 +2,14 @@ device: cuda
 
 dir:
   root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
-  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
-  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplates/25000/human
-  image: ${dir.data}/${data.patch}
+  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
+  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
+  image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
 
 
 file:
-  dataset_dict: ${dir.image}/dataset_dict.txt
+  dataset_dict: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/train/train_25000_64.txt
   vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
   snapshot: ${dir.model_state}/${model.name}_p${data.patch}_b${data.batch_size}_snapshot.pt
   model: ${dir.model_state}/${model.name}_p${data.patch}_b${data.batch_size}.pt
@@ -32,12 +32,13 @@ file:
 
 data:
   patch: 64
+  batch_size: 64
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
   train_val_test_ratio: [0.8, 0.1, 0.1]
-  batch_size: 64
+
 
 training:
   epochs: 1000

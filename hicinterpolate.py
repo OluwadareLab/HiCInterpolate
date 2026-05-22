@@ -96,6 +96,9 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
         tester = TestLib.Tester(
             cfg=cfg, log=log, model=cfg.file.model, test_dl=test_dl, isDistributed=isDistributed)
         tester.test()
+    else:
+        log.info(f"Model file {cfg.file.model} does not exist. Skipping testing.")
+        print(f"Model file {cfg.file.model} does not exist. Skipping testing.")
 
     if isDistributed:
         dist.destroy_process_group()
@@ -118,4 +121,11 @@ if __name__ == "__main__":
                         action='store_true', help='Test Model (default: False)')
     args = parser.parse_args()
 
+    # args.config = "config_a1_10k_p64_b128"
+    # args.train = False
+    # args.test = True
+    # args.distributed = False
     main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
+
+
+# torchrun --standalone --nproc_per_node=1 hicinterpolate.py --test --config config_a1_5k_p64_b128

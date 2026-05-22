@@ -7,6 +7,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+_EPSILON = 1e-8
+CLIPPING_PERCENTILE = 99.99
+
 
 class PairDataset(Dataset):
     def __init__(self, pair_dicts: List):
@@ -16,16 +19,29 @@ class PairDataset(Dataset):
         return len(self.pair_dicts)
 
     def get_image(self, image_file: str) -> Tensor:
-        img = torch.from_numpy(np.load(image_file)).unsqueeze(0)
+        np_img = np.load(image_file)
+        # np_img = self.log1p(np_img)
+        # np_img = self.clip(np_img)
+        np_img = self.min_max_norm(np_img)
+        img = torch.from_numpy(np_img).float().unsqueeze(0)
         return img
+
+    def min_max_norm(self, matrix):
+        _min = np.min(matrix)
+        _max = np.max(matrix)
+        mm_matrix = (matrix - _min) / \
+            (_max - _min) if _max > _min else matrix * 0
+        mm_matrix[mm_matrix == 0] = _EPSILON
+        return mm_matrix
 
     def __getitem__(self, idx):
         key = self.pair_dicts[idx]
         x0 = self.get_image(image_file=key["frame_0"])
-        x1 = self.get_image(image_file=key["frame_2"])
+        x1 = self.get_image(image_file=key["frame_1"])
+        x2 = self.get_image(image_file=key["frame_2"])
         time = torch.tensor([key["time"]], dtype=torch.float32)
 
-        return x0, x1, time
+        return x0, x1, x2, time
 
 
 class CustomDataset:
