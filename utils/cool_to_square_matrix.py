@@ -1,13 +1,10 @@
 import os
 import numpy as np
 import cooler as cool
-from scipy.ndimage import gaussian_filter as sp_gf
-import cupy as cp
-from cupyx.scipy.ndimage import gaussian_filter as cp_gf
-import matplotlib.pyplot as plt
+
 
 ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets"
-OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset"
+OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset"
 
 RESOLUTIONS = [25000, 10000, 5000]
 BALANCE_COOL = False
@@ -15,7 +12,7 @@ PATCHES = [64, 128, 256, 512]
 CLIPPING_PERCENTILE = 99.99
 PATCH_OVERLAP_RATIO = 0.2
 
-COUTER = {
+COUNTER = {
     5000: {64: 0, 128: 0, 256: 0, 512: 0},
     10000: {64: 0, 128: 0, 256: 0, 512: 0},
     25000: {64: 0, 128: 0, 256: 0, 512: 0}
@@ -275,6 +272,12 @@ def save_img(chr_mat, r, c, patch, path, img_name):
     np.save(f"{path}/{img_name}.npy", submatrix)
 
 
+def min_max_normalize(mat):
+    min_val = np.min(mat)
+    max_val = np.max(mat)
+    return (mat - min_val) / (max_val - min_val)
+
+
 def generate_patch(mat_0, mat_y, mat_1, organism, sample, subsample, resolution, chromosome, output_root_path, uuid, ds_dict_file):
     with open(ds_dict_file, "a") as dict_file:
         for patch in PATCHES:
@@ -293,7 +296,7 @@ def generate_patch(mat_0, mat_y, mat_1, organism, sample, subsample, resolution,
                         r += bin_inc
                         continue
 
-                    folder = f"{COUTER[resolution][patch]:09d}"
+                    folder = f"{COUNTER[resolution][patch]:09d}"
                     record = f"{str(resolution)}/{str(patch)}/{organism}/{sample}/{subsample}/{str(uuid)}/{chromosome}/{folder}"
                     dict_file.write(record + "\n")
                     image_path = f"{OUTPUT_ROOT_PATH}/{record}"
@@ -303,7 +306,7 @@ def generate_patch(mat_0, mat_y, mat_1, organism, sample, subsample, resolution,
                     save_img(mat_1, r, c, patch, image_path, "img3")
                     c += bin_inc
                     r += bin_inc
-                    COUTER[resolution][patch] += 1
+                    COUNTER[resolution][patch] += 1
 
         dict_file.flush()
         dict_file.close()
@@ -334,6 +337,9 @@ def prepare_triplates():
                                 balance=BALANCE_COOL).fetch(fetch)
                             mat_1 = cool_1.matrix(
                                 balance=BALANCE_COOL).fetch(fetch)
+                            mat_0 = min_max_normalize(mat_0)
+                            mat_y = min_max_normalize(mat_y)
+                            mat_1 = min_max_normalize(mat_1)
                             generate_patch(mat_0=mat_0, mat_y=mat_y, mat_1=mat_1, resolution=resolution,
                                            organism=organism, sample=sample, subsample=subsample, uuid=uuid, chromosome=chromosome, output_root_path=OUTPUT_ROOT_PATH, ds_dict_file=ds_dict_file)
 

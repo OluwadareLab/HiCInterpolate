@@ -79,16 +79,16 @@ class Tester:
                 time_frame = time_frame.to(self.device)
                 pred = self.model(x0, x1, time_frame)
 
-                psnr_val = eval_metric.get_psnr(pred, y)
-                ssim_val = eval_metric.get_ssim(pred, y)
-                genome_disco_val = eval_metric.get_genome_disco(pred, y)
-                hicrep_val = eval_metric.get_hicrep(pred, y)
-                lpips_val = eval_metric.get_lpips(pred, y)
+                psnr_val = eval_metric.get_psnr_gpu(pred, y)
+                ssim_val = eval_metric.get_ssim_gpu(pred, y)
+                genome_disco_val = eval_metric.get_genome_disco_gpu(pred, y)
+                hicrep_val = eval_metric.get_hicrep_gpu(pred, y)
+                lpips_val = eval_metric.get_lpips_gpu(pred, y)
 
                 local_psnr += psnr_val.item()
                 local_ssim += ssim_val.item()
-                local_genome_disco += genome_disco_val
-                local_hicrep += hicrep_val
+                local_genome_disco += genome_disco_val.item()
+                local_hicrep += hicrep_val.item()
                 local_lpips += lpips_val.item()
 
                 if drawn == 20:

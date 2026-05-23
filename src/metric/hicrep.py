@@ -18,8 +18,8 @@ import scipy.sparse as sp
 from typing import Union
 from contextlib import suppress
 import numpy as np
-import cooler
 import scipy.sparse as sp
+
 
 def sccByDiag(m1: sp.coo_matrix, m2: sp.coo_matrix, nDiags: int):
     """Compute diagonal-wise hicrep SCC score for the two input matrices up to
@@ -41,10 +41,11 @@ def sccByDiag(m1: sp.coo_matrix, m2: sp.coo_matrix, nDiags: int):
     rowSumM2D = m2D.sum(axis=1).A1
 
     with np.errstate(divide='ignore', invalid='ignore'):
-        cov = m1D.multiply(m2D).sum(axis=1).A1 - rowSumM1D * rowSumM2D / nSamplesD
+        cov = m1D.multiply(m2D).sum(axis=1).A1 - \
+            rowSumM1D * rowSumM2D / nSamplesD
         rhoD = cov / np.sqrt(
-            (m1D.power(2).sum(axis=1).A1 - np.square(rowSumM1D) / nSamplesD ) *
-            (m2D.power(2).sum(axis=1).A1 - np.square(rowSumM2D) / nSamplesD ))
+            (m1D.power(2).sum(axis=1).A1 - np.square(rowSumM1D) / nSamplesD) *
+            (m2D.power(2).sum(axis=1).A1 - np.square(rowSumM2D) / nSamplesD))
         wsD = nSamplesD * varVstran(nSamplesD)
 
         wsNan2Zero = np.nan_to_num(wsD, copy=True, posinf=0.0, neginf=0.0)
@@ -63,12 +64,12 @@ def hicrepSCC(mat1: np.ndarray, mat2: np.ndarray, h: int = 0):
     del mat1
     del mat2
 
-
     if h > 0:
         m1 = meanFilterSparse(m1, h)
         m2 = meanFilterSparse(m2, h)
     scc = sccByDiag(m1, m2, nDiags)
     return scc
+
 
 def trimDiags(a: sp.coo_matrix, iDiagMax: int, bKeepMain: bool):
     """Remove diagonal elements whose diagonal index is >= iDiagMax
@@ -87,6 +88,7 @@ def trimDiags(a: sp.coo_matrix, iDiagMax: int, bKeepMain: bool):
     idx = np.where((gDist < iDiagMax) & (bKeepMain | (gDist != 0)))
     return sp.coo_matrix((a.data[idx], (a.row[idx], a.col[idx])),
                          shape=a.shape, dtype=a.dtype)
+
 
 def upperDiagCsr(m: sp.coo_matrix, nDiags: int):
     """Convert an input sp.coo_matrix into a sp.csr_matrix where each row in the
@@ -110,6 +112,7 @@ def upperDiagCsr(m: sp.coo_matrix, nDiags: int):
     ans.eliminate_zeros()
     return ans
 
+
 def meanFilterSparse(a: sp.coo_matrix, h: int):
     """Apply a mean filter to an input sparse matrix. This convolves
     the input with a kernel of size 2*h + 1 with constant entries and
@@ -123,9 +126,9 @@ def meanFilterSparse(a: sp.coo_matrix, h: int):
         `sp.coo_matrix` filterd matrix
     """
     assert h > 0, "meanFilterSparse half-size must be greater than 0"
-    assert sp.issparse(a) and a.getformat() == 'coo',\
+    assert sp.issparse(a) and a.getformat() == 'coo', \
         "meanFilterSparse input matrix is not scipy.sparse.coo_matrix"
-    assert a.shape[0] == a.shape[1],\
+    assert a.shape[0] == a.shape[1], \
         "meanFilterSparse cannot handle non-square matrix"
     fSize = 2 * h + 1
     # filter is a square matrix of constant 1 of shape (fSize, fSize)
@@ -140,13 +143,16 @@ def meanFilterSparse(a: sp.coo_matrix, h: int):
     ansNoEdge = ans.tocsr()[h:(h+a.shape[0]), h:(h+a.shape[1])].tocoo()
     # Assign different number of neighbors to the edge to better
     # match what the original R implementation of HiCRep does
-    rowDist2Edge = np.minimum(ansNoEdge.row, ansNoEdge.shape[0] - 1 - ansNoEdge.row)
+    rowDist2Edge = np.minimum(
+        ansNoEdge.row, ansNoEdge.shape[0] - 1 - ansNoEdge.row)
     nDim1 = h + 1 + np.minimum(rowDist2Edge, h)
-    colDist2Edge = np.minimum(ansNoEdge.col, ansNoEdge.shape[1] - 1 - ansNoEdge.col)
+    colDist2Edge = np.minimum(
+        ansNoEdge.col, ansNoEdge.shape[1] - 1 - ansNoEdge.col)
     nDim2 = h + 1 + np.minimum(colDist2Edge, h)
     nNeighbors = nDim1 * nDim2
     ansNoEdge.data /= nNeighbors
     return ansNoEdge
+
 
 def varVstran(n: Union[int, np.ndarray]):
     """

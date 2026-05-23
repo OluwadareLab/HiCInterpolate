@@ -3,7 +3,9 @@ import torch
 from torch import Tensor
 from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure, LearnedPerceptualImagePatchSimilarity
 from src.metric.genome_disco import compute_reproducibility
+from src.metric.genome_disco_gpu import compute_reproducibility_gpu
 from src.metric.hicrep import hicrepSCC as hicrep_scc
+from src.metric.hicrep_gpu import hicrepSCCGPU as hicrep_scc_gpu
 from src.metric.ent3c import get_similarity as ent3c_similarity
 from scipy.sparse import csr_matrix
 import numpy as np
@@ -17,11 +19,22 @@ def get_psnr(preds: Tensor, target: Tensor, data_range: float = 1.0):
     return psnr_score
 
 
+@torch.no_grad()
+def get_psnr_gpu(preds: Tensor, target: Tensor, data_range: float = 1.0):
+    return get_psnr(preds, target, data_range=data_range)
+
+
 def get_ssim(preds: Tensor, target: Tensor, data_range: float = 1.0):
     ssim = StructuralSimilarityIndexMeasure(
         data_range=data_range).to(preds.device)
     ssim_score = ssim(preds, target)
     return ssim_score
+
+
+@torch.no_grad()
+def get_ssim_gpu(preds: Tensor, target: Tensor, data_range: float = 1.0):
+    return get_ssim(preds, target, data_range=data_range)
+
 
 
 def get_genome_disco(preds: Tensor, target: Tensor):
@@ -39,6 +52,11 @@ def get_genome_disco(preds: Tensor, target: Tensor):
     return genome_disco_score
 
 
+@torch.no_grad()
+def get_genome_disco_gpu(preds: Tensor, target: Tensor):
+    return compute_reproducibility_gpu(preds, target, True)
+
+
 def get_hicrep(preds: Tensor, target: Tensor):
     scc_list = []
     for p, t in zip(preds, target):
@@ -50,6 +68,12 @@ def get_hicrep(preds: Tensor, target: Tensor):
     hicrep_score = torch.tensor(
         hicrep_score).float().to(preds.device)
     return hicrep_score
+
+
+@torch.no_grad()
+def get_hicrep_gpu(preds: Tensor, target: Tensor):
+    return hicrep_scc_gpu(target, preds)
+
 
 def get_ent3c(preds: Tensor, target: Tensor):
     ent3c_score = torch.tensor(
@@ -68,6 +92,41 @@ def get_lpips(preds, target):
     tmp_target = target.repeat(1, 3, 1, 1)
     lpips_score = lpips(tmp_preds, tmp_target)
     return lpips_score
+
+
+@torch.no_grad()
+def get_lpips_gpu(preds: Tensor, target: Tensor):
+    return get_lpips(preds, target)
+
+
+GPU_METRIC_FUNCS = {
+    "psnr": get_psnr_gpu,
+    "ssim": get_ssim_gpu,
+    "genome_disco": get_genome_disco_gpu,
+    "hicrep": get_hicrep_gpu,
+    "lpips": get_lpips_gpu,
+}
+
+
+@torch.no_grad()
+def get_metric_gpu(metric_name: str, preds: Tensor, target: Tensor):
+    if metric_name not in GPU_METRIC_FUNCS:
+        valid_metrics = ", ".join(GPU_METRIC_FUNCS)
+        raise ValueError(f"Unknown GPU metric '{metric_name}'. Valid metrics: {valid_metrics}")
+    return GPU_METRIC_FUNCS[metric_name](preds, target)
+
+
+@torch.no_grad()
+def get_eval_metrics_gpu(preds: Tensor, target: Tensor, include_lpips: bool = True):
+    metrics = {
+        "psnr": get_psnr_gpu(preds, target),
+        "ssim": get_ssim_gpu(preds, target),
+        "genome_disco": get_genome_disco_gpu(preds, target),
+        "hicrep": get_hicrep_gpu(preds, target),
+    }
+    if include_lpips:
+        metrics["lpips"] = get_lpips_gpu(preds, target)
+    return metrics
 
 
 def get_scc(pred, target, eps=1e-8):

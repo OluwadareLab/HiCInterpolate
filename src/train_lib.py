@@ -4,8 +4,7 @@ from src.metric import eval_metrics as eval_metric
 from src.misc import plots as plot
 from src.interpolator import Interpolator
 from tqdm import tqdm
-from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts, CosineAnnealingLR, ReduceLROnPlateau
-from torch.optim import Adam, AdamW, SGD, RMSprop
+from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 import os
@@ -38,8 +37,8 @@ class Trainer:
         self.optimizer = Adam(self.model.parameters(),
                               lr=self.cfg.training.init_lr)
 
-        decay_rate = (self.cfg.training.min_lr / self.cfg.training.init_lr) ** (1/
-            (self.cfg.training.epochs // self.cfg.training.decay_steps))
+        decay_rate = (self.cfg.training.min_lr / self.cfg.training.init_lr) ** (1 /
+                                                                                (self.cfg.training.epochs // self.cfg.training.decay_steps))
         print(f"[DEBUG] Calculated decay_rate: {decay_rate}")
         self.log.info(f"Calculated decay_rate: {decay_rate}")
         self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
@@ -234,11 +233,11 @@ class Trainer:
                 val_loss = self.loss_fn(pred, y, self.epochs_run)
                 local_val_loss += val_loss.item()
 
-                psnr_val = eval_metric.get_psnr(pred, y)
-                ssim_val = eval_metric.get_ssim(pred, y)
-                genome_disco_val = eval_metric.get_genome_disco(pred, y)
-                hicrep_val = eval_metric.get_hicrep(pred, y)
-                lpips_val = eval_metric.get_lpips(pred, y)
+                psnr_val = eval_metric.get_psnr_gpu(pred, y)
+                ssim_val = eval_metric.get_ssim_gpu(pred, y)
+                genome_disco_val = eval_metric.get_genome_disco_gpu(pred, y)
+                hicrep_val = eval_metric.get_hicrep_gpu(pred, y)
+                lpips_val = eval_metric.get_lpips_gpu(pred, y)
 
                 local_val_psnr += psnr_val.item()
                 local_val_ssim += ssim_val.item()
