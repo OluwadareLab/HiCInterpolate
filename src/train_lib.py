@@ -68,6 +68,7 @@ class Trainer:
         self.epochs_no_improve = 0
         self.best_val = -float('inf')
         self.best_model = f'{self.cfg.file.model}'
+        self.best_plot_batch = None
 
         self.snapshot = f'{self.cfg.file.snapshot}'
         if load_snapshot and os.path.exists(self.snapshot):
@@ -160,6 +161,10 @@ class Trainer:
             self.best_val = best_val
             snapshot = self._get_model_stats(epoch)
             torch.save(snapshot, self.best_model)
+            if self.best_plot_batch is not None:
+                plot_file = os.path.join(
+                    self.cfg.dir.model_state, f"epoch_{epoch+1}_output.png")
+                plot.draw_hic_map(2, *self.best_plot_batch, plot_file)
             self.log.info(
                 f"Epoch {self.epochs_run+1} saved best model.")
             print(
@@ -221,6 +226,7 @@ class Trainer:
         local_val_genome_disco = 0
         local_val_hicrep = 0
         local_val_lpips = 0
+        self.best_plot_batch = None
 
         with torch.no_grad():
             self.model.eval()
@@ -245,9 +251,13 @@ class Trainer:
                 local_val_hicrep += hicrep_val.item()
                 local_val_lpips += lpips_val.item()
 
-                plot_file = os.path.join(
-                    self.cfg.dir.model_state, f"epoch_{epoch+1}_output.png")
-                plot.draw_hic_map(2, x0, y, pred, x1, plot_file)
+                if self.best_plot_batch is None:
+                    self.best_plot_batch = (
+                        x0[:2].detach().cpu(),
+                        y[:2].detach().cpu(),
+                        pred[:2].detach().cpu(),
+                        x1[:2].detach().cpu(),
+                    )
 
                 del x0, y, x1, time_frame
 
