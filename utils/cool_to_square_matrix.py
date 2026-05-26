@@ -4,18 +4,18 @@ import cooler as cool
 
 
 ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets"
-OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset"
+OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset"
 
 RESOLUTIONS = [25000, 10000, 5000]
 BALANCE_COOL = False
-PATCHES = [64, 128, 256, 512]
+PATCHES = [64, 128]
 CLIPPING_PERCENTILE = 99.99
 PATCH_OVERLAP_RATIO = 0.2
 
 COUNTER = {
-    5000: {64: 0, 128: 0, 256: 0, 512: 0},
-    10000: {64: 0, 128: 0, 256: 0, 512: 0},
-    25000: {64: 0, 128: 0, 256: 0, 512: 0}
+    5000: {64: 0, 128: 0},
+    10000: {64: 0, 128: 0},
+    25000: {64: 0, 128: 0}
 }
 
 DATASET = {
@@ -272,7 +272,8 @@ def save_img(chr_mat, r, c, patch, path, img_name):
     np.save(f"{path}/{img_name}.npy", submatrix)
 
 
-def min_max_normalize(mat):
+def log_min_max_normalize(mat):
+    mat = np.log1p(mat)
     min_val = np.min(mat)
     max_val = np.max(mat)
     return (mat - min_val) / (max_val - min_val)
@@ -337,9 +338,9 @@ def prepare_triplates():
                                 balance=BALANCE_COOL).fetch(fetch)
                             mat_1 = cool_1.matrix(
                                 balance=BALANCE_COOL).fetch(fetch)
-                            mat_0 = min_max_normalize(mat_0)
-                            mat_y = min_max_normalize(mat_y)
-                            mat_1 = min_max_normalize(mat_1)
+                            # mat_0 = log_min_max_normalize(mat_0)
+                            # mat_y = log_min_max_normalize(mat_y)
+                            # mat_1 = log_min_max_normalize(mat_1)
                             generate_patch(mat_0=mat_0, mat_y=mat_y, mat_1=mat_1, resolution=resolution,
                                            organism=organism, sample=sample, subsample=subsample, uuid=uuid, chromosome=chromosome, output_root_path=OUTPUT_ROOT_PATH, ds_dict_file=ds_dict_file)
 

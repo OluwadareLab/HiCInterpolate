@@ -24,7 +24,6 @@ def base_logger(file):
 
 
 def set_seed(seed_v: int = 42):
-    torch.autograd.set_detect_anomaly(True)
     torch.manual_seed(seed_v)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed_v)
@@ -97,7 +96,8 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
             cfg=cfg, log=log, model=cfg.file.model, test_dl=test_dl, isDistributed=isDistributed)
         tester.test()
     else:
-        log.info(f"Model file {cfg.file.model} does not exist. Skipping testing.")
+        log.info(
+            f"Model file {cfg.file.model} does not exist. Skipping testing.")
         print(f"Model file {cfg.file.model} does not exist. Skipping testing.")
 
     if isDistributed:

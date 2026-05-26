@@ -1,6 +1,6 @@
 import torch
 from typing import List
-from torch.nn import Module, Conv2d, ReLU, functional as F, ModuleList
+from torch.nn import Module, Conv2d, GELU, functional as F, ModuleList
 from torch import Tensor
 
 
@@ -9,17 +9,17 @@ class Block(Module):
         super().__init__()
         self.conv1 = Conv2d(in_channels=in_channels,
                             out_channels=out_channels, kernel_size=kernel_size, padding='same')
-        self.relu1 = ReLU()
+        self.gelu1 = GELU()
         self.conv2 = Conv2d(in_channels=out_channels,
                             out_channels=out_channels, kernel_size=kernel_size, padding='same')
-        self.relu2 = ReLU()
+        self.gelu2 = torch.nn.GELU()
 
     def forward(self, input):
         x = input
         x = self.conv1(x)
-        x = self.relu1(x)
+        x = self.gelu1(x)
         x = self.conv2(x)
-        output = self.relu2(x)
+        output = self.gelu2(x)
 
         return output
 
@@ -52,7 +52,7 @@ class Fusion(Module):
 
         self.output_conv = Conv2d(
             in_channels=init_out_channels, out_channels=init_in_channels, kernel_size=1)
-        self.output_relu = ReLU()
+        self.output_relu = torch.nn.Sigmoid()
 
     def forward(self, pyramid: List[Tensor]) -> Tensor:
         if len(pyramid) != self.levels:
@@ -61,7 +61,8 @@ class Fusion(Module):
         net = pyramid[-1]
         for i in reversed(range(0, self.levels-1)):
             level_size = (pyramid[i].shape)[2:4]
-            net = F.interpolate(net, size=level_size, mode='nearest')
+            net = F.interpolate(net, size=level_size,
+                                mode='bilinear', align_corners=True)
             net = self.convs[i][0](net)
             net = torch.cat([pyramid[i], net], dim=1)
             net = self.convs[i][1](net)

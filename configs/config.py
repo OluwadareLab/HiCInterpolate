@@ -14,25 +14,18 @@ class DirConfig:
 @dataclass
 class FileConfig:
     dataset_dict: str
-    vgg_model: str
     snapshot: str
     model: str
     test_hic_map: str
     val_metrics: str
     num_visualization_samples: int
-    psnr_val_plot: str
     ssim_val_plot: str
-    scc_val_plot: str
-    pcc_val_plot: str
     genome_disco_val_plot: str
-    ncc_val_plot: str
-    lpips_val_plot: str
     train_val_loss_plot: str
-    grad_norm_plot: str
     hicrep_val_plot: str
-    ent3c_val_plot: str
     lr_plot: str
     log: str
+    val_metrics_plot: str
 
 
 @dataclass
@@ -48,7 +41,7 @@ class TrainingConfig:
     epochs: int
     restart_every: int
     save_every: int
-    init_lr: float
+    lr: float
     min_lr: float
     decay_steps: int
     decay_rate: float

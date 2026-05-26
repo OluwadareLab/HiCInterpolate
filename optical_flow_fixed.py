@@ -21,7 +21,7 @@ OUTPUT_PATH = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/out
 OUTPUT_FILE = os.path.join(OUTPUT_PATH, "comparison_optical_flow_fixed.csv")
 
 RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [64, 128, 256, 512]
+PATCHES = [64, 128]
 CHROMOSOMES = {
     "human": ["11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "X", "Y"],
     "mouse": ["11", "12", "13", "14", "15", "16", "17", "18", "19", "X", "Y"],
@@ -137,7 +137,6 @@ def load_and_normalize(path):
 
 
 def warp_from_endpoint(img, u, v, time_step=0.5):
-    """Backward-sample an endpoint image toward the other endpoint by time_step."""
     h, w = img.shape[:2]
     x, y = np.meshgrid(np.arange(w), np.arange(h))
     map_x = (x - time_step * u).astype(np.float32)

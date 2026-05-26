@@ -54,7 +54,7 @@ class HiCInterpolate:
                 x1 = x1.to(self.device)
                 x3 = x3.to(self.device)
                 time_frame = time_frame.to(self.device)
-                pred = self.model(x1, x3, time_frame)
+                pred, _, _ = self.model(x1, x3, time_frame)
                 self.pred_list.append(pred)
                 del x1, x3, time_frame
 

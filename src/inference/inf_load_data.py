@@ -20,19 +20,8 @@ class PairDataset(Dataset):
 
     def get_image(self, image_file: str) -> Tensor:
         np_img = np.load(image_file)
-        # np_img = self.log1p(np_img)
-        # np_img = self.clip(np_img)
-        np_img = self.min_max_norm(np_img)
         img = torch.from_numpy(np_img).float().unsqueeze(0)
         return img
-
-    def min_max_norm(self, matrix):
-        _min = np.min(matrix)
-        _max = np.max(matrix)
-        mm_matrix = (matrix - _min) / \
-            (_max - _min) if _max > _min else matrix * 0
-        mm_matrix[mm_matrix == 0] = _EPSILON
-        return mm_matrix
 
     def __getitem__(self, idx):
         key = self.pair_dicts[idx]
