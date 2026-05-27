@@ -65,6 +65,6 @@ loss:
     - name: symmetry
       boundaries: [100]
       values: [1.0, 1.0]
-    # - name: vgg
-    #   boundaries: [100]
-    #   values: [0.005, 0.01]
+    - name: vgg
+      boundaries: [100]
+      values: [0.005, 0.01]

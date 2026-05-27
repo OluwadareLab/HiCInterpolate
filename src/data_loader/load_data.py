@@ -23,6 +23,8 @@ class TripletDataset(Dataset):
 
     def get_image(self, image_file: str) -> Tensor:
         img = np.load(image_file)
+        if np.isnan(img).any() or np.isinf(img).any() or img.max() == 0:
+            return None
         # img = self.log1p(img)
         # img = self.min_max_norm(img)
         img = torch.from_numpy(img).float().unsqueeze(0)
