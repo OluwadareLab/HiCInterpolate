@@ -1,6 +1,6 @@
 import torch
 from typing import List
-from torch.nn import Module, Conv2d, GELU, functional as F, ModuleList
+from torch.nn import Module, Conv2d, ReLU, functional as F, ModuleList
 from torch import Tensor
 
 
@@ -9,17 +9,17 @@ class Block(Module):
         super().__init__()
         self.conv1 = Conv2d(in_channels=in_channels,
                             out_channels=out_channels, kernel_size=kernel_size, padding='same')
-        self.gelu1 = GELU()
+        self.relu1 = ReLU()
         self.conv2 = Conv2d(in_channels=out_channels,
                             out_channels=out_channels, kernel_size=kernel_size, padding='same')
-        self.gelu2 = torch.nn.GELU()
+        self.relu2 = ReLU()
 
     def forward(self, input):
         x = input
         x = self.conv1(x)
-        x = self.gelu1(x)
+        x = self.relu1(x)
         x = self.conv2(x)
-        output = self.gelu2(x)
+        output = self.relu2(x)
 
         return output
 

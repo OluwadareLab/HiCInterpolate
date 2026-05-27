@@ -61,7 +61,7 @@ loss:
       values: [1.0, 1.0]
     - name: ssim
       boundaries: [100]
-      values: [2.5, 1.0]
+      values: [2.5, 2.5]
     - name: symmetry
       boundaries: [100]
       values: [1.0, 1.0]
