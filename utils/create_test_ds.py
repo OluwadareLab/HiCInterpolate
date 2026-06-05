@@ -1,62 +1,76 @@
 import os
 import re
 
-ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets"
-OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset"
+ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset"
+OUTPUT_ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/test_triplets/mm_triplets/diag_test"
 
-RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [64, 128, 256, 512]
+RESOLUTIONS = [25000, 10000]
+PATCHES = [64, 128]
+
 CHROMOSOMES = {
-    "human": ["11", "12", "13", "14", "15", "16",
+    "human": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+              "11", "12", "13", "14", "15", "16",
               "17", "18", "19", "20", "21", "22", "X", "Y"],
-    "mouse": ["11", "12", "13", "14", "15", "16",
+    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+              "11", "12", "13", "14", "15", "16",
               "17", "18", "19", "X", "Y"]
 }
 
-DATASET = {
+TEST_DATASET = {
     "human": {
+        "dmso": {
+            "control": {
+                "triplets":
+                [
+                    ["4DNFI7T93SHL_dmso_control_30m",
+                     "4DNFICF2Z2TG_dmso_control_60m",
+                     "4DNFILL624WG_dmso_control_90m"]
+                ]
+            }
+        },
         "dtag": {
             "v1": {
                 "triplets":
                 [
-                    ["4DNFI5EAPQTI_dtag_v1_0m",
-                     "4DNFIY1TCVLX_dtag_v1_30m",
-                     "4DNFIXWT5U42_dtag_v1_60m"],
-
                     ["4DNFIY1TCVLX_dtag_v1_30m",
                      "4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m"],
-
-                    ["4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m",
-                     "4DNFIPZCCTV6_dtag_v1_120m"]
+                     "4DNFIHTFIMGG_dtag_v1_90m"]
                 ]
             }
         },
-
         "hct116": {
+            "1": {
+                "triplets":
+                [
+                    ["4DNFIDBFENL7_hct116_1_20m",
+                     "4DNFI9ZUXG61_hct116_1_40m",
+                     "4DNFIAUMRM2S_hct116_1_60m"]
+                ]
+            },
             "2": {
                 "triplets":
                 [
-                    ["4DNFI5IZNXIO_hct116_2_no_transcription_360m_20m",
-                     "4DNFIZK7W8GZ_hct116_2_no_transcription_360m_40m",
-                     "4DNFISRP84FE_hct116_2_no_transcription_360m_60m"],
-
-                    ["4DNFII16KXA7_hct116_2_no_transcription_60m_20m",
-                     "4DNFIMIMLMD3_hct116_2_no_transcription_60m_40m",
-                     "4DNFI2LY7B73_hct116_2_no_transcription_60m_60m"],
-
-                    ["4DNFITUPI4HA_hct116_2_no_atp_120m_20m",
-                     "4DNFIM7Q2FQQ_hct116_2_no_atp_120m_40m",
-                     "4DNFISATK9PF_hct116_2_no_atp_120m_60m"],
-
-                    ["4DNFIVC8OQPG_hct116_2_no_atp_30m_20m",
-                     "4DNFI44JLUSL_hct116_2_no_atp_30m_40m",
-                     "4DNFIBED48O1_hct116_2_no_atp_30m_60m"],
-
-                    ["4DNFIDD9IF9T_hct116_2_no_replication_20m",
-                     "4DNFIQWWATGK_hct116_2_no_replication_40m",
-                     "4DNFI3NTD7B3_hct116_2_no_replication_60m"]
+                    ["4DNFIAAH19VM_hct116_2_20m",
+                     "4DNFI7QUSU5J_hct116_2_40m",
+                     "4DNFIXEB4UZO_hct116_2_60m"]
+                ]
+            },
+        },
+        "hela_s3": {
+            "r2": {
+                "triplets":
+                [
+                    ["4DNFIX6ZXCA8_hela_s3_r2_30m",
+                     "4DNFIEVR81FS_hela_s3_r2_60m",
+                     "4DNFIAUI6BBI_hela_s3_r2_90m"]
+                ]
+            },
+            "r3": {
+                "triplets":
+                [
+                    ["4DNFICFZGFAV_hela_s3_r3_30m",
+                     "4DNFIQXCZVVA_hela_s3_r3_60m",
+                     "4DNFIB6PJFJ3_hela_s3_r3_90m"]
                 ]
             }
         }
@@ -111,18 +125,16 @@ def get_triplet_dict(input_file, output_file, regex_pattern):
 
 def prepare_triplates():
     for resolution in RESOLUTIONS:
-        input_file = f"{OUTPUT_ROOT_PATH}/dataset_dict_{resolution}.txt"
+        input_file = f"{ROOT_PATH}/dataset_dict_{resolution}.txt"
         for patch in PATCHES:
-            for organism, samples in DATASET.items():
+            for organism, samples in TEST_DATASET.items():
                 for sample, subsamples in samples.items():
                     for subsample, content in subsamples.items():
                         for triplet in content["triplets"]:
-                            uuid = triplet[0] + "_" + \
-                                triplet[1] + "_" + triplet[2]
+                            uuid = "_".join(triplet)
                             for chromosome in CHROMOSOMES[organism]:
                                 record = f"{str(resolution)}/{str(patch)}/{organism}/{sample}/{subsample}/{str(uuid)}/{chromosome}"
-
-                                output_file = f"{OUTPUT_ROOT_PATH}/test_{resolution}_{patch}_{organism}_{uuid}_{chromosome}.txt"
+                                output_file = f"{OUTPUT_ROOT_PATH}/test_{resolution}_{patch}_{organism}_{triplet[1]}_{chromosome}.txt"
                                 os.makedirs(os.path.dirname(
                                     output_file), exist_ok=True)
 

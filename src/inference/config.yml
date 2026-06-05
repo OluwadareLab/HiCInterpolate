@@ -1,16 +1,16 @@
-device: cuda
+device: cuda:1
 
 dir:
-  root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate
-  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
-  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/test
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
+  root: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate
+  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
+  output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/test
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
   image: ${dir.data}/${data.patch}
 
 file:
-  inference: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test/test.txt
-  inference_raw: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test/info.txt
-  vgg_model: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/imagenet-vgg-verydeep-19.mat
+  inference: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test/test.txt
+  inference_raw: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test/info.txt
+  vgg_model: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/imagenet-vgg-verydeep-19.mat
   model: ${dir.model_state}/${model.name}.pt
   hic_map: ${dir.output}/${model.name}_inference_hic_map.jpg
   metrics: ${dir.output}/${model.name}_inference_metrics.txt

@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import torch
 from torch.utils.data import Dataset
@@ -19,15 +20,29 @@ class PairDataset(Dataset):
         return len(self.pair_dicts)
 
     def get_image(self, image_file: str) -> Tensor:
-        np_img = np.load(image_file)
-        img = torch.from_numpy(np_img).float().unsqueeze(0)
-        return img
+        try:
+            np_img = np.load(image_file)
+            # Check for empty or zero-dimension arrays which cause 'stack' errors
+            if np_img.size == 0 or 0 in np_img.shape:
+                logging.warning(f"Corrupted or empty patch found: {image_file} with shape {np_img.shape}")
+                return torch.empty(0)
+            np_arr = np.ascontiguousarray(np_img, dtype=np.float32)
+            img = torch.from_numpy(np_arr).unsqueeze(0)
+            return img
+        except Exception as e:
+            logging.error(f"Failed to load patch file {image_file}: {e}")
+            return torch.empty(0)
 
     def __getitem__(self, idx):
         key = self.pair_dicts[idx]
         x0 = self.get_image(image_file=key["frame_0"])
         x1 = self.get_image(image_file=key["frame_1"])
         x2 = self.get_image(image_file=key["frame_2"])
+
+        # Return None if any frame failed to load correctly
+        if x0.numel() == 0 or x1.numel() == 0 or x2.numel() == 0:
+            return None
+
         time = torch.tensor([key["time"]], dtype=torch.float32)
 
         return x0, x1, x2, time
@@ -44,9 +59,8 @@ class CustomDataset:
         with open(record_file, "r") as fid:
             pair_list = np.loadtxt(fid, dtype=str)
 
-        image_dir = self.img_dir
-        image_dirs = image_dir.split(os.sep)
-        base_path = os.sep.join(image_dirs[:9])
+        image_dir = self.img_dir.rstrip(os.sep)
+        base_path = image_dir
         image_map = self.img_map
         pair_dicts = []
         for pair in pair_list:

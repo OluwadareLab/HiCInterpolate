@@ -68,6 +68,7 @@ def compute_reproducibility_gpu(
     nonzero_1 = (rowsums_1 > 0.0).sum(dim=-1).to(m1.dtype)
     nonzero_2 = (rowsums_2 > 0.0).sum(dim=-1).to(m1.dtype)
     nonzero_total = 0.5 * (nonzero_1 + nonzero_2)
+    nonzero_total = torch.clamp(nonzero_total, min=1.0)
 
     scores = []
     rw1 = None
@@ -91,7 +92,7 @@ def compute_reproducibility_gpu(
     else:
         auc = _auc_unit_spacing(scores)
 
-    return (1.0 - auc).mean()
+    return (1.0 - auc).nanmean()
 
 
 @torch.no_grad()

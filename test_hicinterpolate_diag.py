@@ -20,11 +20,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 ROOT_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate"
 MODEL_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/mm_triplets_dataset"
-DICT_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/test_triplets/mm_triplets/test"
-IMAGE_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/test_triplets/mm_triplets"
+DICT_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/test_triplets/mm_triplets/diag_test"
+IMAGE_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset"
 OUTPUT_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/test"
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "comparison_hicinterpolate.csv")
-SUMMARY_FILE = os.path.join(OUTPUT_DIR, "comparison_summary.csv")
+OUTPUT_FILE = os.path.join(OUTPUT_DIR, "comparison_hicinterpolate_diag.csv")
+SUMMARY_FILE = os.path.join(OUTPUT_DIR, "comparison_summary_diag.csv")
 CONFIG_PATH = f"{ROOT_DIR}/HiCInterpolate/src/inference/config.yml"
 RESULT_ID_COLS = ["resolution", "patch_size", "organism",
                   "sample", "subsample", "frame", "chromosome"]

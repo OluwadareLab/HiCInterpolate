@@ -52,7 +52,6 @@ class Fusion(Module):
 
         self.output_conv = Conv2d(
             in_channels=init_out_channels, out_channels=init_in_channels, kernel_size=1)
-        self.output_relu = torch.nn.Sigmoid()
 
     def forward(self, pyramid: List[Tensor]) -> Tensor:
         if len(pyramid) != self.levels:
@@ -67,6 +66,5 @@ class Fusion(Module):
             net = torch.cat([pyramid[i], net], dim=1)
             net = self.convs[i][1](net)
         net = self.output_conv(net)
-        net = self.output_relu(net)
 
         return net

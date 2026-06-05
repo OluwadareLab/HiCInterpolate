@@ -11,6 +11,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from omegaconf import OmegaConf
 from configs.config import Config
+from torch.utils.data.dataloader import default_collate
 
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -37,11 +38,17 @@ def ddp_setup():
     dist.init_process_group(backend="nccl")
 
 
+def collate_fn(batch):
+    batch = [b for b in batch if b is not None]
+    return default_collate(batch)
+
+
 def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False, isDistributed: bool = False) -> DataLoader:
     if isDistributed:
         return DataLoader(
             ds,
             batch_size=batch_size,
+            collate_fn=collate_fn,
             pin_memory=True,
             worker_init_fn=set_seed,
             sampler=DistributedSampler(ds, shuffle=shuffle)
@@ -50,6 +57,7 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False, isDi
         return DataLoader(
             ds,
             batch_size=batch_size,
+            collate_fn=collate_fn,
             pin_memory=True,
             shuffle=shuffle,
             worker_init_fn=set_seed
