@@ -2,12 +2,33 @@
 __pycache__/
 *.py[cod]
 *$py.class
-*.log
+
+# Media + tabular
 *.jpg
 *.png
 *.csv
-*.zip
+
+# Text — block all except deps/license
+*.txt
+!requirements.txt
+!LICENSE.txt
+
+# Hi-C / ML binaries + archives
+*.npy
+*.npz
+*.cool
+*.mcool
+*.hic
+*.pt
 *.pth
+*.ckpt
+*.safetensors
+*.parquet
+*.jar
+*.zip
+*.tar
+*.gz
+*.7z
 *.Rhistory
 
 # Virtual environments
@@ -27,18 +48,14 @@ l1/
 style_loss/
 vgg_loss/
 
+# If output appears under any subdirectory
+**/output/
+
 # Backup or temp files
 *.bak
 *.tmp
 *.swp
 *~
-
-# If output appears under any subdirectory
-**/output/
-
-# PyTorch Lightning checkpoints/logs (if used)
-*.ckpt
-*.log
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints/
@@ -46,3 +63,7 @@ vgg_loss/
 # System files
 .DS_Store
 Thumbs.db
+
+.cursorignore
+.cursorindexingignore
+
