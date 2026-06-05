@@ -1,3 +1,3 @@
-from .model import PyramidFlowEstimator
+from .model import ForwardFlowPredictor, BackwardFlowPredictor
 
-__all__ = ["PyramidFlowEstimator"]
+__all__ = ["ForwardFlowPredictor", "BackwardFlowPredictor"]

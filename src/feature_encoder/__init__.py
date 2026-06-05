@@ -1,3 +1,3 @@
-from .model import FeatureExtractor
+from .model import FeatureEncoder
 
-__all__ = ["FeatureExtractor"]
+__all__ = ["FeatureEncoder"]

@@ -1,60 +1,368 @@
-from typing import List
-from torch.nn import Module, Conv2d, AvgPool2d, Sequential, ReLU, ModuleList
-from torch import Tensor
 import torch
+from typing import List
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import Tensor
 
 
-class SubTreeExtractor(Module):
-    def __init__(self, cfg):
+class InputProjection(nn.Module):
+    def __init__(self, in_channels=1, out_channels=256):
+        super().__init__()
+        self.dilated_expanded = nn.Conv2d(
+            in_channels=in_channels, out_channels=out_channels, kernel_size=7, stride=1, padding=6, dilation=2
+        )
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.local_refine = nn.Conv2d(
+            out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.act = nn.GELU()
+
+    def forward(self, x):
+        x = self.act(self.bn1(self.dilated_expanded(x)))
+        x = self.act(self.bn2(self.local_refine(x)))
+        return x
+
+
+class DilatedDoubleBlock64To32(nn.Module):
+    def __init__(self, in_channels=256, out_channels=128):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=7,
+            stride=1,
+            padding=6,
+            dilation=2,
+        )
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.act = nn.GELU()
+        self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
+
+    def forward(self, input):
+        x = input
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.act(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        output = self.act(x)
+
+        return output
+
+
+class DilatedDoubleBlock32To16(nn.Module):
+    def __init__(self, in_channels=128, out_channels=128):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=5,
+            stride=1,
+            padding=4,
+            dilation=2,
+        )
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.act = nn.GELU()
+        self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
+
+    def forward(self, x):
+        x = self.act(self.bn1(self.conv1(x)))
+        x = self.act(self.bn2(self.conv2(x)))
+
+        return self.pool(x)
+
+
+class DilatedDoubleBlock16To8(nn.Module):
+    def __init__(self, in_channels=128, out_channels=64):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=2,
+            dilation=2,
+        )
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.act = nn.GELU()
+        self.pool = nn.AvgPool2d(kernel_size=4, stride=4)
+
+    def forward(self, x):
+        x = self.act(self.bn1(self.conv1(x)))
+        x = self.act(self.bn2(self.conv2(x)))
+        return self.pool(x)
+
+
+class DilatedDoubleBlock8To4(nn.Module):
+    def __init__(self, in_channels=64, out_channels=64):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=2,
+            dilation=2,
+        )
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.act = nn.GELU()
+        self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
+
+    def forward(self, x):
+        x = self.act(self.bn1(self.conv1(x)))
+        x = self.act(self.bn2(self.conv2(x)))
+        return self.pool(x)
+
+
+class FeatureEncoder(nn.Module):
+    def __init__(self, cfg, in_channels=1, out_channels=[32, 64, 128, 256, 512]):
         super().__init__()
         self.cfg = cfg
-        n = self.cfg.model.ext_feature_level
-        self.convs = ModuleList()
-        in_channels = self.cfg.model.init_in_channels
-        for i in range(n):
-            out_channels = self.cfg.model.init_out_channels << i
-            seq1 = Sequential(Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding="same"),
-                              ReLU())
-            self.convs.append(seq1)
-            seq2 = Sequential(Conv2d(in_channels=out_channels, out_channels=out_channels, kernel_size=3, padding="same"),
-                              ReLU())
-            self.convs.append(seq2)
-            in_channels = out_channels
 
-        self.avgpool = AvgPool2d(kernel_size=2, stride=2, padding=0)
+        # 1 > 256, k=7
+        self.input_project = nn.Sequential(
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channels[0]//4,
+                      kernel_size=7, stride=1, padding=6, dilation=2),
+            nn.BatchNorm2d(out_channels[0]//4),
 
-    def forward(self, image: Tensor, n: int) -> List[Tensor]:
-        head = image
-        pyramid = []
-        for i in range(n):
-            head = self.convs[2*i](head)
-            head = self.convs[2*i+1](head)
-            pyramid.append(head)
-            if i < n-1:
-                head = self.avgpool(head)
-        return pyramid
+            nn.Conv2d(in_channels=out_channels[0]//4, out_channels=out_channels[0]//2,
+                      kernel_size=7, stride=1, padding=6, dilation=2),
+            nn.BatchNorm2d(out_channels[0]//2),
 
+            nn.Conv2d(in_channels=out_channels[0]//2, out_channels=out_channels[0],
+                      kernel_size=7, stride=1, padding=6, dilation=2),
+            nn.BatchNorm2d(out_channels[0]),
 
-class FeatureExtractor(Module):
-    def __init__(self, cfg):
-        super().__init__()
-        self.cfg = cfg
-        self.extract_sublevels = SubTreeExtractor(self.cfg)
+            nn.Conv2d(out_channels[0], out_channels[0],
+                      kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(out_channels[0]),
+            nn.LeakyReLU()
+        )
 
-    def forward(self, image_pyramid: List[Tensor]) -> List[Tensor]:
-        sub_pyramids = []
-        ext_feature_level = self.cfg.model.ext_feature_level
-        for i in range(len(image_pyramid)):
-            capped_sub_levels = min(len(image_pyramid), ext_feature_level)
-            sub_pyramids.append(self.extract_sublevels(
-                image_pyramid[i], capped_sub_levels))
+        # 256 > 128 k=7
+        self.unique1 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=out_channels[0],
+                out_channels=out_channels[1],
+                kernel_size=7,
+                stride=1,
+                padding=6,
+                dilation=2,
+            ),
+            nn.BatchNorm2d(out_channels[1]),
+            nn.Conv2d(
+                in_channels=out_channels[1],
+                out_channels=out_channels[1],
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(out_channels[1]),
+            nn.LeakyReLU(),
+            nn.AvgPool2d(kernel_size=2, stride=2)
+        )
 
-        featur_pyramid = []
-        for i in range(len(image_pyramid)):
-            features = sub_pyramids[i][0]
-            for j in range(1, ext_feature_level):
-                if j <= i:
-                    features = torch.cat(
-                        [features, sub_pyramids[i-j][j]], axis=1)
-            featur_pyramid.append(features)
-        return featur_pyramid
+        # 128 > 128 k=7
+        self.shared1 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=out_channels[1],
+                out_channels=out_channels[1],
+                kernel_size=7,
+                stride=1,
+                padding=6,
+                dilation=2,
+            ),
+            nn.BatchNorm2d(out_channels[1]),
+            nn.Conv2d(
+                in_channels=out_channels[1],
+                out_channels=out_channels[1],
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(out_channels[1]),
+            nn.LeakyReLU(),
+            # nn.AvgPool2d(kernel_size=2, stride=2)
+        )
+
+        # 128 > 64 k=5
+        self.unique2 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=out_channels[1],
+                out_channels=out_channels[2],
+                kernel_size=5,
+                stride=1,
+                padding=4,
+                dilation=2,
+            ),
+            nn.BatchNorm2d(out_channels[2]),
+            nn.Conv2d(
+                in_channels=out_channels[2],
+                out_channels=out_channels[2],
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(out_channels[2]),
+            nn.LeakyReLU(),
+            nn.AvgPool2d(kernel_size=2, stride=2)
+        )
+
+        # 64 > 64 k=5
+        self.shared2 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=out_channels[2],
+                out_channels=out_channels[2],
+                kernel_size=5,
+                stride=1,
+                padding=4,
+                dilation=2,
+            ),
+            nn.BatchNorm2d(out_channels[2]),
+            nn.Conv2d(
+                in_channels=out_channels[2],
+                out_channels=out_channels[2],
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(out_channels[2]),
+            nn.LeakyReLU(),
+            # nn.AvgPool2d(kernel_size=2, stride=2)
+        )
+
+        # 64 > 32 k=3
+        self.unique3 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=out_channels[2],
+                out_channels=out_channels[3],
+                kernel_size=3,
+                stride=1,
+                padding=2,
+                dilation=2,
+            ),
+            nn.BatchNorm2d(out_channels[3]),
+            nn.Conv2d(
+                in_channels=out_channels[3],
+                out_channels=out_channels[3],
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(out_channels[3]),
+            nn.LeakyReLU(),
+            nn.AvgPool2d(kernel_size=2, stride=2)
+        )
+
+        # 32 > 32 k=3
+        self.shared3 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=out_channels[3],
+                out_channels=out_channels[3],
+                kernel_size=3,
+                stride=1,
+                padding=2,
+                dilation=2,
+            ),
+            nn.BatchNorm2d(out_channels[3]),
+            nn.Conv2d(
+                in_channels=out_channels[3],
+                out_channels=out_channels[3],
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(out_channels[3]),
+            nn.LeakyReLU(),
+            # nn.AvgPool2d(kernel_size=2, stride=2)
+        )
+
+        # 32 > 16 k=3
+        self.unique4 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=out_channels[3],
+                out_channels=out_channels[4],
+                kernel_size=3,
+                stride=1,
+                padding=2,
+                dilation=2,
+            ),
+            nn.BatchNorm2d(out_channels[4]),
+            nn.Conv2d(
+                in_channels=out_channels[4],
+                out_channels=out_channels[4],
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(out_channels[4]),
+            nn.LeakyReLU(),
+            nn.AvgPool2d(kernel_size=2, stride=2)
+        )
+
+        # 16 > 16 k=3
+        self.shared4 = nn.Sequential(
+            nn.Conv2d(
+                in_channels=out_channels[4],
+                out_channels=out_channels[4],
+                kernel_size=3,
+                stride=1,
+                padding=2,
+                dilation=2,
+            ),
+            nn.BatchNorm2d(out_channels[4]),
+            nn.Conv2d(
+                in_channels=out_channels[4],
+                out_channels=out_channels[4],
+                kernel_size=3,
+                stride=1,
+                padding=1,
+            ),
+            nn.BatchNorm2d(out_channels[4]),
+            nn.LeakyReLU(),
+            # nn.AvgPool2d(kernel_size=2, stride=2)
+        )
+
+    def forward(self, ftr: Tensor) -> List[Tensor]:
+        proj = self.input_project(ftr)
+        unique1 = self.unique1(proj)
+        shared1 = self.shared1(unique1)
+        unique2 = self.unique2(shared1)
+        shared2 = self.shared2(unique2)
+        unique3 = self.unique3(shared2)
+        shared3 = self.shared3(unique3)
+        unique4 = self.unique4(shared3)
+        shared4 = self.shared4(unique4)
+        return [proj, unique1, shared1, unique2, shared2, unique3, shared3, unique4, shared4]

@@ -23,7 +23,8 @@ class TripletDataset(Dataset):
 
     def get_image(self, image_file: str) -> Tensor:
         img = np.load(image_file)
-        if np.isnan(img).any() or np.isinf(img).any() or img.max() == 0:
+        # Filter out matrices with NaNs, Infs, or those that are "identical" (constant values like all zeros)
+        if np.isnan(img).any() or np.isinf(img).any() or img.min() == img.max():
             return None
         # img = self.log1p(img)
         # img = self.min_max_norm(img)
@@ -51,6 +52,8 @@ class TripletDataset(Dataset):
         y = self.get_image(image_file=key["frame_1"])
         x1 = self.get_image(image_file=key["frame_2"])
         time = torch.tensor([key["time"]], dtype=torch.float32)
+        if x0 is None or y is None or x1 is None:
+            return None
 
         return x0, y, x1, time
 

@@ -2,10 +2,11 @@ import os
 import re
 
 ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets"
-OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset"
+DATASET_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset"
+OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset/test"
 
 RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [64, 128, 256, 512]
+PATCHES = [64, 128]
 CHROMOSOMES = {
     "human": ["11", "12", "13", "14", "15", "16",
               "17", "18", "19", "20", "21", "22", "X", "Y"],
@@ -15,48 +16,34 @@ CHROMOSOMES = {
 
 DATASET = {
     "human": {
-        "dtag": {
-            "v1": {
+        "dmso": {
+            "control": {
                 "triplets":
                 [
-                    ["4DNFI5EAPQTI_dtag_v1_0m",
-                     "4DNFIY1TCVLX_dtag_v1_30m",
-                     "4DNFIXWT5U42_dtag_v1_60m"],
-
-                    ["4DNFIY1TCVLX_dtag_v1_30m",
-                     "4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m"],
-
-                    ["4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m",
-                     "4DNFIPZCCTV6_dtag_v1_120m"]
+                    ["4DNFI7T93SHL_dmso_control_30m",
+                     "4DNFICF2Z2TG_dmso_control_60m",
+                     "4DNFILL624WG_dmso_control_90m"]
                 ]
             }
         },
-
         "hct116": {
             "2": {
                 "triplets":
                 [
-                    ["4DNFI5IZNXIO_hct116_2_no_transcription_360m_20m",
-                     "4DNFIZK7W8GZ_hct116_2_no_transcription_360m_40m",
-                     "4DNFISRP84FE_hct116_2_no_transcription_360m_60m"],
+                    ["4DNFIAAH19VM_hct116_2_20m",
+                     "4DNFI7QUSU5J_hct116_2_40m",
+                     "4DNFIXEB4UZO_hct116_2_60m"]
+                ]
+            },
+        },
 
-                    ["4DNFII16KXA7_hct116_2_no_transcription_60m_20m",
-                     "4DNFIMIMLMD3_hct116_2_no_transcription_60m_40m",
-                     "4DNFI2LY7B73_hct116_2_no_transcription_60m_60m"],
-
-                    ["4DNFITUPI4HA_hct116_2_no_atp_120m_20m",
-                     "4DNFIM7Q2FQQ_hct116_2_no_atp_120m_40m",
-                     "4DNFISATK9PF_hct116_2_no_atp_120m_60m"],
-
-                    ["4DNFIVC8OQPG_hct116_2_no_atp_30m_20m",
-                     "4DNFI44JLUSL_hct116_2_no_atp_30m_40m",
-                     "4DNFIBED48O1_hct116_2_no_atp_30m_60m"],
-
-                    ["4DNFIDD9IF9T_hct116_2_no_replication_20m",
-                     "4DNFIQWWATGK_hct116_2_no_replication_40m",
-                     "4DNFI3NTD7B3_hct116_2_no_replication_60m"]
+        "hela_s3": {
+            "r2": {
+                "triplets":
+                [
+                    ["4DNFIPZBEXCP_hela_s3_r2_150m",
+                     "4DNFIWPKRZGU_hela_s3_r2_180m",
+                     "4DNFIMD9QNDX_hela_s3_r2_210m"]
                 ]
             }
         }
@@ -65,25 +52,9 @@ DATASET = {
         "embryo": {
             "development": {
                 "triplets": [
-                    ["4DNFIN8F14CS_sperm",
-                     "4DNFIVCJKHMN_mii_oocyte",
-                     "4DNFI1EYIGOC_zygote"],
-
-                    ["4DNFIVCJKHMN_mii_oocyte",
-                     "4DNFI1EYIGOC_zygote",
-                     "4DNFIK4CECUH_early2_cell"],
-
-                    ["4DNFI1EYIGOC_zygote",
-                     "4DNFIK4CECUH_early2_cell",
-                     "4DNFICXCFGEI_late2_cell"],
-
                     ["4DNFIK4CECUH_early2_cell",
                      "4DNFICXCFGEI_late2_cell",
                      "4DNFIFA89L5B_8cell"],
-
-                    ["4DNFICXCFGEI_late2_cell",
-                     "4DNFIFA89L5B_8cell",
-                     "4DNFIK5HY1GP_icm"],
 
                     ["4DNFIFA89L5B_8cell",
                      "4DNFIK5HY1GP_icm",
@@ -111,7 +82,7 @@ def get_triplet_dict(input_file, output_file, regex_pattern):
 
 def prepare_triplates():
     for resolution in RESOLUTIONS:
-        input_file = f"{OUTPUT_ROOT_PATH}/dataset_dict_{resolution}.txt"
+        input_file = f"{DATASET_PATH}/dataset_dict_{resolution}.txt"
         for patch in PATCHES:
             for organism, samples in DATASET.items():
                 for sample, subsamples in samples.items():

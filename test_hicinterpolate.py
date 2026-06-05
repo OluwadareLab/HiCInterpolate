@@ -1,11 +1,11 @@
 from tqdm.asyncio import tqdm
 
 from src.metric.eval_metrics import (
-    get_genome_disco,
-    get_hicrep,
-    get_lpips,
-    get_psnr,
-    get_ssim,
+    get_genome_disco_gpu,
+    get_hicrep_gpu,
+    get_lpips_gpu,
+    get_psnr_gpu,
+    get_ssim_gpu,
 )
 import os
 from statistics import mean
@@ -29,13 +29,14 @@ from src import InferenceLib
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 ROOT_PATH = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate"
-DATA_PATH = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset"
+DATA_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset"
 OUTPUT_PATH = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/test"
-OUTPUT_FILE = os.path.join(OUTPUT_PATH, "comparison_hicinterpolate.csv")
+OUTPUT_FILE = os.path.join(
+    OUTPUT_PATH, "comparison_hicinterpolate_w_log_model_w_mm_data.csv")
 
-RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [64, 128]
-BATCHES = [64, 128]
+RESOLUTIONS = [10000]
+PATCHES = [64]
+BATCHES = [64]
 CHROMOSOMES = {
     "human": ["11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "X", "Y"],
     "mouse": ["11", "12", "13", "14", "15", "16", "17", "18", "19", "X", "Y"],
@@ -43,93 +44,49 @@ CHROMOSOMES = {
 
 DATASET = {
     "human": {
-        "dtag": {
-            "v1": {
-                "triplets": [
-                    [
-                        "4DNFI5EAPQTI_dtag_v1_0m",
-                        "4DNFIY1TCVLX_dtag_v1_30m",
-                        "4DNFIXWT5U42_dtag_v1_60m",
-                    ],
-                    [
-                        "4DNFIY1TCVLX_dtag_v1_30m",
-                        "4DNFIXWT5U42_dtag_v1_60m",
-                        "4DNFIHTFIMGG_dtag_v1_90m",
-                    ],
-                    [
-                        "4DNFIXWT5U42_dtag_v1_60m",
-                        "4DNFIHTFIMGG_dtag_v1_90m",
-                        "4DNFIPZCCTV6_dtag_v1_120m",
-                    ],
+        "dmso": {
+            "control": {
+                "triplets":
+                [
+                    ["4DNFI7T93SHL_dmso_control_30m",
+                     "4DNFICF2Z2TG_dmso_control_60m",
+                     "4DNFILL624WG_dmso_control_90m"]
                 ]
             }
         },
         "hct116": {
             "2": {
-                "triplets": [
-                    [
-                        "4DNFI5IZNXIO_hct116_2_no_transcription_360m_20m",
-                        "4DNFIZK7W8GZ_hct116_2_no_transcription_360m_40m",
-                        "4DNFISRP84FE_hct116_2_no_transcription_360m_60m",
-                    ],
-                    [
-                        "4DNFII16KXA7_hct116_2_no_transcription_60m_20m",
-                        "4DNFIMIMLMD3_hct116_2_no_transcription_60m_40m",
-                        "4DNFI2LY7B73_hct116_2_no_transcription_60m_60m",
-                    ],
-                    [
-                        "4DNFITUPI4HA_hct116_2_no_atp_120m_20m",
-                        "4DNFIM7Q2FQQ_hct116_2_no_atp_120m_40m",
-                        "4DNFISATK9PF_hct116_2_no_atp_120m_60m",
-                    ],
-                    [
-                        "4DNFIVC8OQPG_hct116_2_no_atp_30m_20m",
-                        "4DNFI44JLUSL_hct116_2_no_atp_30m_40m",
-                        "4DNFIBED48O1_hct116_2_no_atp_30m_60m",
-                    ],
-                    [
-                        "4DNFIDD9IF9T_hct116_2_no_replication_20m",
-                        "4DNFIQWWATGK_hct116_2_no_replication_40m",
-                        "4DNFI3NTD7B3_hct116_2_no_replication_60m",
-                    ],
+                "triplets":
+                [
+                    ["4DNFIAAH19VM_hct116_2_20m",
+                     "4DNFI7QUSU5J_hct116_2_40m",
+                     "4DNFIXEB4UZO_hct116_2_60m"]
+                ]
+            },
+        },
+
+        "hela_s3": {
+            "r2": {
+                "triplets":
+                [
+                    ["4DNFIPZBEXCP_hela_s3_r2_150m",
+                     "4DNFIWPKRZGU_hela_s3_r2_180m",
+                     "4DNFIMD9QNDX_hela_s3_r2_210m"]
                 ]
             }
-        },
+        }
     },
     "mouse": {
         "embryo": {
             "development": {
                 "triplets": [
-                    [
-                        "4DNFIN8F14CS_sperm",
-                        "4DNFIVCJKHMN_mii_oocyte",
-                        "4DNFI1EYIGOC_zygote",
-                    ],
-                    [
-                        "4DNFIVCJKHMN_mii_oocyte",
-                        "4DNFI1EYIGOC_zygote",
-                        "4DNFIK4CECUH_early2_cell",
-                    ],
-                    [
-                        "4DNFI1EYIGOC_zygote",
-                        "4DNFIK4CECUH_early2_cell",
-                        "4DNFICXCFGEI_late2_cell",
-                    ],
-                    [
-                        "4DNFIK4CECUH_early2_cell",
-                        "4DNFICXCFGEI_late2_cell",
-                        "4DNFIFA89L5B_8cell",
-                    ],
-                    [
-                        "4DNFICXCFGEI_late2_cell",
-                        "4DNFIFA89L5B_8cell",
-                        "4DNFIK5HY1GP_icm",
-                    ],
-                    [
-                        "4DNFIFA89L5B_8cell",
-                        "4DNFIK5HY1GP_icm",
-                        "4DNFI5IAH9H1_mes_cell",
-                    ]
+                    ["4DNFIK4CECUH_early2_cell",
+                     "4DNFICXCFGEI_late2_cell",
+                     "4DNFIFA89L5B_8cell"],
+
+                    ["4DNFIFA89L5B_8cell",
+                     "4DNFIK5HY1GP_icm",
+                     "4DNFI5IAH9H1_mes_cell"]
                 ]
             }
         }
@@ -187,7 +144,8 @@ def build_result_row(metadata, metrics):
 
 
 def inference(config_filename: str, dataset_filename: str, model_path: str, batch_size: int, isDistributed: bool = False):
-    yaml_cfg = OmegaConf.load(f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate/src/inference/{config_filename}.yml")
+    yaml_cfg = OmegaConf.load(
+        f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate/src/inference/{config_filename}.yml")
     structured_cfg = OmegaConf.structured(InfConfig)
     cfg = OmegaConf.merge(structured_cfg, yaml_cfg)
 
@@ -230,11 +188,11 @@ def inference(config_filename: str, dataset_filename: str, model_path: str, batc
                 time_frame = time_frame.to(device)
                 pred = model(x1, x3, time_frame)
                 x2 = x2.to(device)
-                psnrs.append(get_psnr(pred, x2).item())
-                ssims.append(get_ssim(pred, x2).item())
-                genome_discos.append(get_genome_disco(pred, x2).item())
-                hicreps.append(get_hicrep(pred, x2).item())
-                lpips_scores.append(get_lpips(pred, x2).item())
+                psnrs.append(get_psnr_gpu(pred, x2).item())
+                ssims.append(get_ssim_gpu(pred, x2).item())
+                genome_discos.append(get_genome_disco_gpu(pred, x2).item())
+                hicreps.append(get_hicrep_gpu(pred, x2).item())
+                lpips_scores.append(get_lpips_gpu(pred, x2).item())
                 del x1, x2, x3, time_frame, pred
 
         psnr_mean = mean(psnrs)
@@ -277,12 +235,11 @@ def run_inference():
                                         print(
                                             f"[WARN] Unsupported resolution: {resolution}")
                                         continue
-                                    model_path = f"{ROOT_PATH}/datasets/output/config_a1_{res}_p{patch}_b{batch_size}/hicinterpolate_{patch}_p{patch}_b{batch_size}.pt"
+                                    model_path = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset/config_a1_{res}_p{patch}_b{batch_size}/hicinterpolate_{patch}_p{patch}_b{batch_size}.pt"
                                     if not os.path.exists(ds_dict_filename):
                                         print(
                                             f"[WARN] Missing input file: {ds_dict_filename}")
                                         continue
-
 
                                     psnr, ssim, genome_disco, hicrep, lpips = inference(
                                         config_filename="config",
@@ -300,23 +257,24 @@ def run_inference():
                                         "organism": organism,
                                         "sample": sample,
                                         "subsample": subsample,
-                                        "uuid": uuid,
                                         "frame": triplet[1],
                                         "chromosome": chromosome,
-                                        "psnr": psnr,
-                                        "ssim": ssim,
-                                        "genome_disco": genome_disco,
-                                        "hicrep": hicrep,
-                                        "lpips": lpips,
+                                        "psnr": format(psnr, ".4f"),
+                                        "ssim": format(ssim, ".4f"),
+                                        "genome_disco": format(genome_disco, ".4f"),
+                                        "hicrep": format(hicrep, ".4f"),
+                                        "lpips": format(lpips, ".4f"),
                                     }
 
                                     # Save to CSV in append mode
                                     df = pd.DataFrame([row])
                                     if first_write and not os.path.exists(OUTPUT_FILE):
-                                        df.to_csv(OUTPUT_FILE, mode="a", header=True, index=False)
+                                        df.to_csv(OUTPUT_FILE, mode="a",
+                                                  header=True, index=False)
                                         first_write = False
                                     else:
-                                        df.to_csv(OUTPUT_FILE, mode="a", header=False, index=False)
+                                        df.to_csv(OUTPUT_FILE, mode="a",
+                                                  header=False, index=False)
 
 
 if __name__ == "__main__":

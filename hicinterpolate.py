@@ -36,9 +36,11 @@ def ddp_setup():
     torch.cuda.set_device(local_rank)
     dist.init_process_group(backend="nccl")
 
+
 def collate_fn(batch):
     batch = [b for b in batch if b is not None]
     return default_collate(batch)
+
 
 def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False, isDistributed: bool = False) -> DataLoader:
     if isDistributed:
@@ -48,6 +50,8 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False, isDi
             collate_fn=collate_fn,
             pin_memory=True,
             worker_init_fn=set_seed,
+            num_workers=20,
+            persistent_workers=True,
             sampler=DistributedSampler(ds, shuffle=shuffle)
         )
     else:
@@ -57,7 +61,9 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False, isDi
             collate_fn=collate_fn,
             pin_memory=True,
             shuffle=shuffle,
-            worker_init_fn=set_seed
+            worker_init_fn=set_seed,
+            num_workers=20,
+            persistent_workers=True
         )
 
 
@@ -126,10 +132,9 @@ if __name__ == "__main__":
                         action='store_true', help='Test Model (default: False)')
     args = parser.parse_args()
 
-    # args.config = "config_a1_10k_p64_b128"
-    # args.train = False
-    # args.test = True
-    # args.distributed = False
+    # args.config = "config_a1_10k_p64_b64"
+    # args.train = True
+    # args.test = False
     main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
 
 

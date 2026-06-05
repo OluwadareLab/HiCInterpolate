@@ -47,6 +47,8 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, isDistributed: bool = False
             batch_size=batch_size,
             pin_memory=True,
             worker_init_fn=set_seed,
+            num_workers=20,
+            persistent_workers=True,
             sampler=DistributedSampler(ds, shuffle=False)
         )
     else:
@@ -55,7 +57,9 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, isDistributed: bool = False
             batch_size=batch_size,
             pin_memory=True,
             shuffle=False,
-            worker_init_fn=set_seed
+            worker_init_fn=set_seed,
+            num_workers=20,
+            persistent_workers=True
         )
 
 

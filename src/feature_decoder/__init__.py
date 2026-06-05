@@ -1,3 +1,3 @@
-from .model import Fusion
+from .model import FeatureDecoder
 
-__all__ = ["Fusion"]
+__all__ = ["FeatureDecoder"]

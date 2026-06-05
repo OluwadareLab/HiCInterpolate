@@ -8,7 +8,16 @@ from torch.nn import L1Loss, MSELoss, Module, functional as F
 from torch import Tensor
 from src.metric import eval_metrics as eval_metric
 from torchmetrics.image import StructuralSimilarityIndexMeasure
+from src.metric.hicrep_gpu import hicrepSCCGPU as hicrep_scc
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+
+class HiCRepLoss(Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred: Tensor, y: Tensor):
+        return 1-hicrep_scc(y, pred)
 
 
 class _L1Loss(Module):
@@ -219,6 +228,7 @@ class CombinedLoss(Module):
         self.symmetry_loss = SymmetryLoss().to(self.cfg.device)
         self.ssim_loss = SSIMLoss().to(self.cfg.device)
         self.flow_smoothness_loss = FlowSmoothnessLoss().to(self.cfg.device)
+        self.get_hicrep = HiCRepLoss().to(self.cfg.device)
 
     def weight_schedule(self, weight_params: tuple, epoch: int) -> float:
         for i, boundary in enumerate(weight_params["boundaries"]):
@@ -270,6 +280,10 @@ class CombinedLoss(Module):
                 tv_loss = self.tv_loss(pred)
                 tv_loss = tv_loss * weight
                 loss += tv_loss
+            elif weight_params["name"] == "hicrep":
+                hicrep_loss = self.get_hicrep(pred, y)
+                hicrep_loss = hicrep_loss * weight
+                loss += hicrep_loss
             elif weight_params["name"] == "flow_smoothness":
                 if forward_flow is None or backward_flow is None:
                     continue

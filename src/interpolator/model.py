@@ -1,73 +1,47 @@
 import os
 import sys
 import torch
-from src.feature_encoder import FeatureExtractor
-from src.flow_predictor import PyramidFlowEstimator
-from src.feature_decoder import Fusion
+import torch.nn as nn
+from src.feature_encoder import FeatureEncoder
+from src.flow_predictor import ForwardFlowPredictor, BackwardFlowPredictor
+from src.feature_decoder import FeatureDecoder
 from torch import Tensor
-from torch.nn import Module
-from src.misc import utils
+from src.flow_predictor.model import ForwardFlowPredictor
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
-class Interpolator(Module):
+class Interpolator(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.feature_ext = FeatureExtractor(self.cfg)
-        self.flow_est = PyramidFlowEstimator(self.cfg)
-        self.fusion = Fusion(self.cfg)
+        self.feature_encoder = FeatureEncoder(self.cfg)
+        self.forward_flow = ForwardFlowPredictor(self.cfg)
+        self.backward_flow = BackwardFlowPredictor(self.cfg)
+        self.feature_decoder = FeatureDecoder(self.cfg)
+
+    @staticmethod
+    def concatenate_flow_ftr(ftr_0: list[Tensor], ftr_2: list[Tensor]) -> list[Tensor]:
+        mid_ftr = []
+        for feature1, feature2 in zip(ftr_0, ftr_2):
+            mid_ftr.append(torch.cat([feature1, feature2], dim=1))
+        return mid_ftr
 
     def forward(self, x0: Tensor, x2: Tensor, time: Tensor) -> Tensor:
-        pyramid_levels = self.cfg.model.pyramid_level
-        fusion_pyramid_levels = self.cfg.model.fusion_pyramid_level
-        if pyramid_levels < fusion_pyramid_levels:
-            raise ValueError(
-                '[Error] pyramid level must be greater than or equal to fusion level')
 
-        # Create input pyramid
-        x0_decoded = x0
-        x2_decoded = x2
+        # Feature Encoder
+        ftr0_stk = self.feature_encoder(x0)
+        ftr2_stk = self.feature_encoder(x2)
 
-        pyramid0 = utils.build_image_pyramid(x0_decoded, pyramid_levels)
-        pyramid2 = utils.build_image_pyramid(x2_decoded, pyramid_levels)
-        image_pyramid = [pyramid0, pyramid2]
+        # Flow Predictor
+        forward_mid_ftr = self.forward_flow(
+            ftr0_stk, ftr2_stk, time[:, 0])
+        backward_mid_ftr = self.backward_flow(
+            ftr2_stk, ftr0_stk, time[:, 0])
 
-        # Feature extractor
-        ftr_pyramid0 = self.feature_ext(image_pyramid[0])
-        ftr_pyramid2 = self.feature_ext(image_pyramid[1])
-        feature_pyramids = [ftr_pyramid0, ftr_pyramid2]
+        # Feature Alignment
+        mid_ftr = self.concatenate_flow_ftr(forward_mid_ftr, backward_mid_ftr)
 
-        # Flow estimator
-        forward_residual_flow_pyramid = self.flow_est(
-            feature_pyramids[0], feature_pyramids[1])
-        backward_residual_flow_pyramid = self.flow_est(
-            feature_pyramids[1], feature_pyramids[0])
-
-        forward_flow_pyramid = utils.flow_pyramid_synthesis(
-            forward_residual_flow_pyramid)[:fusion_pyramid_levels]
-        backward_flow_pyramid = utils.flow_pyramid_synthesis(
-            backward_residual_flow_pyramid)[:fusion_pyramid_levels]
-
-        backward_flow = utils.multiply_pyramid(
-            backward_flow_pyramid, time[:, 0])
-        forward_flow = utils.multiply_pyramid(
-            forward_flow_pyramid, 1-time[:, 0])
-
-        pyramids_to_warp = [utils.concatenate_pyramids(image_pyramid[0][:fusion_pyramid_levels], feature_pyramids[0][:fusion_pyramid_levels]),
-                            utils.concatenate_pyramids(image_pyramid[1][:fusion_pyramid_levels], feature_pyramids[1][:fusion_pyramid_levels])]
-
-        forward_warped_pyramid = utils.pyramid_warp(
-            pyramids_to_warp[0], backward_flow)
-        backward_warped_pyramid = utils.pyramid_warp(
-            pyramids_to_warp[1], forward_flow)
-
-        aligned_pyramid = utils.concatenate_pyramids(
-            forward_warped_pyramid, backward_warped_pyramid)
-        aligned_pyramid = utils.concatenate_pyramids(
-            aligned_pyramid, backward_flow)
-        aligned_pyramid = utils.concatenate_pyramids(
-            aligned_pyramid, forward_flow)
-
-        prediction = self.fusion(aligned_pyramid)
-        return prediction
+        # Feature Decoder
+        pred = self.feature_decoder(mid_ftr)
+        return pred
