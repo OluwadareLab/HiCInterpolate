@@ -2,10 +2,9 @@ from threading import local
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-from .metric import eval_metrics as eval_metric
-from .interpolator import Interpolator
-from .misc import plots as plot
+from src.interpolator import Interpolator
+from src.misc import plots as plot
+from src.metric import metrics as eval_metric
 import torch.distributed as dist
 import torch
 import traceback
@@ -13,9 +12,6 @@ import gc
 import time
 import sys
 import os
-
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 
 class Tester:
     def __init__(self, cfg, log, model: str, test_dl: DataLoader, isDistributed: bool = False) -> None:

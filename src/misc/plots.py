@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 plt.rcParams['figure.figsize'] = (12, 6)
-plt.rcParams['figure.dpi'] = 600
+plt.rcParams['figure.dpi'] = 300
 CMAP_ = mcolors.LinearSegmentedColormap.from_list(
     "juicebox",
     [
@@ -67,7 +67,6 @@ def draw_inf_hic_map(y: np.ndarray, pred: np.ndarray, file):
 
     plt.tight_layout()
     plt.savefig(f"{file}.png", dpi=300, format='png')
-    plt.savefig(f"{file}.pdf", dpi=300, format='pdf')
     plt.close()
 
 
@@ -110,29 +109,29 @@ def draw_metric(cfg, state):
     # plt.savefig(cfg.file.psnr_val_plot, dpi=300, format='png')
     # plt.close()
 
-    # plt.figure()
-    # plt.plot(state["val_ssim"])
-    # plt.title("SSIM on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("SSIM")
-    # plt.savefig(cfg.file.ssim_val_plot, dpi=300, format='png')
-    # plt.close()
+    plt.figure()
+    plt.plot(state["val_ssim"])
+    plt.title("SSIM on validation set")
+    plt.xlabel("epoch")
+    plt.ylabel("SSIM")
+    plt.savefig(cfg.file.ssim_val_plot, dpi=300, format='png')
+    plt.close()
 
-    # plt.figure()
-    # plt.plot(state["val_genome_disco"])
-    # plt.title("GenomeDISCO on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("GenomeDISCO")
-    # plt.savefig(cfg.file.genome_disco_val_plot, dpi=300, format='png')
-    # plt.close()
+    plt.figure()
+    plt.plot(state["val_genome_disco"])
+    plt.title("GenomeDISCO on validation set")
+    plt.xlabel("epoch")
+    plt.ylabel("GenomeDISCO")
+    plt.savefig(cfg.file.genome_disco_val_plot, dpi=300, format='png')
+    plt.close()
 
-    # plt.figure()
-    # plt.plot(state["val_hicrep"])
-    # plt.title("HiCRep on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("HiCRep")
-    # plt.savefig(cfg.file.hicrep_val_plot, dpi=300, format='png')
-    # plt.close()
+    plt.figure()
+    plt.plot(state["val_hicrep"])
+    plt.title("HiCRep on validation set")
+    plt.xlabel("epoch")
+    plt.ylabel("HiCRep")
+    plt.savefig(cfg.file.hicrep_val_plot, dpi=300, format='png')
+    plt.close()
 
     # plt.figure()
     # plt.plot(state["val_lpips"])

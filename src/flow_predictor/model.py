@@ -1,13 +1,13 @@
-import torch
-import sys
 import os
+import sys
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
-class FlowEstimation(nn.Module):
+class FlowEstimationBlock(nn.Module):
     def __init__(self, feature_channels=128, max_disp=4):
         super().__init__()
         self.max_disp = max_disp
@@ -17,15 +17,16 @@ class FlowEstimation(nn.Module):
             nn.Conv2d(feature_channels, feature_channels,
                       kernel_size=3, padding=1),
             nn.BatchNorm2d(feature_channels),
-            nn.GELU(),
+            nn.LeakyReLU(),
         )
         corr_channels = (2 * max_disp + 1) ** 2
         self.process_head = nn.Sequential(
             nn.Conv2d(corr_channels, 64, kernel_size=3, padding=1),
-            nn.GELU(),
+            nn.BatchNorm2d(64),
             nn.Conv2d(64, 32, kernel_size=3, padding=1),
-            nn.GELU(),
+            nn.BatchNorm2d(32),
             nn.Conv2d(32, 2, kernel_size=3, padding=1),
+            nn.LeakyReLU(),
         )
 
     @staticmethod
@@ -39,19 +40,6 @@ class FlowEstimation(nn.Module):
             [max_disp, max_disp, max_disp, max_disp],
             mode="reflect"
         )
-
-        # if ftr2.shape[2] > max_disp and ftr2.shape[3] > max_disp:
-        #     padded_ftr2 = F.pad(
-        #         ftr2,
-        #         [max_disp, max_disp, max_disp, max_disp],
-        #         mode="reflect"
-        #     )
-        # else:
-        #     padded_ftr2 = F.pad(
-        #         ftr2,
-        #         [max_disp, max_disp, max_disp, max_disp],
-        #         mode="replicate"
-        #     )
 
         patches = F.unfold(
             padded_ftr2,
@@ -99,39 +87,32 @@ class FlowEstimation(nn.Module):
         warped_output = F.grid_sample(
             src_img,
             warp_grid,
-            mode="bilinear",
-            padding_mode="reflection",
+            mode="nearest",
+            padding_mode="zeros",
             align_corners=True,
         )
-
         return warped_output
 
 
-class ForwardFlowPredictor(nn.Module):
+class FlowPredictor(nn.Module):
     def __init__(self, cfg, feature_channels=[32, 64, 128, 256, 512], max_disp=5):
         super().__init__()
         self.cfg = cfg
-        self.proj_flow = FlowEstimation(
-            feature_channels=feature_channels[0], max_disp=max_disp)
-        self.unique_flow1 = FlowEstimation(
-            feature_channels=feature_channels[1], max_disp=max_disp)
-        self.shared_flow1 = FlowEstimation(
-            feature_channels=feature_channels[1], max_disp=max_disp)
-        self.unique_flow2 = FlowEstimation(
-            feature_channels=feature_channels[2], max_disp=max_disp-1)
-        self.shared_flow2 = FlowEstimation(
-            feature_channels=feature_channels[2], max_disp=max_disp-1)
-        self.unique_flow3 = FlowEstimation(
-            feature_channels=feature_channels[3], max_disp=max_disp-2)
-        self.shared_flow3 = FlowEstimation(
-            feature_channels=feature_channels[3], max_disp=max_disp-2)
-        self.unique_flow4 = FlowEstimation(
-            feature_channels=feature_channels[4], max_disp=max_disp-2)
-        self.shared_flow4 = FlowEstimation(
-            feature_channels=feature_channels[4], max_disp=max_disp-2)
-        self.flow_heads = [self.proj_flow, self.unique_flow1, self.shared_flow1,
-                           self.unique_flow2, self.shared_flow2, self.unique_flow3, self.shared_flow3,
-                           self.unique_flow4, self.shared_flow4]
+        self.flow_heads = nn.ModuleList([
+            FlowEstimationBlock(
+                feature_channels=feature_channels[i],
+                max_disp=self._max_disp_for_level(i, max_disp),
+            )
+            for i in range(len(feature_channels))
+        ])
+
+    @staticmethod
+    def _max_disp_for_level(level_idx: int, max_disp: int) -> int:
+        if level_idx < 2:
+            return max_disp
+        if level_idx == 2:
+            return max_disp - 1
+        return max_disp - 2
 
     def forward(self, ftr0_stk: list[torch.Tensor], ftr2_stk: list[torch.Tensor], time: torch.Tensor):
         forward_flows = []
@@ -142,36 +123,21 @@ class ForwardFlowPredictor(nn.Module):
         return forward_flows
 
 
-class BackwardFlowPredictor(nn.Module):
+class ForwardFlow(nn.Module):
     def __init__(self, cfg, feature_channels=[32, 64, 128, 256, 512], max_disp=5):
         super().__init__()
-        self.cfg = cfg
-        self.proj_flow = FlowEstimation(
-            feature_channels=feature_channels[0], max_disp=max_disp)
-        self.unique_flow1 = FlowEstimation(
-            feature_channels=feature_channels[1], max_disp=max_disp)
-        self.shared_flow1 = FlowEstimation(
-            feature_channels=feature_channels[1], max_disp=max_disp)
-        self.unique_flow2 = FlowEstimation(
-            feature_channels=feature_channels[2], max_disp=max_disp-1)
-        self.shared_flow2 = FlowEstimation(
-            feature_channels=feature_channels[2], max_disp=max_disp-1)
-        self.unique_flow3 = FlowEstimation(
-            feature_channels=feature_channels[3], max_disp=max_disp-2)
-        self.shared_flow3 = FlowEstimation(
-            feature_channels=feature_channels[3], max_disp=max_disp-2)
-        self.unique_flow4 = FlowEstimation(
-            feature_channels=feature_channels[4], max_disp=max_disp-2)
-        self.shared_flow4 = FlowEstimation(
-            feature_channels=feature_channels[4], max_disp=max_disp-2)
-        self.flow_heads = [self.proj_flow, self.unique_flow1, self.shared_flow1,
-                           self.unique_flow2, self.shared_flow2, self.unique_flow3, self.shared_flow3,
-                           self.unique_flow4, self.shared_flow4]
+        self.flow_pred = FlowPredictor(cfg, feature_channels, max_disp)
 
-    def forward(self, ftr2_stk: list[torch.Tensor], ftr0_stk: list[torch.Tensor], time: torch.Tensor):
-        backward_flows = []
-        for ftr0, ftr2, flow_head in zip(ftr0_stk, ftr2_stk, self.flow_heads):
-            warped_output = flow_head(ftr0, ftr2, time)
-            backward_flows.append(warped_output)
+    def forward(self, ftr0_stk: list[torch.Tensor], ftr2_stk: list[torch.Tensor], time: torch.Tensor):
+        forward_flows = self.flow_pred(ftr0_stk, ftr2_stk, time)
+        return forward_flows
 
+
+class BackwardFlow(nn.Module):
+    def __init__(self, cfg, feature_channels=[32, 64, 128, 256, 512], max_disp=5):
+        super().__init__()
+        self.flow_pred = FlowPredictor(cfg, feature_channels, max_disp)
+
+    def forward(self, ftr0_stk: list[torch.Tensor], ftr2_stk: list[torch.Tensor], time: torch.Tensor):
+        backward_flows = self.flow_pred(ftr0_stk, ftr2_stk, time)
         return backward_flows

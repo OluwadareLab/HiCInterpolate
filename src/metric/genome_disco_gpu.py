@@ -46,15 +46,16 @@ def compute_reproducibility_gpu(
     if tmin < 1 or tmax < tmin:
         raise ValueError("GenomeDISCO requires 1 <= tmin <= tmax")
 
+    out_dtype = m1.dtype if torch.is_floating_point(m1) else torch.float32
+    device = m1.device
+
     m1 = _as_batched_square_matrix(m1)
     m2 = _as_batched_square_matrix(m2)
     if m1.shape != m2.shape:
         raise ValueError("GenomeDISCO input shapes must match")
 
-    if not torch.is_floating_point(m1):
-        m1 = m1.float()
-    if not torch.is_floating_point(m2):
-        m2 = m2.float()
+    m1 = m1.to(dtype=torch.float64)
+    m2 = m2.to(dtype=torch.float64)
 
     m1 = m1 + m1.transpose(-1, -2)
     m2 = m2 + m2.transpose(-1, -2)
@@ -91,15 +92,4 @@ def compute_reproducibility_gpu(
     else:
         auc = _auc_unit_spacing(scores)
 
-    return (1.0 - auc).mean()
-
-
-@torch.no_grad()
-def get_genome_disco_gpu(
-    preds: Tensor,
-    target: Tensor,
-    transition: bool = True,
-    tmax: int = 3,
-    tmin: int = 3,
-) -> Tensor:
-    return compute_reproducibility_gpu(preds, target, transition, tmax=tmax, tmin=tmin)
+    return (1.0 - auc).mean().to(device=device, dtype=out_dtype)
