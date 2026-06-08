@@ -59,9 +59,15 @@ loss:
     - name: awl
       boundaries: [0]
       values: [1.0, 1.0]
+    - name: l1
+      boundaries: [0]
+      values: [1.0, 1.0]
+    - name: vgg
+      boundaries: [0]
+      values: [0.01, 0.01]
     - name: ms_ssim
       boundaries: [0]
-      values: [0.25, 0.25]
+      values: [0.75, 0.75]
     - name: tv
       boundaries: [0]
-      values: [1e-4, 1e-4]
+      values: [0.2, 0.2]

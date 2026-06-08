@@ -57,6 +57,18 @@ class GenomicSharpeningHead(nn.Module):
         return torch.clamp(F.conv2d(x_padded, self.kernel), 0, 1)
 
 
+class GenomicAffineScalingHead(nn.Module):
+    def __init__(self):
+        super(GenomicAffineScalingHead, self).__init__()
+        # Learnable scale (gamma) initialized to 1.0, and bias (beta) initialized to 0.0
+        self.gamma = nn.Parameter(torch.ones(1, 1, 1, 1))
+        self.beta = nn.Parameter(torch.zeros(1, 1, 1, 1))
+
+    def forward(self, x):
+        # Dynamically scales absolute brightness and shifts luminance
+        return (x * self.gamma) + self.beta
+
+
 class DenseGenomicRefinementBlock(nn.Module):
     def __init__(self, in_ch=16, out_ch=16):
         super(DenseGenomicRefinementBlock, self).__init__()
@@ -114,6 +126,7 @@ class Interpolator(nn.Module):
         # )
         self.projection = nn.Conv2d(16, 1, kernel_size=1)
         self.sharpening_head = GenomicSharpeningHead()
+        self.scaling_head = GenomicAffineScalingHead()
 
     @staticmethod
     def concatenate_flow_ftr(ftr_0: list[Tensor], ftr_2: list[Tensor]) -> list[Tensor]:
@@ -145,6 +158,7 @@ class Interpolator(nn.Module):
         residual = self.refinement(residual)
         residual = self.projection(residual)
         # residual = self.sharpening_head(residual)
+        residual = self.scaling_head(residual)
         # pred = residual + interpolatios[0]
 
         return residual
