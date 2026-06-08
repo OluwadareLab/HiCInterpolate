@@ -7,6 +7,13 @@ import torch.nn.functional as F
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
+def gn(channels: int, max_groups: int = 8) -> nn.GroupNorm:
+    groups = max_groups
+    while groups > 1 and channels % groups != 0:
+        groups //= 2
+    return nn.GroupNorm(groups, channels)
+
+
 class FlowEstimationBlock(nn.Module):
     def __init__(self, feature_channels=128, max_disp=4):
         super().__init__()
@@ -14,10 +21,10 @@ class FlowEstimationBlock(nn.Module):
         self.flow_estimator = nn.Sequential(
             nn.Conv2d(search_range, 64, kernel_size=3,
                       padding=1, bias=False),
-            nn.BatchNorm2d(64),
+            gn(64),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(64, 32, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(32),
+            gn(32),
             nn.LeakyReLU(0.2, inplace=True),
             # Outputs U and V flow components
             nn.Conv2d(32, 2, kernel_size=3, padding=1)

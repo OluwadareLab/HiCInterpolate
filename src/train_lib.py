@@ -2,6 +2,7 @@ from src.loss import CombinedLoss, ExponentialDecay
 from src.metric import metrics as eval_metric
 from src.misc import plots as plot
 from src.interpolator import Interpolator, model
+from src.discriminator import PatchDiscriminator, d_hinge_loss, g_hinge_loss
 from tqdm import tqdm
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -31,14 +32,30 @@ class Trainer:
 
         self.model = Interpolator(self.cfg)
 
+        # Adversarial (two-stage GAN) configuration
+        self.adv_weight = float(getattr(self.cfg.training, 'adv_weight', 0.0))
+        self.adv_start_epoch = int(
+            getattr(self.cfg.training, 'adv_start_epoch', 0))
+        self.gan_in_channels = int(
+            getattr(self.cfg.training, 'gan_in_channels', 3))
+        self.use_gan = self.adv_weight > 0.0
+        self.discriminator = PatchDiscriminator(
+            in_channels=self.gan_in_channels) if self.use_gan else None
+
         self.isDistributed = isDistributed and dist.is_available() and dist.is_initialized()
         if self.isDistributed:
             self.device = int(os.environ.get('LOCAL_RANK', 0))
             self.model = self.model.to(self.device)
             self.model = DDP(self.model, device_ids=[self.device])
+            if self.discriminator is not None:
+                self.discriminator = self.discriminator.to(self.device)
+                self.discriminator = DDP(
+                    self.discriminator, device_ids=[self.device])
         else:
             self.device = self.cfg.device
             self.model = self.model.to(self.device)
+            if self.discriminator is not None:
+                self.discriminator = self.discriminator.to(self.device)
 
         total_params = sum(p.numel() for p in self.model.parameters())
         trainable_params = sum(p.numel()
@@ -69,12 +86,35 @@ class Trainer:
             eps=1e-8
         )
         total_iterations = len(self.train_dl) * self.cfg.training.epochs
-        warmup_iterations = len(self.train_dl) * 10
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=warmup_iterations, eta_min=1e-6)
+        warmup_epochs = int(getattr(self.cfg.training, 'warmup_epochs', 5))
+        warmup_iterations = max(1, len(self.train_dl) * warmup_epochs)
+        min_lr = float(getattr(self.cfg.training, 'min_lr', 1e-6))
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+            self.optimizer, start_factor=0.1, total_iters=warmup_iterations)
+        cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer,
+            T_max=max(1, total_iterations - warmup_iterations),
+            eta_min=min_lr)
+        self.scheduler = torch.optim.lr_scheduler.SequentialLR(
+            self.optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_iterations])
+
+        self.optimizer_d = None
+        if self.discriminator is not None:
+            d_lr = float(getattr(self.cfg.training, 'd_lr', 1e-4))
+            self.optimizer_d = optim.AdamW(
+                self.discriminator.parameters(),
+                lr=d_lr,
+                betas=(0.0, 0.999),
+                weight_decay=1e-4,
+                eps=1e-8,
+            )
 
         self.epochs_run = 0
         self.train_loss_per_epoch = 0
+        self.train_d_loss_per_epoch = 0
+        self.train_loss_components = {}
         self.val_loss_per_epoch = 0
         self.val_ssim_per_epoch = 0
         self.val_genome_disco_per_epoch = 0
@@ -116,6 +156,9 @@ class Trainer:
             best_val_list = snapshot['state'].get('best_val', [])
             self.best_val = best_val_list[-1] if best_val_list else - \
                 float('inf')
+            if self.discriminator is not None and 'discriminator' in snapshot:
+                self.discriminator.load_state_dict(snapshot['discriminator'])
+                self.optimizer_d.load_state_dict(snapshot['optimizer_d'])
         else:
             snapshot = torch.load(snapshot, map_location=self.device)
             self.epochs_run = snapshot['epoch']
@@ -127,6 +170,11 @@ class Trainer:
             best_val_list = self.state.get('best_val', [])
             self.best_val = best_val_list[-1] if best_val_list else - \
                 float('inf')
+            if self.discriminator is not None and 'discriminator' in snapshot:
+                disc_state = self._remove_module_prefix(
+                    snapshot['discriminator'])
+                self.discriminator.load_state_dict(disc_state)
+                self.optimizer_d.load_state_dict(snapshot['optimizer_d'])
         self.log.info(
             f"Resuming training from snapshot at epoch {self.epochs_run}")
         print(
@@ -173,6 +221,9 @@ class Trainer:
             'scheduler': self.scheduler.state_dict(),
             'state': self.state
         }
+        if self.discriminator is not None:
+            snapshot['discriminator'] = self.discriminator.state_dict()
+            snapshot['optimizer_d'] = self.optimizer_d.state_dict()
         return snapshot
 
     def _save_snapshot(self, epoch: int):
@@ -222,9 +273,18 @@ class Trainer:
         plot.draw_metric(self.cfg, self.state)
 
     def _format_scores(self, max_epochs: int):
+        adv_active = self.use_gan and (self.epochs_run >= self.adv_start_epoch)
+        d_str = f"D Loss: {self.train_d_loss_per_epoch:.4f}; " if adv_active else ""
+        comp_str = ""
+        if self.train_loss_components:
+            terms = ", ".join(
+                f"{k}: {v:.4f}" for k, v in self.train_loss_components.items())
+            comp_str = f"Loss Terms ({terms}); "
         return (
             f"[{(self.epochs_run+1)}/{max_epochs}] LR: {self.optimizer.param_groups[0]['lr']:.6f}; "
             f"Batch Size: {self.batch_size}; Train Loss: {self.train_loss_per_epoch:.4f}; "
+            f"{d_str}"
+            f"{comp_str}"
             f"Val (Loss: {self.val_loss_per_epoch:.4f}, SSIM: {self.val_ssim_per_epoch:.4f}, "
             f"GenomeDISCO: {self.val_genome_disco_per_epoch:.4f}, HiCRep: {self.val_hicrep_per_epoch:.4f}, "
             f"Score: {self.val_score_per_epoch:.4f});"
@@ -233,6 +293,7 @@ class Trainer:
     def _run_epoch(self, epoch):
         self.epochs_run = epoch
         self.train_loss_per_epoch = 0
+        self.train_d_loss_per_epoch = 0
         self.val_loss_per_epoch = 0
         self.val_ssim_per_epoch = 0
         self.val_genome_disco_per_epoch = 0
@@ -245,19 +306,52 @@ class Trainer:
 
         local_train_loss = torch.tensor(0.0, device=self.device)
         local_train_samples = torch.tensor(0.0, device=self.device)
+        local_train_d_loss = torch.tensor(0.0, device=self.device)
+        local_loss_components = {}
+
+        adv_active = self.use_gan and (
+            self.epochs_run >= self.adv_start_epoch)
+        if self.discriminator is not None:
+            self.discriminator.train()
 
         for step, (x0, y, x1, time_frame) in enumerate(tqdm(self.train_dl)):
             x0 = x0.to(self.device)
             y = y.to(self.device)
             x1 = x1.to(self.device)
             time_frame = time_frame.to(self.device)
-            self.optimizer.zero_grad()
 
             batch_size = y.size(0)
             pred = self.model(x0, x1, time_frame)
-            train_loss = self.loss_fn(pred, y, self.epochs_run)
 
-            train_loss.backward()
+            # ---- Discriminator step (Stage B only) ----
+            if adv_active:
+                self.optimizer_d.zero_grad()
+                real_in = torch.cat([x0, y, x1], dim=1)
+                fake_in = torch.cat([x0, pred.detach(), x1], dim=1)
+                real_logits = self.discriminator(real_in)
+                fake_logits = self.discriminator(fake_in)
+                d_loss = d_hinge_loss(real_logits, fake_logits)
+                d_loss.backward()
+                torch.nn.utils.clip_grad_norm_(
+                    self.discriminator.parameters(), max_norm=1.0)
+                self.optimizer_d.step()
+                local_train_d_loss += d_loss.detach() * batch_size
+
+            # ---- Generator step ----
+            self.optimizer.zero_grad()
+            train_loss, loss_components = self.loss_fn(
+                pred, y, self.epochs_run, return_components=True)
+            for k, v in loss_components.items():
+                local_loss_components[k] = local_loss_components.get(
+                    k, 0.0) + v * batch_size
+            g_total = train_loss
+            if adv_active:
+                g_fake_logits = self.discriminator(
+                    torch.cat([x0, pred, x1], dim=1))
+                g_total = train_loss + self.adv_weight * \
+                    g_hinge_loss(g_fake_logits)
+
+            g_total.backward()
             torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
@@ -289,9 +383,11 @@ class Trainer:
 
                 local_val_loss += val_loss.detach() * batch_size
 
-                ssim_val = eval_metric.get_ssim_gpu(pred, y)
-                genome_disco_val = eval_metric.get_genome_disco_gpu(pred, y)
-                hicrep_val = eval_metric.get_hicrep_gpu(pred, y)
+                # Metrics/visuals need bounded [0,1] values; the model output is unbounded
+                pred_eval = pred.clamp(0.0, 1.0)
+                ssim_val = eval_metric.get_ssim_gpu(pred_eval, y)
+                genome_disco_val = eval_metric.get_genome_disco_gpu(pred_eval, y)
+                hicrep_val = eval_metric.get_hicrep_gpu(pred_eval, y)
 
                 local_val_ssim += ssim_val * batch_size
                 local_val_genome_disco += genome_disco_val * batch_size
@@ -302,7 +398,7 @@ class Trainer:
                     self.best_plot_batch = (
                         x0[:2].detach().cpu(),
                         y[:2].detach().cpu(),
-                        pred[:2].detach().cpu(),
+                        pred_eval[:2].detach().cpu(),
                         x1[:2].detach().cpu(),
                     )
 
@@ -317,8 +413,18 @@ class Trainer:
                 local_val_ssim,
                 local_val_genome_disco,
                 local_val_hicrep,
+                local_train_d_loss,
             ):
                 dist.all_reduce(value, op=dist.ReduceOp.SUM)
+
+        self.train_d_loss_per_epoch = self._safe_average(
+            local_train_d_loss.item(), local_train_samples.item())
+
+        n_samples = local_train_samples.item()
+        self.train_loss_components = {
+            k: self._safe_average(v, n_samples)
+            for k, v in local_loss_components.items()
+        }
 
         self._update_metrics(
             self.epochs_run,

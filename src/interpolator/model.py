@@ -11,25 +11,32 @@ import torch.nn.functional as F
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
+def gn(channels: int, max_groups: int = 8) -> nn.GroupNorm:
+    groups = max_groups
+    while groups > 1 and channels % groups != 0:
+        groups //= 2
+    return nn.GroupNorm(groups, channels)
+
+
 class FeatureExtractionBlock(nn.Module):
     def __init__(self, in_channels, feature_channels):
         super().__init__()
         self.branch_pixel = nn.Sequential(
             nn.Conv2d(in_channels, feature_channels, kernel_size=1, padding=0),
-            nn.BatchNorm2d(feature_channels),
+            gn(feature_channels),
             nn.ReLU(inplace=True)
         )
 
         self.branch_medium = nn.Sequential(
             nn.Conv2d(in_channels, feature_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(feature_channels),
+            gn(feature_channels),
             nn.ReLU(inplace=True)
         )
 
         self.branch_macro = nn.Sequential(
             nn.Conv2d(in_channels, feature_channels,
                       kernel_size=3, padding=3, dilation=3),
-            nn.BatchNorm2d(feature_channels),
+            gn(feature_channels),
             nn.ReLU(inplace=True)
         )
 
@@ -41,20 +48,21 @@ class FeatureExtractionBlock(nn.Module):
         return out
 
 
-class GenomicSharpeningHead(nn.Module):
-    def __init__(self):
+class LearnableUnsharpMask(nn.Module):
+    """Differentiable unsharp mask: out = x + amount * (x - blur(x))."""
+
+    def __init__(self, init_amount: float = 1.0):
         super().__init__()
-        # 2.D Laplacian Kernel to highlight structural insulation edges
-        kernel = torch.tensor([[0, -1,  0],
-                               [-1,  10, -1],
-                               [0, -1,  0]], dtype=torch.float32)
-        self.register_buffer('kernel', kernel.view(1, 1, 3, 3))
+        g = torch.tensor([1.0, 4.0, 6.0, 4.0, 1.0])
+        kernel = torch.outer(g, g)
+        kernel = kernel / kernel.sum()
+        self.register_buffer('kernel', kernel.view(1, 1, 5, 5))
+        self.amount = nn.Parameter(torch.tensor(float(init_amount)))
 
     def forward(self, x):
-        # x shape: [B, 1, 64, 64]
-        # Pad edges symmetrically to preserve matrix boundary structures
-        x_padded = F.pad(x, (1, 1, 1, 1), mode='replicate')
-        return torch.clamp(F.conv2d(x_padded, self.kernel), 0, 1)
+        x_padded = F.pad(x, (2, 2, 2, 2), mode='replicate')
+        blur = F.conv2d(x_padded, self.kernel)
+        return x + self.amount * (x - blur)
 
 
 class DenseGenomicRefinementBlock(nn.Module):
@@ -69,6 +77,7 @@ class DenseGenomicRefinementBlock(nn.Module):
             in_ch, out_ch, kernel_size=3, padding=3, dilation=3)
 
         self.fusion = nn.Conv2d(out_ch * 3, out_ch, kernel_size=1)
+        self.norm = gn(out_ch)
         self.leaky_relu = nn.LeakyReLU(0.2, inplace=True)
 
     def forward(self, x):
@@ -77,7 +86,7 @@ class DenseGenomicRefinementBlock(nn.Module):
         b3 = self.branch3(x)
         # Concatenate and compress features
         fused = torch.cat([b1, b2, b3], dim=1)
-        return self.leaky_relu(self.fusion(fused))
+        return self.leaky_relu(self.norm(self.fusion(fused)))
 
 
 class Interpolator(nn.Module):
@@ -113,7 +122,15 @@ class Interpolator(nn.Module):
         #     nn.LeakyReLU(0.2, inplace=True)
         # )
         self.projection = nn.Conv2d(16, 1, kernel_size=1)
-        self.sharpening_head = GenomicSharpeningHead()
+        self.sharpening_head = LearnableUnsharpMask(init_amount=1.0)
+        # Learnable photometric gain/bias to correct low brightness/contrast
+        self.out_gain = nn.Parameter(torch.tensor(1.0))
+        self.out_bias = nn.Parameter(torch.tensor(0.0))
+        # Learnable blend between smooth warp base and decoder synthesis.
+        # base_weight via sigmoid (init 0 -> 0.5); res_scale lets the decoder
+        # residual override the blurred motion-compensated average.
+        self.base_weight = nn.Parameter(torch.tensor(0.0))
+        self.res_scale = nn.Parameter(torch.tensor(1.0))
 
     @staticmethod
     def concatenate_flow_ftr(ftr_0: list[Tensor], ftr_2: list[Tensor]) -> list[Tensor]:
@@ -144,7 +161,22 @@ class Interpolator(nn.Module):
             ftrs0, ftrs2, interpolatios, warped0, warped2)
         residual = self.refinement(residual)
         residual = self.projection(residual)
-        # residual = self.sharpening_head(residual)
-        # pred = residual + interpolatios[0]
 
-        return residual
+        # Motion-compensated base: blend of warped raw frames (top level, 1ch)
+        base = 0.5 * (warped0[0] + warped2[0])
+        # Learnable blend so the decoder can override the smooth base
+        base_w = torch.sigmoid(self.base_weight)
+        pred = base_w * base + self.res_scale * residual
+
+        # Differentiable sharpening to recover crisp edges/texture
+        pred = self.sharpening_head(pred)
+
+        # Learnable photometric correction for brightness/contrast
+        pred = self.out_gain * pred + self.out_bias
+
+        # Hi-C contact matrices are symmetric
+        pred = 0.5 * (pred + pred.transpose(-1, -2))
+
+        # Output left unbounded: log1p+minmax target is in [0, 1] but supervising
+        # on raw values keeps gradients alive everywhere. Clamp only at metrics/save.
+        return pred

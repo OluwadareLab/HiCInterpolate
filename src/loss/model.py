@@ -121,6 +121,80 @@ class AdaptiveWingLoss2D(nn.Module):
         return loss.mean()
 
 
+class FocalFrequencyLoss(nn.Module):
+    """Recovers high-frequency texture by matching 2D FFT spectra,
+    focusing on the hardest-to-synthesize frequencies."""
+
+    def __init__(self, alpha: float = 1.0, eps: float = 1e-8):
+        super().__init__()
+        self.alpha = alpha
+        self.eps = eps
+
+    def forward(self, pred: Tensor, target: Tensor):
+        pred_f = torch.fft.fft2(pred, norm="ortho")
+        target_f = torch.fft.fft2(target, norm="ortho")
+        diff = pred_f - target_f
+        # Squared spectral distance per frequency
+        dist = diff.real ** 2 + diff.imag ** 2
+        # Focal weight: emphasize frequencies with large error (detached)
+        weight = dist.detach() ** self.alpha
+        weight = weight / (weight.amax(dim=(-2, -1), keepdim=True) + self.eps)
+        return (weight * dist).mean()
+
+
+class StratumCorrelationLoss(nn.Module):
+    """Per-diagonal (stratum) Pearson correlation loss. Directly targets
+    HiCRep/GenomeDISCO and protects distal off-diagonal signal."""
+
+    def __init__(self, max_offset: int = None, eps: float = 1e-8):
+        super().__init__()
+        self.max_offset = max_offset
+        self.eps = eps
+
+    def forward(self, pred: Tensor, target: Tensor):
+        if pred.dim() == 4 and pred.size(1) == 1:
+            pred = pred.squeeze(1)
+            target = target.squeeze(1)
+        n = pred.shape[-1]
+        max_off = self.max_offset if self.max_offset is not None else n - 1
+
+        total = pred.new_zeros(())
+        weight_sum = pred.new_zeros(())
+        for d in range(max_off):
+            pd = torch.diagonal(pred, offset=d, dim1=-2, dim2=-1)
+            td = torch.diagonal(target, offset=d, dim1=-2, dim2=-1)
+            if pd.shape[-1] < 2:
+                break
+            pm = pd.mean(dim=-1, keepdim=True)
+            tm = td.mean(dim=-1, keepdim=True)
+            pc = pd - pm
+            tc = td - tm
+            cov = (pc * tc).sum(dim=-1)
+            denom = torch.sqrt((pc ** 2).sum(dim=-1) *
+                               (tc ** 2).sum(dim=-1) + self.eps)
+            corr = cov / (denom + self.eps)
+            # Up-weight distal strata so long-range signal is not smoothed away
+            w = 1.0 + d / n
+            total = total + w * (1.0 - corr).mean()
+            weight_sum = weight_sum + w
+        return total / (weight_sum + self.eps)
+
+
+class GradientMatchingLoss(nn.Module):
+    """L1 match of horizontal/vertical finite-difference gradients to
+    sharpen TAD walls and edges."""
+
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pred: Tensor, target: Tensor):
+        p_dx = pred[:, :, :, 1:] - pred[:, :, :, :-1]
+        t_dx = target[:, :, :, 1:] - target[:, :, :, :-1]
+        p_dy = pred[:, :, 1:, :] - pred[:, :, :-1, :]
+        t_dy = target[:, :, 1:, :] - target[:, :, :-1, :]
+        return F.l1_loss(p_dx, t_dx) + F.l1_loss(p_dy, t_dy)
+
+
 class TVLoss(nn.Module):
     def __init__(self):
         super(TVLoss, self).__init__()
@@ -269,6 +343,10 @@ class CombinedLoss(nn.Module):
         self.mse_loss = nn.MSELoss().to(cfg.device)
         self.tv_loss = TVLoss().to(cfg.device)
         self.symmetry_loss = SymmetryLoss().to(cfg.device)
+        self.charbonnier_loss = CharbonnierLoss().to(cfg.device)
+        self.ffl_loss = FocalFrequencyLoss().to(cfg.device)
+        self.stratum_loss = StratumCorrelationLoss().to(cfg.device)
+        self.grad_loss = GradientMatchingLoss().to(cfg.device)
         self.ssim_loss = StructuralSimilarityIndexMeasure(
             data_range=1.0).to(cfg.device)
         self.ms_ssim_loss = MultiScaleStructuralSimilarityIndexMeasure(
@@ -332,40 +410,55 @@ class CombinedLoss(nn.Module):
         corr = cov / (torch.sqrt(var_x * var_y) + 1e-12)
         return corr.mean()
 
-    def forward(self, pred: Tensor, y: Tensor, epoch: int):
+    def forward(self, pred: Tensor, y: Tensor, epoch: int, return_components: bool = False):
         loss = pred.new_zeros(())
+        components = {}
 
         for weight_params in self.cfg.loss.weight_parameters:
+            name = weight_params["name"]
             weight = self.weight_schedule(
                 weight_params=weight_params, epoch=epoch)
 
             if weight <= 0.0:
                 continue
-            if weight_params["name"] == "l1":
-                loss = loss + weight * self.l1_loss(pred, y)
-            elif weight_params["name"] == "mse":
-                loss = loss + weight * self.mse_loss(pred, y)
-            elif weight_params["name"] == "ssim":
-                loss = loss + weight * (1.0 - self.ssim_loss(pred, y))
-            elif weight_params["name"] == "vgg":
-                loss = loss + weight * \
-                    self.vgg_loss(self._to_3ch(pred), self._to_3ch(y))
-            elif weight_params["name"] == "style":
-                loss = loss + weight * \
-                    self.style_loss(self._to_3ch(pred), self._to_3ch(y))
-            elif weight_params["name"] == "tv":
-                loss = loss + weight * self.tv_loss(pred)
-            elif weight_params["name"] == "symmetry":
-                loss = loss + weight * self.symmetry_loss(pred)
-            elif weight_params["name"] == "ms_ssim":
-                loss = loss + weight * (1.0 - self.ms_ssim_loss(pred, y))
-            elif weight_params["name"] == "dwpc":
-                loss = loss + weight * (1.0 - self.dwpc_loss(pred, y))
-            elif weight_params["name"] == "ds":
-                loss = loss + weight * self.dense_sparse_loss(pred, y)
-            elif weight_params["name"] == "awl":
-                loss = loss + weight * self.aw_loss(pred, y)
+            if name == "l1":
+                term = self.l1_loss(pred, y)
+            elif name == "mse":
+                term = self.mse_loss(pred, y)
+            elif name == "ssim":
+                term = 1.0 - self.ssim_loss(pred, y)
+            elif name == "vgg":
+                term = self.vgg_loss(self._to_3ch(pred), self._to_3ch(y))
+            elif name == "style":
+                term = self.style_loss(self._to_3ch(pred), self._to_3ch(y))
+            elif name == "tv":
+                term = self.tv_loss(pred)
+            elif name == "symmetry":
+                term = self.symmetry_loss(pred)
+            elif name == "ms_ssim":
+                term = 1.0 - self.ms_ssim_loss(pred, y)
+            elif name == "dwpc":
+                term = 1.0 - self.dwpc_loss(pred, y)
+            elif name == "ds":
+                term = self.dense_sparse_loss(pred, y)
+            elif name == "awl":
+                term = self.aw_loss(pred, y)
+            elif name == "charbonnier":
+                term = self.charbonnier_loss(pred, y)
+            elif name == "ffl":
+                term = self.ffl_loss(pred, y)
+            elif name == "stratum":
+                term = self.stratum_loss(pred, y)
+            elif name == "grad":
+                term = self.grad_loss(pred, y)
             else:
-                raise ValueError(f"Invalid loss name: {weight_params['name']}")
+                raise ValueError(f"Invalid loss name: {name}")
 
+            contribution = weight * term
+            loss = loss + contribution
+            components[name] = float(contribution.detach()) if torch.is_tensor(
+                contribution) else float(contribution)
+
+        if return_components:
+            return loss, components
         return loss

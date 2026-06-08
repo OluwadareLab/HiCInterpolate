@@ -4,6 +4,13 @@ import torch.nn as nn
 from torch import Tensor
 
 
+def gn(channels: int, max_groups: int = 8) -> nn.GroupNorm:
+    groups = max_groups
+    while groups > 1 and channels % groups != 0:
+        groups //= 2
+    return nn.GroupNorm(groups, channels)
+
+
 class EncoderBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, use_maxpool: bool = True):
         super().__init__()
@@ -12,7 +19,7 @@ class EncoderBlock(nn.Module):
         self.fine_path = nn.Sequential(
             nn.Conv2d(in_channels, hidden_ch,
                       kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(hidden_ch),
+            gn(hidden_ch),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
@@ -20,7 +27,7 @@ class EncoderBlock(nn.Module):
             # Using dilation=2 on a 3x3 kernel gives a 5x5 field without the heavy blur
             nn.Conv2d(in_channels, hidden_ch, kernel_size=3,
                       padding=2, dilation=2, bias=False),
-            nn.BatchNorm2d(hidden_ch),
+            gn(hidden_ch),
             nn.LeakyReLU(0.2, inplace=True)
         )
 

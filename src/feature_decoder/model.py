@@ -5,6 +5,13 @@ from torch import Tensor
 import torch.nn.functional as F
 
 
+def gn(channels: int, max_groups: int = 8) -> nn.GroupNorm:
+    groups = max_groups
+    while groups > 1 and channels % groups != 0:
+        groups //= 2
+    return nn.GroupNorm(groups, channels)
+
+
 class SkipFusion(nn.Module):
     def __init__(self, channels):
         super().__init__()
@@ -17,7 +24,7 @@ class SkipFusion(nn.Module):
         # Refinement trunk to process the gated output back to target channel width
         self.refine = nn.Sequential(
             nn.Conv2d(channels, channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(channels),
+            gn(channels),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
@@ -79,7 +86,7 @@ class DecoderBlock(nn.Module):
         self.fine_refinement = nn.Sequential(
             nn.Conv2d(out_channels, mid_channels,
                       kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_channels),
+            gn(mid_channels),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
@@ -87,7 +94,7 @@ class DecoderBlock(nn.Module):
         self.structural_refinement = nn.Sequential(
             nn.Conv2d(out_channels, mid_channels, kernel_size=3,
                       padding=2, dilation=2, bias=False),
-            nn.BatchNorm2d(mid_channels),
+            gn(mid_channels),
             nn.LeakyReLU(0.2, inplace=True)
         )
 

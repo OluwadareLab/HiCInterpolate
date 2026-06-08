@@ -74,6 +74,8 @@ class Tester:
                 x1 = x1.to(self.device)
                 time_frame = time_frame.to(self.device)
                 pred = self.model(x0, x1, time_frame)
+                # Model output is unbounded; metrics/visuals require [0,1]
+                pred = pred.clamp(0.0, 1.0)
 
                 psnr_val = eval_metric.get_psnr_gpu(pred, y)
                 ssim_val = eval_metric.get_ssim_gpu(pred, y)

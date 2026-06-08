@@ -46,6 +46,11 @@ class TrainingConfig:
     decay_steps: int
     decay_rate: float
     lr_staircase: bool
+    warmup_epochs: int = 5
+    adv_weight: float = 0.0
+    adv_start_epoch: int = 0
+    d_lr: float = 1e-4
+    gan_in_channels: int = 3
 
 
 @dataclass

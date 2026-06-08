@@ -41,6 +41,11 @@ training:
   decay_steps: 100
   decay_rate: 0.215
   lr_staircase: true
+  warmup_epochs: 5
+  adv_weight: 0.05
+  adv_start_epoch: 30
+  d_lr: 1e-4
+  gan_in_channels: 3
 
 model:
   name: hicinterpolate_${data.patch}
@@ -56,12 +61,30 @@ model:
 
 loss:
   weight_parameters:
-    - name: awl
-      boundaries: [0]
-      values: [1.0, 1.0]
+    - name: charbonnier
+      boundaries: [30]
+      values: [0.5, 0.5]
+    - name: mse
+      boundaries: [30]
+      values: [0.05, 0.05]
     - name: ms_ssim
-      boundaries: [0]
-      values: [0.25, 0.25]
+      boundaries: [30]
+      values: [1.0, 1.0]
+    - name: ffl
+      boundaries: [30]
+      values: [0.5, 0.5]
+    - name: stratum
+      boundaries: [30]
+      values: [1.0, 1.0]
+    - name: grad
+      boundaries: [30]
+      values: [0.5, 0.5]
+    - name: vgg
+      boundaries: [30]
+      values: [0.05, 0.1]
+    - name: symmetry
+      boundaries: [30]
+      values: [0.5, 0.5]
     - name: tv
-      boundaries: [0]
-      values: [1e-4, 1e-4]
+      boundaries: [30]
+      values: [0.01, 0.01]
