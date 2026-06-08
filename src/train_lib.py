@@ -1,7 +1,7 @@
 from src.loss import CombinedLoss, ExponentialDecay
 from src.metric import metrics as eval_metric
 from src.misc import plots as plot
-from src.interpolator import Interpolator
+from src.interpolator import Interpolator, model
 from tqdm import tqdm
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -48,8 +48,8 @@ class Trainer:
         self.log.info(log_txt)
 
         self.loss_fn = CombinedLoss(self.cfg)
-        self.optimizer = optim.Adam(self.model.parameters(),
-                                    lr=self.cfg.training.lr)
+        # self.optimizer = optim.Adam(self.model.parameters(),
+        #                             lr=self.cfg.training.lr)
 
         # decay_rate = (self.cfg.training.min_lr / self.cfg.training.lr) ** (1 /
         #                                                                    (self.cfg.training.epochs // self.cfg.training.decay_steps))
@@ -58,8 +58,18 @@ class Trainer:
         # self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
         #                                   decay_rate=decay_rate, staircase=self.cfg.training.lr_staircase)
 
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='max', factor=0.5, patience=10)
+        # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        #     self.optimizer, mode='max', factor=0.5, patience=10)
+
+        self.optimizer = optim.AdamW(
+            self.model.parameters(),
+            lr=self.cfg.training.lr,              # Peak learning rate baseline
+            betas=(0.9, 0.999),    # Standard momentum coefficients
+            weight_decay=1e-4,    # Decoupled L2 regularization to prevent overfitting
+            eps=1e-8
+        )
+        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer, T_max=self.cfg.training.epochs - 10, eta_min=1e-6)
 
         self.epochs_run = 0
         self.train_loss_per_epoch = 0
@@ -246,7 +256,10 @@ class Trainer:
             train_loss = self.loss_fn(pred, y, self.epochs_run)
 
             train_loss.backward()
+            torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
+            self.scheduler.step()
 
             local_train_loss += train_loss.detach() * batch_size
             local_train_samples += batch_size
@@ -315,7 +328,6 @@ class Trainer:
             local_val_genome_disco.item(),
             local_val_hicrep.item(),
         )
-        self.scheduler.step(self.val_score_per_epoch)
 
     def train(self, max_epochs: int):
         self.log.info(f"==== Training Started ({self.device}) ====")

@@ -10,23 +10,22 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 class FlowEstimationBlock(nn.Module):
     def __init__(self, feature_channels=128, max_disp=4):
         super().__init__()
-        self.max_disp = max_disp
-        self.search_range = 2 * max_disp + 1
-        self.out_channels = self.search_range**2
-        self.ftr_ext = nn.Sequential(
-            nn.Conv2d(feature_channels, feature_channels,
-                      kernel_size=3, padding=1),
-            nn.BatchNorm2d(feature_channels),
-            nn.LeakyReLU(),
-        )
-        corr_channels = (2 * max_disp + 1) ** 2
-        self.process_head = nn.Sequential(
-            nn.Conv2d(corr_channels, 64, kernel_size=3, padding=1),
+        search_range = (2 * max_disp + 1)**2
+        self.flow_estimator = nn.Sequential(
+            nn.Conv2d(search_range, 64, kernel_size=3,
+                      padding=1, bias=False),
             nn.BatchNorm2d(64),
-            nn.Conv2d(64, 32, kernel_size=3, padding=1),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 32, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(32),
-            nn.Conv2d(32, 2, kernel_size=3, padding=1),
-            nn.LeakyReLU(),
+            nn.LeakyReLU(0.2, inplace=True),
+            # Outputs U and V flow components
+            nn.Conv2d(32, 2, kernel_size=3, padding=1)
+        )
+
+        self.mask_estimator = nn.Sequential(
+            nn.Conv2d(feature_channels * 2, 1, kernel_size=3, padding=1),
+            nn.Sigmoid()
         )
 
     @staticmethod
@@ -75,36 +74,44 @@ class FlowEstimationBlock(nn.Module):
 
         return transformation_grid
 
-    def forward(self, src_img, tgt_img, time):
-        src_ftr = self.ftr_ext(src_img)
-        tgt_ftr = self.ftr_ext(tgt_img)
-        corr_map = self.cost_volume_estimator(
-            src_ftr, tgt_ftr, self.max_disp, self.search_range, self.out_channels)
-        flow_field = self.process_head(corr_map)
-        timed_flow_field = flow_field * time.view(-1, 1, 1, 1)
-        warp_grid = self.flow_to_warp_grid(
-            timed_flow_field, align_corners=True)
-        warped_output = F.grid_sample(
-            src_img,
-            warp_grid,
-            mode="nearest",
-            padding_mode="zeros",
-            align_corners=True,
-        )
-        return warped_output
+    def forward(self, ftr0, ftr1, x0, x1):
+        cve = self.cost_volume_estimator(
+            ftr0, ftr1, max_disp=4, search_range=9, out_channels=81)
+        flow_0_to_1 = self.flow_estimator(cve)
+
+        flow_f0_t05 = flow_0_to_1 * 0.5
+        flow_f1_t05 = -flow_0_to_1 * 0.5
+
+        grid_0 = self.flow_to_warp_grid(
+            flow_f0_t05, align_corners=True)
+        grid_1 = self.flow_to_warp_grid(
+            flow_f1_t05, align_corners=True)
+
+        warped_x0 = F.grid_sample(
+            x0, grid_0, mode="bilinear", padding_mode="zeros", align_corners=True)
+        warped_x1 = F.grid_sample(
+            x1, grid_1, mode="bilinear", padding_mode="zeros", align_corners=True)
+
+        mask = self.mask_estimator(torch.cat([ftr0, ftr1], dim=1))
+        interpolated_ftr = mask * warped_x0 + (1 - mask) * warped_x1
+        return interpolated_ftr, warped_x0, warped_x1
 
 
 class FlowPredictor(nn.Module):
-    def __init__(self, cfg, feature_channels=[32, 64, 128, 256, 512], max_disp=5):
+    def __init__(self, cfg, feature_channels=[32, 64, 128, 256], max_disp=4):
         super().__init__()
         self.cfg = cfg
         self.flow_heads = nn.ModuleList([
             FlowEstimationBlock(
                 feature_channels=feature_channels[i],
-                max_disp=self._max_disp_for_level(i, max_disp),
+                max_disp=max_disp,
             )
             for i in range(len(feature_channels))
         ])
+        self.compress_L2 = nn.Conv2d(128 + 256, 128, kernel_size=1)
+        self.compress_L1 = nn.Conv2d(64 + 128, 64, kernel_size=1)
+        self.compress_L0 = nn.Conv2d(1 + 64, 32, kernel_size=1)
+        # self.compress_L0 = nn.Conv2d(1 + 32, 1, kernel_size=1)
 
     @staticmethod
     def _max_disp_for_level(level_idx: int, max_disp: int) -> int:
@@ -114,30 +121,79 @@ class FlowPredictor(nn.Module):
             return max_disp - 1
         return max_disp - 2
 
-    def forward(self, ftr0_stk: list[torch.Tensor], ftr2_stk: list[torch.Tensor], time: torch.Tensor):
-        forward_flows = []
-        for ftr0, ftr2, flow_head in zip(ftr0_stk, ftr2_stk, self.flow_heads):
-            warped_output = flow_head(ftr0, ftr2, time)
-            forward_flows.append(warped_output)
+    def forward(self, ftrs0: list[torch.Tensor], ftrs2: list[torch.Tensor], raw_x0: torch.Tensor, raw_x2: torch.Tensor):
+        interp_features_out = []
+        warps_x0_out = []
+        warps_x2_out = []
 
-        return forward_flows
+        levels = len(self.flow_heads)  # e.g., 4 levels
 
+        # ----------------------------------------------------------------
+        # STEP 1: START AT THE BOTTLENECK (Level 4 / Index 3)
+        # ----------------------------------------------------------------
+        # Resolution: H/8 x W/8, Channels: 256
+        interp_ftr, w_x0, w_x2 = self.flow_heads[-1](
+            ftrs0[-1], ftrs2[-1], ftrs0[-1], ftrs2[-1]
+        )
 
-class ForwardFlow(nn.Module):
-    def __init__(self, cfg, feature_channels=[32, 64, 128, 256, 512], max_disp=5):
-        super().__init__()
-        self.flow_pred = FlowPredictor(cfg, feature_channels, max_disp)
+        # Store Level 4 states
+        interp_features_out.append(interp_ftr)
+        warps_x0_out.append(w_x0)
+        warps_x2_out.append(w_x2)
 
-    def forward(self, ftr0_stk: list[torch.Tensor], ftr2_stk: list[torch.Tensor], time: torch.Tensor):
-        forward_flows = self.flow_pred(ftr0_stk, ftr2_stk, time)
-        return forward_flows
+        # Define our running feature that travels up the network
+        running_context_feature = interp_ftr  # Base: [B, 256, H/8, W/8]
 
+        # ----------------------------------------------------------------
+        # STEP 2: LOOP UPWARD THROUGH INTERMEDIATE PYRAMIDS (Levels 3 & 2)
+        # ----------------------------------------------------------------
+        # Corrected step to -1 to move backward cleanly: Index 2 down to Index 1
+        for level in range(levels - 2, 0, -1):
+            # 1. Upsample the running structural context map from below
+            upsampled_context = F.interpolate(
+                running_context_feature, scale_factor=2, mode="bilinear", align_corners=True
+            )
 
-class BackwardFlow(nn.Module):
-    def __init__(self, cfg, feature_channels=[32, 64, 128, 256, 512], max_disp=5):
-        super().__init__()
-        self.flow_pred = FlowPredictor(cfg, feature_channels, max_disp)
+            # 2. Calculate native high-res flow features for current level
+            native_interp, w_x0, w_x2 = self.flow_heads[level](
+                ftrs0[level], ftrs2[level], ftrs0[level], ftrs2[level]
+            )
 
-    def forward(self, ftr0_stk: list[torch.Tensor], ftr2_stk: list[torch.Tensor], time: torch.Tensor):
-        backward_flows = self.flow_pred(ftr0_stk, ftr2_stk, time)
-        return backward_flows
+            # 3. Concatenate and IMMEDIATELY compress to avoid a heavy model
+            fused_ftr = torch.cat([native_interp, upsampled_context], dim=1)
+            if level == 2:
+                running_context_feature = self.compress_L2(fused_ftr)
+            elif level == 1:
+                running_context_feature = self.compress_L1(fused_ftr)
+            # elif level == 1:
+            #     running_context_feature = self.compress_L1(fused_ftr)
+
+            # 4. Track outputs for corresponding decoder stages
+            interp_features_out.append(running_context_feature)
+            warps_x0_out.append(w_x0)
+            warps_x2_out.append(w_x2)
+
+        # ----------------------------------------------------------------
+        # STEP 3: TOP-LEVEL FINALIZATION (Level 1 / Index 0)
+        # ----------------------------------------------------------------
+        # Resolution: H x W, Channels: 1 (Warping raw matrices)
+        upsampled_context = F.interpolate(
+            running_context_feature, scale_factor=2, mode="bilinear", align_corners=True
+        )
+
+        # Calculate full-resolution crisp displacements using Feature Extractor
+        # We pass raw input matrices (1 channel) into raw slots!
+        native_interp, w_x0, w_x2 = self.flow_heads[0](
+            ftrs0[0], ftrs2[0], raw_x0, raw_x2
+        )
+
+        # Final Top-Level Channel Fusion
+        fused_L0 = torch.cat([native_interp, upsampled_context], dim=1)
+        running_context_feature = self.compress_L0(fused_L0)
+
+        interp_features_out.append(running_context_feature)
+        warps_x0_out.append(w_x0)
+        warps_x2_out.append(w_x2)
+
+        # Reverse lists so they cleanly map from Top (L1) to Bottom (L4) for the Decoder
+        return interp_features_out[::-1], warps_x0_out[::-1], warps_x2_out[::-1]

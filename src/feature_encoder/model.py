@@ -1,63 +1,74 @@
 from typing import List
+import torch
 import torch.nn as nn
 from torch import Tensor
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size: int):
+    def __init__(self, in_channels: int, out_channels: int, use_maxpool: bool = True):
         super().__init__()
-        padding = self._dilated_padding(kernel_size)
-        self.down_ftr = nn.Sequential(
-            nn.Conv2d(
-                in_channels, out_channels,
-                kernel_size=kernel_size, stride=1, padding=padding, dilation=2,
-            ),
-            nn.BatchNorm2d(out_channels),
-            nn.Conv2d(out_channels, out_channels,
-                      kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.AvgPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(
-                out_channels, out_channels,
-                kernel_size=kernel_size, stride=1, padding=padding, dilation=2,
-            ),
-            nn.LeakyReLU(),
+        hidden_ch = out_channels // 2
+
+        self.fine_path = nn.Sequential(
+            nn.Conv2d(in_channels, hidden_ch,
+                      kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_ch),
+            nn.LeakyReLU(0.2, inplace=True)
         )
 
-    @staticmethod
-    def _dilated_padding(kernel_size: int, dilation: int = 2) -> int:
-        return (kernel_size - 1) * dilation // 2
+        self.structural_path = nn.Sequential(
+            # Using dilation=2 on a 3x3 kernel gives a 5x5 field without the heavy blur
+            nn.Conv2d(in_channels, hidden_ch, kernel_size=3,
+                      padding=2, dilation=2, bias=False),
+            nn.BatchNorm2d(hidden_ch),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
 
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.down_ftr(x)
-        return x
+        # Identity mapping to allow a local residual shortcut if channel sizes match
+        self.shortcut = nn.Conv2d(
+            in_channels, out_channels, kernel_size=1) if in_channels != out_channels else nn.Identity()
+        self.pool = nn.MaxPool2d(
+            kernel_size=2, stride=2) if use_maxpool else nn.Identity()
+
+    def forward(self, x):
+        # 1. Extract parallel features
+        f1 = self.fine_path(x)
+        f2 = self.structural_path(x)
+        combined = torch.cat([f1, f2], dim=1)
+
+        # 2. Local residual connection to maintain crisp features
+        skip_out = combined + self.shortcut(x)
+
+        # 3. Downsample for the next level
+        pooled_out = self.pool(skip_out)
+
+        # We return pooled_out for the next deep layer,
+        # and skip_out to send across to the UNet Decoder
+        return pooled_out, skip_out
 
 
 class FeatureEncoder(nn.Module):
-    def __init__(self, cfg, in_channels=1, out_channels=[32, 64, 128, 256, 512]):
+    def __init__(self, cfg, in_channels=48, out_channels=[32, 64, 128, 256]):
         super().__init__()
         self.cfg = cfg
 
-        self.stages = nn.ModuleList([
-            EncoderBlock(
-                out_channels[i], out_channels[i + 1], self._kernel_size(i),
-            )
-            for i in range(len(out_channels) - 1)
-        ])
-
-    @staticmethod
-    def _kernel_size(stage_idx: int) -> int:
-        if stage_idx < 2:
-            return 7
-        if stage_idx == 2:
-            return 5
-        return 3
+        self.level1 = EncoderBlock(
+            in_channels, out_channels[0], use_maxpool=True)
+        self.level2 = EncoderBlock(
+            out_channels[0], out_channels[1], use_maxpool=True)
+        self.level3 = EncoderBlock(
+            out_channels[1], out_channels[2], use_maxpool=True)
+        self.level4 = EncoderBlock(
+            out_channels[2], out_channels[3], use_maxpool=False)
 
     def forward(self, ftr: Tensor) -> List[Tensor]:
         outputs = []
-        x = ftr
-        outputs.append(x)
-        for stage in self.stages:
-            x = stage(x)
-            outputs.append(x)
+        x, out1 = self.level1(ftr)
+        outputs.append(out1)
+        x, out2 = self.level2(x)
+        outputs.append(out2)
+        x, out3 = self.level3(x)
+        outputs.append(out3)
+        x, out4 = self.level4(x)
+        outputs.append(out4)
         return outputs

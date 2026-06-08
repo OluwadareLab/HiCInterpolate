@@ -9,6 +9,8 @@ from src.metric.metrics import (
 )
 from src.inference import InfConfig, InfCustomDataset
 from src import InferenceLib
+from src.feature_encoder import FeatureEncoder
+from src.flow_predictor import BackwardFlow, ForwardFlow
 from flow_based_interpolation import of_interpolation
 from tqdm import tqdm
 from torch.utils.data.distributed import DistributedSampler
@@ -19,13 +21,16 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.colors import LogNorm
 import torch.distributed as dist
 import torch
+import torch.nn as nn
 import pandas as pd
 import numpy as np
 import argparse
 import csv
+import glob
 import logging
 import os
 import random
+import re
 import sys
 from statistics import mean
 from typing import Dict, List, Optional
@@ -39,9 +44,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 ROOT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate"
 MODEL_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset"
-DICT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset/test"
-IMAGE_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset"
-OUTPUT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/test/mm_test"
+DICT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset/test"
+IMAGE_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset"
+OUTPUT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/test/log_test"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "comparison_hicinterpolate_diag.csv")
 SUMMARY_FILE = os.path.join(OUTPUT_DIR, "comparison_summary_diag.csv")
 OUTPUT_HEATMAP_DIR = os.path.join(OUTPUT_DIR, "pred_heatmaps")
@@ -124,6 +129,109 @@ _BASE_CFG = None
 _LOG = None
 
 
+class LegacyDecoderBlock(nn.Module):
+    def __init__(self, in_channels=16, skip_channels=32, out_channels=32):
+        super().__init__()
+        self.upsample = nn.ConvTranspose2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=2,
+            stride=2,
+            padding=0,
+        )
+        self.comb = nn.Sequential(
+            nn.Conv2d(out_channels + skip_channels, out_channels, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1),
+            nn.LeakyReLU(),
+        )
+
+    def forward(self, deep_ftr, skip_connection):
+        x = self.upsample(deep_ftr)
+        x = torch.cat([x, skip_connection], dim=1)
+        return self.comb(x)
+
+
+class LegacyFeatureDecoder(nn.Module):
+    def __init__(self, cfg, feature_channels=None, out_channels=1):
+        super().__init__()
+        self.cfg = cfg
+        self.feature_channels = list(feature_channels or [32, 64, 128, 256, 512])
+        self.level1 = LegacyDecoderBlock(self.feature_channels[1], self.feature_channels[0], self.feature_channels[0])
+        self.level2 = LegacyDecoderBlock(self.feature_channels[2], self.feature_channels[1], self.feature_channels[1])
+        self.level3 = LegacyDecoderBlock(self.feature_channels[3], self.feature_channels[2], self.feature_channels[2])
+        self.level4 = LegacyDecoderBlock(self.feature_channels[4], self.feature_channels[3], self.feature_channels[3])
+
+    def forward(self, ftr_stk: List[torch.Tensor]) -> torch.Tensor:
+        out = self.level4(ftr_stk[4], ftr_stk[3])
+        out = self.level3(out, ftr_stk[2])
+        out = self.level2(out, ftr_stk[1])
+        return self.level1(out, ftr_stk[0])
+
+
+class LegacyInterpolator(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.cfg = cfg
+        self.in_channels = 1
+        self.feature_channels = [32, 64, 128, 256, 512]
+        self.out_channels = 1
+        self.feature_encoder = FeatureEncoder(cfg, in_channels=self.in_channels, out_channels=self.feature_channels)
+        self.forward_flow = ForwardFlow(cfg, feature_channels=self.feature_channels)
+        self.backward_flow = BackwardFlow(cfg, feature_channels=self.feature_channels)
+        self.feature_decoder = LegacyFeatureDecoder(cfg, feature_channels=self.feature_channels)
+        self.in_proj = nn.Sequential(
+            nn.Conv2d(self.in_channels, self.feature_channels[0], kernel_size=7, stride=1, padding=6, dilation=2),
+            nn.BatchNorm2d(self.feature_channels[0]),
+            nn.Conv2d(self.feature_channels[0], self.feature_channels[0], kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(self.feature_channels[0]),
+        )
+        self.out_proj = nn.Sequential(
+            nn.Conv2d(self.feature_channels[0], self.feature_channels[0] // 2, kernel_size=7, stride=1, padding=6, dilation=2),
+            nn.BatchNorm2d(self.feature_channels[0] // 2),
+            nn.Conv2d(self.feature_channels[0] // 2, self.out_channels, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(self.out_channels),
+            nn.ReLU(),
+        )
+
+    @staticmethod
+    def concatenate_flow_ftr(ftr_0: List[torch.Tensor], ftr_2: List[torch.Tensor]) -> List[torch.Tensor]:
+        return [0.5 * (feature1 + feature2) for feature1, feature2 in zip(ftr_0, ftr_2)]
+
+    def forward(self, x0: torch.Tensor, x2: torch.Tensor, time: torch.Tensor) -> torch.Tensor:
+        x0 = self.in_proj(x0)
+        x2 = self.in_proj(x2)
+        ftrs0 = self.feature_encoder(x0)
+        ftrs2 = self.feature_encoder(x2)
+        forward_mid_ftrs = self.forward_flow(ftrs0, ftrs2, time[:, 0])
+        backward_mid_ftrs = self.backward_flow(ftrs2, ftrs0, time[:, 0])
+        mid_ftrs = self.concatenate_flow_ftr(forward_mid_ftrs, backward_mid_ftrs)
+        residual = self.feature_decoder(mid_ftrs)
+        return self.out_proj(residual + mid_ftrs[0])
+
+
+def load_runner_model(cfg, log, model_path: str, dl: DataLoader, isDistributed: bool = False):
+    try:
+        runner = InferenceLib.HiCInterpolate(
+            cfg=cfg, log=log, model=model_path, dl=dl, isDistributed=isDistributed
+        )
+        return runner._get_model()
+    except RuntimeError as exc:
+        if "size mismatch" not in str(exc):
+            raise
+        print("[WARN] Current Interpolator shape mismatches checkpoint; retrying legacy decoder path.")
+        original_interpolator = InferenceLib.Interpolator
+        try:
+            InferenceLib.Interpolator = LegacyInterpolator
+            runner = InferenceLib.HiCInterpolate(
+                cfg=cfg, log=log, model=model_path, dl=dl, isDistributed=isDistributed
+            )
+            return runner._get_model()
+        finally:
+            InferenceLib.Interpolator = original_interpolator
+
+
+
 def base_logger(file):
     os.makedirs(os.path.dirname(file), exist_ok=True)
     logger = logging.getLogger(os.path.basename(file))
@@ -161,7 +269,7 @@ def collate_fn(batch):
 
 def get_dataloader(ds: Dataset, batch_size: int = 8, isDistributed: bool = False) -> DataLoader:
     kwargs = dict(batch_size=batch_size,
-                  collate_fn=collate_fn, pin_memory=True)
+                  collate_fn=collate_fn, pin_memory=torch.cuda.is_available())
     if isDistributed:
         return DataLoader(
             ds,
@@ -191,7 +299,9 @@ def build_job_cfg(config_filename: str, dataset_filename: str, model_path: str, 
     OmegaConf.update(cfg, "file.inference", dataset_filename)
     OmegaConf.update(cfg, "file.model", model_path)
     OmegaConf.update(cfg, "dir.image", IMAGE_DIR)
+    OmegaConf.update(cfg, "data.patch", PATCHES[0])
     OmegaConf.update(cfg, "data.batch_size", batch_size)
+    OmegaConf.update(cfg, "device", "cuda" if torch.cuda.is_available() else "cpu")
     output_dir = f"{cfg.dir.output}/{config_filename}"
     model_state_dir = f"{cfg.dir.model_state}/{config_filename}"
     os.makedirs(output_dir, exist_ok=True)
@@ -204,10 +314,7 @@ def build_job_cfg(config_filename: str, dataset_filename: str, model_path: str, 
 def get_or_load_model(cfg, log, model_path: str, dl: DataLoader, isDistributed: bool = False):
     cache_key = f"{model_path}|{cfg.device}|{isDistributed}"
     if cache_key not in _MODEL_CACHE:
-        runner = InferenceLib.HiCInterpolate(
-            cfg=cfg, log=log, model=model_path, dl=dl, isDistributed=isDistributed
-        )
-        model, device = runner._get_model()
+        model, device = load_runner_model(cfg, log, model_path, dl, isDistributed=isDistributed)
         model.eval()
         _MODEL_CACHE[cache_key] = (model, device)
     return _MODEL_CACHE[cache_key]
@@ -409,7 +516,7 @@ def process_chromosome(cfg, model, device, ds, batch_size: int, job_meta: dict, 
     return row
 
 
-def iter_jobs(organism_filter: Optional[str], chromosome_filter: Optional[str]):
+def iter_known_jobs(organism_filter: Optional[str], chromosome_filter: Optional[str]):
     for resolution in RESOLUTIONS:
         res_tag = resolution_tag(resolution)
         if res_tag is None:
@@ -442,6 +549,98 @@ def iter_jobs(organism_filter: Optional[str], chromosome_filter: Optional[str]):
                                     }
 
 
+
+def split_triplet_uuid(frame_uuid: str) -> List[str]:
+    starts = [0] + [match.start() + 1 for match in re.finditer(r"_4DNFI", frame_uuid)]
+    if len(starts) != 3:
+        return [frame_uuid]
+    starts.append(len(frame_uuid) + 1)
+    return [frame_uuid[starts[i]:starts[i + 1] - 1] for i in range(3)]
+
+
+def infer_sample_meta(organism: str, triplet: List[str]) -> tuple[str, str]:
+    middle = triplet[1] if len(triplet) > 1 else triplet[0]
+    parts = middle.split("_")
+    if len(parts) < 3:
+        return organism, "unknown"
+    if "dmso" in parts:
+        return "dmso", "control"
+    if "hct116" in parts:
+        idx = parts.index("hct116")
+        return "hct116", parts[idx + 1] if idx + 1 < len(parts) else "unknown"
+    if "hela" in parts and "s3" in parts:
+        idx = parts.index("hela")
+        replicate = parts[idx + 2] if idx + 2 < len(parts) else "unknown"
+        return "hela_s3", replicate
+    sample = "_".join(parts[1:-1]) or organism
+    subsample = parts[-2] if len(parts) >= 4 else "unknown"
+    return sample, subsample
+
+
+def record_path(job: dict) -> str:
+    return os.path.join(
+        DICT_DIR,
+        (
+            "test_{}_{}_{}_{}_{}.txt".format(
+                job["resolution"],
+                job["patch_size"],
+                job["organism"],
+                job["frame"],
+                job["chromosome"],
+            )
+        ),
+    )
+
+
+def iter_record_jobs(organism_filter: Optional[str], chromosome_filter: Optional[str]):
+    seen = set()
+    for job in iter_known_jobs(organism_filter, chromosome_filter):
+        path = record_path(job)
+        if not os.path.exists(path):
+            continue
+        key = (job["resolution"], job["patch_size"], job["organism"], job["frame"], job["chromosome"])
+        seen.add(key)
+        yield {**job, "record_file": path}
+
+    pattern = os.path.join(DICT_DIR, "test_*_*.txt")
+    for path in sorted(glob.glob(pattern)):
+        name = os.path.basename(path)
+        match = re.match(r"^test_(\d+)_(\d+)_(human|mouse)_(.+)_([^_]+)\.txt$", name)
+        if not match:
+            continue
+        resolution = int(match.group(1))
+        patch = int(match.group(2))
+        organism = match.group(3)
+        frame_uuid = match.group(4)
+        chromosome = match.group(5)
+        if resolution not in RESOLUTIONS or patch not in PATCHES:
+            continue
+        if organism_filter and organism != organism_filter:
+            continue
+        if chromosome_filter and chromosome != chromosome_filter:
+            continue
+        res_tag = resolution_tag(resolution)
+        if res_tag is None:
+            continue
+        key = (resolution, patch, organism, frame_uuid, chromosome)
+        if key in seen:
+            continue
+        triplet = split_triplet_uuid(frame_uuid)
+        sample, subsample = infer_sample_meta(organism, triplet)
+        yield {
+            "resolution": resolution,
+            "patch_size": patch,
+            "batch_size": BATCHES[0],
+            "organism": organism,
+            "sample": sample,
+            "subsample": subsample,
+            "frame": frame_uuid,
+            "chromosome": chromosome,
+            "res_tag": res_tag,
+            "record_file": path,
+        }
+
+
 def run_inference(
     organism_filter: Optional[str] = None,
     chromosome_filter: Optional[str] = None,
@@ -464,20 +663,16 @@ def run_inference(
     ]
     processed = 0
     skipped = 0
+    discovered = 0
 
-    for job in iter_jobs(organism_filter, chromosome_filter):
-        ds_dict_filename = os.path.join(
-            DICT_DIR,
-            (
-                f"test_{job['resolution']}_{job['patch_size']}_"
-                f"{job['organism']}_{job['frame']}_{job['chromosome']}.txt"
-            ),
-        )
+    for job in iter_record_jobs(organism_filter, chromosome_filter):
+        ds_dict_filename = job["record_file"]
         # model_subdir = f"config_a1_{job['res_tag']}_p{job['patch_size']}_b{job['batch_size']}"
         # model_name = (
         #     f"hicinterpolate_{job['patch_size']}_"
         #     f"p{job['patch_size']}_b{job['batch_size']}.pt"
         # )
+        discovered += 1
         model_subdir = "config_dilated_25k_128"
         model_name = "hicinterpolate_128_p128_b30.pt"
         model_path = os.path.join(MODEL_DIR, model_subdir, model_name)
@@ -527,6 +722,8 @@ def run_inference(
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
+    if discovered == 0:
+        print(f"[WARN] No matching records in {DICT_DIR} for organism={organism_filter} chromosome={chromosome_filter}")
     print(
         f"Finished. processed={processed}, skipped={skipped}, "
         f"metrics={OUTPUT_FILE}, summary={SUMMARY_FILE}, manifest={MANIFEST_FILE}"

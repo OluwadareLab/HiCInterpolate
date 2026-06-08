@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,6 +11,7 @@ from torchvision.models import vgg19, VGG19_Weights
 class CharbonnierLoss(nn.Module):
     def __init__(self):
         super().__init__()
+
     def forward(self, pred: Tensor, y: Tensor, epsilon=1e-3):
         diff = pred - y
         loss = torch.mean(torch.sqrt(diff ** 2 + epsilon ** 2))
@@ -26,22 +29,96 @@ class SymmetryLoss(nn.Module):
         return loss
 
 
+class AdaptiveWingLoss2D(nn.Module):
+    def __init__(self, omega=14.0, theta=0.5, epsilon=1.0, alpha=2.1):
+        """
+        Args:
+            omega (float): Controls the maximum gradient scale for small errors.
+            theta (float): The threshold switching point between the log and linear zones.
+            epsilon (float): Avoids division by zero and shapes the internal curve.
+            alpha (float): Used in the (alpha - y) exponent to govern background sensitivity.
+        """
+        super(AdaptiveWingLoss2D, self).__init__()
+        self.omega = omega
+        self.theta = theta
+        self.epsilon = epsilon
+        self.alpha = alpha
+
+        # Precompute structural mathematical constants to save runtime FLOPs
+        self.A = omega * (1.0 / (1.0 + math.pow(theta / epsilon, alpha - theta))) * \
+            (alpha - theta) * (math.pow(theta / epsilon,
+                                        alpha - theta - 1.0)) * (1.0 / epsilon)
+
+        self.C = self.A * theta - omega * \
+            math.log(1.0 + math.pow(theta / epsilon, alpha - theta))
+
+    def forward(self, pred, target):
+        """
+        Args:
+            pred (torch.Tensor): Output from the model prediction head [B, 1, H, W]
+            target (torch.Tensor): Ground-truth target Hi-C matrix patch [B, 1, H, W]
+        """
+        # 1. Compute absolute localized spatial error
+        delta_y = torch.abs(pred - target)
+
+        # 2. Build the operating state masks based on the theta threshold
+        small_error_mask = delta_y < self.theta
+        large_error_mask = ~small_error_mask
+
+        # Allocate an empty loss tensor matching our inputs
+        loss = torch.zeros_like(delta_y)
+
+        # 3. Compute Small Error Phase (Logarithmic Zone)
+        # Isolate the target intensities for the small error zones
+        target_small = target[small_error_mask]
+        delta_y_small = delta_y[small_error_mask]
+
+        # Calculate dynamic exponents: (alpha - y)
+        pow_exponent = self.alpha - target_small
+
+        # Run the vectorized log function
+        loss[small_error_mask] = self.omega * torch.log(
+            1.0 + torch.pow(delta_y_small / self.epsilon, pow_exponent)
+        )
+
+        # 4. Compute Large Error Phase (Linear Zone)
+        delta_y_large = delta_y[large_error_mask]
+        loss[large_error_mask] = self.A * delta_y_large - self.C
+
+        # 5. Return the batch-averaged spatial error mean
+        return loss.mean()
+
+
 class TVLoss(nn.Module):
-    def __init__(self, tv_loss_weight=1):
+    def __init__(self):
         super(TVLoss, self).__init__()
-        self.tv_loss_weight = tv_loss_weight
 
     def forward(self, x):
-        b = x.shape[0]
-        count_h = self.tensor_size(x[:, :, 1:, :])
-        count_w = self.tensor_size(x[:, :, :, 1:])
-        h_tv = (x[:, :, 1:, :] - x[:, :, :-1, :]).square().sum()
-        w_tv = (x[:, :, :, 1:] - x[:, :, :, :-1]).square().sum()
-        return self.tv_loss_weight * 2 * (h_tv / count_h + w_tv / count_w) / b
+        b, c, h, w = x.shape
 
-    @staticmethod
-    def tensor_size(t):
-        return t.size()[1] * t.size()[2] * t.size()[3]
+        # Enforce strict matrix symmetry before computing gradients
+        # This aligns the prediction with physical genomic topology
+        x_sym = 0.5 * (x + x.transpose(-2, -1))
+
+        # Calculate local differences (Gradients)
+        # Delta along the genomic genomic position axis (Vertical)
+        diff_h = x_sym[:, :, 1:, :] - x_sym[:, :, :-1, :]
+        # Delta along the interacting genomic position axis (Horizontal)
+        diff_w = x_sym[:, :, :, 1:] - x_sym[:, :, :, :-1]
+
+        # THE CRITICAL FIXED STEP: Use the L1 Norm (.abs()) instead of L2 (.square())
+        # This creates an anisotropic penalty that allows sharp step functions (TAD walls)
+        h_tv = diff_h.abs().sum()
+        w_tv = diff_w.abs().sum()
+
+        # Dynamic normalization using total element counts to prevent scaling bugs
+        count_h = diff_h.numel()
+        count_w = diff_w.numel()
+
+        # Average the total variation penalty across the batch size
+        total_tv = (h_tv / count_h + w_tv / count_w) / b
+
+        return total_tv
 
 
 class StyleLoss(nn.Module):
@@ -123,7 +200,8 @@ class VGGPerceptualLoss(nn.Module):
 
         self.register_buffer(
             "layer_weights",
-            torch.tensor([1.0 / 2.6, 1.0 / 4.8, 1.0 / 3.7, 1.0 / 5.6, 1.0 / 1.5]),
+            torch.tensor([1.0 / 2.6, 1.0 / 4.8, 1.0 /
+                         3.7, 1.0 / 5.6, 1.0 / 1.5]),
         )
 
         for param in self.parameters():
@@ -153,17 +231,22 @@ class CombinedLoss(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.vgg_loss = VGGPerceptualLoss()
-        self.style_loss = StyleLoss()
-        self.l1_loss = nn.L1Loss()
-        self.mse_loss = nn.MSELoss()
-        self.tv_loss = TVLoss()
-        self.symmetry_loss = SymmetryLoss()
-        self.ssim_loss = StructuralSimilarityIndexMeasure(data_range=1.0)
+        self.vgg_loss = VGGPerceptualLoss().to(cfg.device)
+        self.style_loss = StyleLoss().to(cfg.device)
+        self.l1_loss = nn.L1Loss().to(cfg.device)
+        self.mse_loss = nn.MSELoss().to(cfg.device)
+        self.tv_loss = TVLoss().to(cfg.device)
+        self.symmetry_loss = SymmetryLoss().to(cfg.device)
+        self.ssim_loss = StructuralSimilarityIndexMeasure(
+            data_range=1.0).to(cfg.device)
         self.ms_ssim_loss = MultiScaleStructuralSimilarityIndexMeasure(
-            data_range=1.0, kernel_size=7, reduction="elementwise_mean"
-        )
-        self.to(cfg.device)
+            data_range=1.0,
+            kernel_size=7,               # Size 7 provides excellent local neighborhood statistics
+            # Explicitly limits the internal downsampling to 4 scales
+            betas=(0.0448, 0.2856, 0.3001, 0.3695),
+            reduction="elementwise_mean"
+        ).to(cfg.device)
+        self.aw_loss = AdaptiveWingLoss2D().to(cfg.device)
 
     @staticmethod
     def _to_3ch(x: Tensor) -> Tensor:
@@ -175,19 +258,33 @@ class CombinedLoss(nn.Module):
             if epoch < boundary:
                 return weight_params["values"][i]
         return weight_params["values"][-1]
-    
+
+    @classmethod
+    def dense_sparse_loss(cls, pred, target):
+        zero_mask = (target == 0).float()
+        nonzero_mask = (target > 0).float()
+        dense_loss = F.l1_loss(pred * nonzero_mask,
+                               target * nonzero_mask).to(pred.device)
+        sparse_penalty = F.mse_loss(
+            pred * zero_mask, torch.zeros_like(pred)).to(pred.device)
+        lambda_sparse = 2.0
+        total_loss = dense_loss + lambda_sparse * sparse_penalty
+        return total_loss
+
     @classmethod
     def dwpc_loss(cls, pred, target):
         if pred.dim() == 4 and pred.size(1) == 1:
             pred = pred.squeeze(1)
             target = target.squeeze(1)
         if pred.dim() != 3 or pred.shape != target.shape:
-            raise ValueError("DWPC loss expects matching [B, N, N] or [B, 1, N, N] tensors")
+            raise ValueError(
+                "DWPC loss expects matching [B, N, N] or [B, 1, N, N] tensors")
 
         n = pred.shape[-1]
         cache_key = (n, pred.device)
         if cache_key not in cls._triu_cache:
-            cls._triu_cache[cache_key] = torch.triu_indices(n, n, offset=1, device=pred.device)
+            cls._triu_cache[cache_key] = torch.triu_indices(
+                n, n, offset=1, device=pred.device)
         rows, cols = cls._triu_cache[cache_key]
         weights = (cols - rows).to(dtype=pred.dtype) + 1
         weights = weights.view(1, -1)
@@ -209,7 +306,7 @@ class CombinedLoss(nn.Module):
         for weight_params in self.cfg.loss.weight_parameters:
             weight = self.weight_schedule(
                 weight_params=weight_params, epoch=epoch)
-            
+
             if weight <= 0.0:
                 continue
             if weight_params["name"] == "l1":
@@ -219,9 +316,11 @@ class CombinedLoss(nn.Module):
             elif weight_params["name"] == "ssim":
                 loss = loss + weight * (1.0 - self.ssim_loss(pred, y))
             elif weight_params["name"] == "vgg":
-                loss = loss + weight * self.vgg_loss(self._to_3ch(pred), self._to_3ch(y))
+                loss = loss + weight * \
+                    self.vgg_loss(self._to_3ch(pred), self._to_3ch(y))
             elif weight_params["name"] == "style":
-                loss = loss + weight * self.style_loss(self._to_3ch(pred), self._to_3ch(y))
+                loss = loss + weight * \
+                    self.style_loss(self._to_3ch(pred), self._to_3ch(y))
             elif weight_params["name"] == "tv":
                 loss = loss + weight * self.tv_loss(pred)
             elif weight_params["name"] == "symmetry":
@@ -230,6 +329,10 @@ class CombinedLoss(nn.Module):
                 loss = loss + weight * (1.0 - self.ms_ssim_loss(pred, y))
             elif weight_params["name"] == "dwpc":
                 loss = loss + weight * (1.0 - self.dwpc_loss(pred, y))
+            elif weight_params["name"] == "ds":
+                loss = loss + weight * self.dense_sparse_loss(pred, y)
+            elif weight_params["name"] == "awl":
+                loss = loss + weight * self.aw_loss(pred, y)
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 

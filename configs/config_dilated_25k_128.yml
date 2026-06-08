@@ -25,18 +25,18 @@ file:
 
 data:
   patch: 128
-  batch_size: 30
+  batch_size: 20
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.8, 0.1, 0.1]
+  train_val_test_ratio: [0.2, 0.025, 0.025]
 
 training:
-  epochs: 500
+  epochs: 100
   restart_every: 100
   save_every: 10
-  lr: 1e-3
+  lr: 2e-4
   min_lr: 1e-5
   decay_steps: 100
   decay_rate: 0.215
@@ -56,12 +56,12 @@ model:
 
 loss:
   weight_parameters:
-    - name: l1
-      boundaries: [100]
-      values: [1.0, 1.0]
-    - name: symmetry
-      boundaries: [100]
+    - name: awl
+      boundaries: [0]
       values: [1.0, 1.0]
     - name: ms_ssim
-      boundaries: [100]
-      values: [1.0, 1.0]
+      boundaries: [0]
+      values: [0.25, 0.25]
+    - name: tv
+      boundaries: [0]
+      values: [1e-4, 1e-4]

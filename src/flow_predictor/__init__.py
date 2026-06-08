@@ -1,3 +1,3 @@
-from .model import ForwardFlow, BackwardFlow
+from .model import FlowPredictor
 
-__all__ = ["ForwardFlow", "BackwardFlow"]
+__all__ = ["FlowPredictor"]
