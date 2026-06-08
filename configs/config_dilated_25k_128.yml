@@ -42,9 +42,11 @@ training:
   decay_rate: 0.215
   lr_staircase: true
   warmup_epochs: 5
-  adv_weight: 0.05
-  adv_start_epoch: 30
-  d_lr: 1e-4
+  adv_weight: 0.02
+  adv_start_epoch: 40
+  adv_warmup_epochs: 10
+  d_update_every: 2
+  d_lr: 5e-5
   gan_in_channels: 3
 
 model:

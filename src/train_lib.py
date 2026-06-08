@@ -36,6 +36,10 @@ class Trainer:
         self.adv_weight = float(getattr(self.cfg.training, 'adv_weight', 0.0))
         self.adv_start_epoch = int(
             getattr(self.cfg.training, 'adv_start_epoch', 0))
+        self.adv_warmup_epochs = int(
+            getattr(self.cfg.training, 'adv_warmup_epochs', 0))
+        self.d_update_every = max(
+            1, int(getattr(self.cfg.training, 'd_update_every', 1)))
         self.gan_in_channels = int(
             getattr(self.cfg.training, 'gan_in_channels', 3))
         self.use_gan = self.adv_weight > 0.0
@@ -272,6 +276,18 @@ class Trainer:
         metrics_df.to_csv(self.cfg.file.val_metrics, index=False)
         plot.draw_metric(self.cfg, self.state)
 
+    def _current_adv_weight(self):
+        """Linearly ramp adv_weight from 0 to target over adv_warmup_epochs,
+        starting at adv_start_epoch. Avoids the hard 0->full shock that
+        destabilized the generator."""
+        if not self.use_gan or self.epochs_run < self.adv_start_epoch:
+            return 0.0
+        if self.adv_warmup_epochs <= 0:
+            return self.adv_weight
+        progress = (self.epochs_run - self.adv_start_epoch + 1) / \
+            float(self.adv_warmup_epochs)
+        return self.adv_weight * min(1.0, max(0.0, progress))
+
     def _format_scores(self, max_epochs: int):
         adv_active = self.use_gan and (self.epochs_run >= self.adv_start_epoch)
         d_str = f"D Loss: {self.train_d_loss_per_epoch:.4f}; " if adv_active else ""
@@ -311,6 +327,7 @@ class Trainer:
 
         adv_active = self.use_gan and (
             self.epochs_run >= self.adv_start_epoch)
+        cur_adv_weight = self._current_adv_weight()
         if self.discriminator is not None:
             self.discriminator.train()
 
@@ -324,7 +341,7 @@ class Trainer:
             pred = self.model(x0, x1, time_frame)
 
             # ---- Discriminator step (Stage B only) ----
-            if adv_active:
+            if adv_active and (step % self.d_update_every == 0):
                 self.optimizer_d.zero_grad()
                 real_in = torch.cat([x0, y, x1], dim=1)
                 fake_in = torch.cat([x0, pred.detach(), x1], dim=1)
@@ -345,10 +362,10 @@ class Trainer:
                 local_loss_components[k] = local_loss_components.get(
                     k, 0.0) + v * batch_size
             g_total = train_loss
-            if adv_active:
+            if adv_active and cur_adv_weight > 0.0:
                 g_fake_logits = self.discriminator(
                     torch.cat([x0, pred, x1], dim=1))
-                g_total = train_loss + self.adv_weight * \
+                g_total = train_loss + cur_adv_weight * \
                     g_hinge_loss(g_fake_logits)
 
             g_total.backward()

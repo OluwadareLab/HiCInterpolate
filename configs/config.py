@@ -49,6 +49,8 @@ class TrainingConfig:
     warmup_epochs: int = 5
     adv_weight: float = 0.0
     adv_start_epoch: int = 0
+    adv_warmup_epochs: int = 0
+    d_update_every: int = 1
     d_lr: float = 1e-4
     gan_in_channels: int = 3
 
