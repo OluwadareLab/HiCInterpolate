@@ -17,6 +17,38 @@ class CharbonnierLoss(nn.Module):
         loss = torch.mean(torch.sqrt(diff ** 2 + epsilon ** 2))
         return loss
 
+import torch
+import torch.nn as nn
+
+class DistanceWeightedWingLoss(nn.Module):
+    def __init__(self, base_wing_loss):
+        super(DistanceWeightedWingLoss, self).__init__()
+        self.base_wing = base_wing_loss
+
+    def forward(self, pred, target):
+        # 1. Compute standard pixel-level loss matrix (unreduced)
+        # Ensure your AdaptiveWingLoss returns an unreduced tensor [B, 1, H, W]
+        raw_loss = self.base_wing(pred, target) 
+        
+        # 2. Dynamically construct a distance-from-diagonal weight matrix
+        b, c, h, w = target.shape
+        
+        # Create a meshgrid of coordinates
+        rows = torch.arange(h, device=target.device).view(h, 1).repeat(1, w)
+        cols = torch.arange(w, device=target.device).view(1, w).repeat(h, 1)
+        
+        # Calculate absolute distance from diagonal for each bin entry
+        distance_matrix = torch.abs(rows - cols).float()
+        
+        # Apply an inverse power-law weight mask: entries further out get amplified
+        # This forces the optimizer to fix long-range loop errors instead of ignoring them
+        weight_mask = torch.exp(distance_matrix * 0.05).clamp(max=10.0)
+        weight_mask = weight_mask.view(1, 1, h, w) # Broadcastable shape
+        
+        # 3. Apply the weight mask to your spatial loss map
+        weighted_loss = raw_loss * weight_mask
+        
+        return weighted_loss.mean()
 
 class SymmetryLoss(nn.Module):
     def __init__(self):

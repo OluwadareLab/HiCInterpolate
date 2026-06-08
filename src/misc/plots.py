@@ -31,8 +31,6 @@ def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, 
             matrix = data_groups[j][i].squeeze().cpu()
             min_ = torch.min(matrix)
             max_ = torch.max(matrix)
-            min_ = torch.min(min_, torch.tensor(0.0))
-            max_ = torch.max(torch.tensor(1.0), max_)
             im = ax.imshow(matrix, cmap=CMAP_, vmin=min_, vmax=max_)
             ax.set_title(titles[j])
             ax.axis("off")
@@ -56,9 +54,6 @@ def draw_inf_hic_map(y: np.ndarray, pred: np.ndarray, file):
 
         min_ = np.min(matrix)
         max_ = np.max(matrix)
-
-        min_ = min(min_, 0.0)
-        max_ = max(1.0, max_)
 
         im = ax.imshow(matrix, cmap=CMAP_, vmin=min_, vmax=max_)
         ax.set_title(titles[i])

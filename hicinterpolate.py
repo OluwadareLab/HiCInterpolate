@@ -132,9 +132,9 @@ if __name__ == "__main__":
                         action='store_true', help='Test Model (default: False)')
     args = parser.parse_args()
 
-    args.config = "config_dilated_25k_128"
-    args.train = True
-    args.test = False
+    # args.config = "config_dilated_25k_128"
+    # args.train = True
+    # args.test = False
     main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
 
 

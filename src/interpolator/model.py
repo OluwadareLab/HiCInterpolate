@@ -6,6 +6,7 @@ from src.feature_encoder import FeatureEncoder
 from src.flow_predictor import FlowPredictor
 from src.feature_decoder import FeatureDecoder
 from torch import Tensor
+import torch.nn.functional as F
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -40,6 +41,45 @@ class FeatureExtractionBlock(nn.Module):
         return out
 
 
+class GenomicSharpeningHead(nn.Module):
+    def __init__(self):
+        super().__init__()
+        # 2.D Laplacian Kernel to highlight structural insulation edges
+        kernel = torch.tensor([[0, -1,  0],
+                               [-1,  10, -1],
+                               [0, -1,  0]], dtype=torch.float32)
+        self.register_buffer('kernel', kernel.view(1, 1, 3, 3))
+
+    def forward(self, x):
+        # x shape: [B, 1, 64, 64]
+        # Pad edges symmetrically to preserve matrix boundary structures
+        x_padded = F.pad(x, (1, 1, 1, 1), mode='replicate')
+        return torch.clamp(F.conv2d(x_padded, self.kernel), 0, 1)
+
+
+class DenseGenomicRefinementBlock(nn.Module):
+    def __init__(self, in_ch=16, out_ch=16):
+        super(DenseGenomicRefinementBlock, self).__init__()
+        # Parallel Multi-Scale Dilated Receptive Fields
+        self.branch1 = nn.Conv2d(
+            in_ch, out_ch, kernel_size=3, padding=1, dilation=1)
+        self.branch2 = nn.Conv2d(
+            in_ch, out_ch, kernel_size=3, padding=2, dilation=2)
+        self.branch3 = nn.Conv2d(
+            in_ch, out_ch, kernel_size=3, padding=3, dilation=3)
+
+        self.fusion = nn.Conv2d(out_ch * 3, out_ch, kernel_size=1)
+        self.leaky_relu = nn.LeakyReLU(0.2, inplace=True)
+
+    def forward(self, x):
+        b1 = self.branch1(x)
+        b2 = self.branch2(x)
+        b3 = self.branch3(x)
+        # Concatenate and compress features
+        fused = torch.cat([b1, b2, b3], dim=1)
+        return self.leaky_relu(self.fusion(fused))
+
+
 class Interpolator(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -64,13 +104,16 @@ class Interpolator(nn.Module):
             self.cfg, feature_channels=self.dec_ftr_channels, out_channels=self.output_features)
 
         self.refinement_channels = self.dec_ftr_channels[0]
-        self.refinement = nn.Sequential(
-            nn.Conv2d(self.refinement_channels, 16,
-                      kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(16),
-            nn.LeakyReLU(0.2, inplace=True)
-        )
+        self.refinement = DenseGenomicRefinementBlock(
+            self.refinement_channels, 16)
+        # self.refinement = nn.Sequential(
+        #     nn.Conv2d(self.refinement_channels, 16,
+        #               kernel_size=3, padding=1, bias=False),
+        #     nn.BatchNorm2d(16),
+        #     nn.LeakyReLU(0.2, inplace=True)
+        # )
         self.projection = nn.Conv2d(16, 1, kernel_size=1)
+        self.sharpening_head = GenomicSharpeningHead()
 
     @staticmethod
     def concatenate_flow_ftr(ftr_0: list[Tensor], ftr_2: list[Tensor]) -> list[Tensor]:
@@ -101,6 +144,7 @@ class Interpolator(nn.Module):
             ftrs0, ftrs2, interpolatios, warped0, warped2)
         residual = self.refinement(residual)
         residual = self.projection(residual)
+        # residual = self.sharpening_head(residual)
         # pred = residual + interpolatios[0]
 
         return residual

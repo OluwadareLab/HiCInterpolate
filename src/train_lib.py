@@ -68,8 +68,10 @@ class Trainer:
             weight_decay=1e-4,    # Decoupled L2 regularization to prevent overfitting
             eps=1e-8
         )
+        total_iterations = len(self.train_dl) * self.cfg.training.epochs
+        warmup_iterations = len(self.train_dl) * 10
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=self.cfg.training.epochs - 10, eta_min=1e-6)
+            self.optimizer, T_max=warmup_iterations, eta_min=1e-6)
 
         self.epochs_run = 0
         self.train_loss_per_epoch = 0
