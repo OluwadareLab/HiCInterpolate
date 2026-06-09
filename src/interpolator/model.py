@@ -124,9 +124,15 @@ class Interpolator(nn.Module):
         #     nn.BatchNorm2d(16),
         #     nn.LeakyReLU(0.2, inplace=True)
         # )
-        self.projection = nn.Conv2d(16, 1, kernel_size=1)
-        self.sharpening_head = GenomicSharpeningHead()
+
+        # self.sharpening_head = GenomicSharpeningHead()
         self.scaling_head = GenomicAffineScalingHead()
+
+        self.projection = nn.Conv2d(16, 1, kernel_size=1)
+        self.regression_head = nn.Conv2d(16, 1, kernel_size=1)
+        self.mask_head = nn.Conv2d(16, 1, kernel_size=1)
+
+
 
     @staticmethod
     def concatenate_flow_ftr(ftr_0: list[Tensor], ftr_2: list[Tensor]) -> list[Tensor]:
@@ -156,9 +162,36 @@ class Interpolator(nn.Module):
         residual = self.feature_decoder(
             ftrs0, ftrs2, interpolatios, warped0, warped2)
         residual = self.refinement(residual)
-        residual = self.projection(residual)
+
+
+
+        # residual = self.projection(residual)
         # residual = self.sharpening_head(residual)
         residual = self.scaling_head(residual)
         # pred = residual + interpolatios[0]
+
+        res_correction = self.regression_head(residual)
+        # raw_intensity = res_correction + interpolatios[0]
+        raw_intensity = res_correction
+        
+        # Apply ReLU or Softplus to ensure intensity is physically non-negative
+        predicted_intensity = F.softplus(raw_intensity)
+        
+        # 2. Calculate Sparsity Mask (Probability Space)
+        # Sigmoid squashes output to [0, 1] range
+        mask_logits = self.mask_head(residual)
+        predicted_mask_prob = torch.sigmoid(mask_logits)
+        
+        # 3. Final Gated Output (The "Filtered" Result)
+        # During training, we use the probability. 
+        # During inference, we can use a hard threshold (e.g., > 0.5)
+        final_output = predicted_intensity * predicted_mask_prob
+        
+        return {
+            "final": final_output,          # Use this for HiCRep/SSIM/etc.
+            "mask_prob": predicted_mask_prob, # Use this for BCE Loss
+            "intensity": predicted_intensity  # Intermediate regression
+        }
+
 
         return residual

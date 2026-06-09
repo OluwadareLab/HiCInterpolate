@@ -25,12 +25,12 @@ file:
 
 data:
   patch: 128
-  batch_size: 20
+  batch_size: 16
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.2, 0.025, 0.025]
+  train_val_test_ratio: [0.9, 0.1, 0.0]
 
 training:
   epochs: 100
@@ -56,7 +56,7 @@ model:
 
 loss:
   weight_parameters:
-    - name: awl
+    - name: stratified
       boundaries: [0]
       values: [1.0, 1.0]
     - name: l1
@@ -70,4 +70,7 @@ loss:
       values: [0.75, 0.75]
     - name: tv
       boundaries: [0]
-      values: [0.2, 0.2]
+      values: [0.4, 0.4]
+    - name: symmetry
+      boundaries: [0]
+      values: [1.0, 1.0]

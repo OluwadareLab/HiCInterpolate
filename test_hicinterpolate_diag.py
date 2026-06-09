@@ -10,7 +10,6 @@ from src.metric.metrics import (
 from src.inference import InfConfig, InfCustomDataset
 from src import InferenceLib
 from src.feature_encoder import FeatureEncoder
-from src.flow_predictor import BackwardFlow, ForwardFlow
 from flow_based_interpolation import of_interpolation
 from tqdm import tqdm
 from torch.utils.data.distributed import DistributedSampler
@@ -46,7 +45,7 @@ ROOT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate"
 MODEL_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset"
 DICT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset/test"
 IMAGE_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset"
-OUTPUT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/test/log_test"
+OUTPUT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/test_result"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "comparison_hicinterpolate_diag.csv")
 SUMMARY_FILE = os.path.join(OUTPUT_DIR, "comparison_summary_diag.csv")
 OUTPUT_HEATMAP_DIR = os.path.join(OUTPUT_DIR, "pred_heatmaps")
@@ -56,11 +55,10 @@ CONFIG_PATH = f"{ROOT_DIR}/HiCInterpolate/src/inference/config.yml"
 RESULT_ID_COLS = [
     "resolution",
     "patch_size",
-    "batch_size",
     "organism",
     "sample",
     "subsample",
-    "frame",
+    "frame_uuid",
     "chromosome",
 ]
 METHODS = ("hicinterpolate", "linear", "optical_flow")
@@ -68,55 +66,113 @@ METRICS = ("psnr", "ssim", "genome_disco", "hicrep", "lpips")
 METRIC_PRECISION = 4
 NUM_VIZ_SAMPLES = 2
 
+
+def build_metric_fields() -> List[str]:
+    return [
+        f"{metric}_{method}"
+        for metric in METRICS
+        for method in METHODS
+    ]
+
 RESOLUTIONS = [25000]
-BATCHES = [30]
+BATCHES = [20]
 PATCHES = [128]
 
 CHROMOSOMES = {
-    "human": [
-        "11", "12", "13", "14", "15", "16",
+    "human": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
               "17", "18", "19", "20", "21", "22"],
-    "mouse": [
-        "11", "12", "13", "14", "15", "16",
-              "17", "18", "19"],
+    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16",
+              "17", "18", "19"]
 }
 
 TEST_DATASET = {
     "human": {
-        "dmso": {"control": {"triplets": [[
-            "4DNFI7T93SHL_dmso_control_30m",
-            "4DNFICF2Z2TG_dmso_control_60m",
-            "4DNFILL624WG_dmso_control_90m",
-        ]]}},
-        "dtag": {"v1": {"triplets": [[
-            "4DNFIY1TCVLX_dtag_v1_30m",
-            "4DNFIXWT5U42_dtag_v1_60m",
-            "4DNFIHTFIMGG_dtag_v1_90m",
-        ]]}},
+        "dmso": {
+            "control": {
+                "triplets":
+                [
+                    ["4DNFI7T93SHL_dmso_control_30m",
+                     "4DNFICF2Z2TG_dmso_control_60m",
+                     "4DNFILL624WG_dmso_control_90m"]
+                ]
+            }
+        },
+
+        "dtag": {
+            "v1": {
+                "triplets":
+                [
+                    ["4DNFI5EAPQTI_dtag_v1_0m",
+                     "4DNFIY1TCVLX_dtag_v1_30m",
+                     "4DNFIXWT5U42_dtag_v1_60m"]
+                ]
+            }
+        },
+
         "hct116": {
-            "1": {"triplets": [[
-                "4DNFIDBFENL7_hct116_1_20m",
-                "4DNFI9ZUXG61_hct116_1_40m",
-                "4DNFIAUMRM2S_hct116_1_60m",
-            ]]},
-            "2": {"triplets": [[
-                "4DNFIAAH19VM_hct116_2_20m",
-                "4DNFI7QUSU5J_hct116_2_40m",
-                "4DNFIXEB4UZO_hct116_2_60m",
-            ]]},
+            "1": {
+                "triplets":
+                [
+                    ["4DNFIDBFENL7_hct116_1_20m",
+                     "4DNFI9ZUXG61_hct116_1_40m",
+                     "4DNFIAUMRM2S_hct116_1_60m"]
+                ]
+            },
+
+            "2": {
+                "triplets":
+                [
+                    ["4DNFITUPI4HA_hct116_2_no_atp_120m_20m",
+                     "4DNFIM7Q2FQQ_hct116_2_no_atp_120m_40m",
+                     "4DNFISATK9PF_hct116_2_no_atp_120m_60m"]
+                ]
+            },
         },
+
         "hela_s3": {
-            "r2": {"triplets": [[
-                "4DNFIX6ZXCA8_hela_s3_r2_30m",
-                "4DNFIEVR81FS_hela_s3_r2_60m",
-                "4DNFIAUI6BBI_hela_s3_r2_90m",
-            ]]},
-            "r3": {"triplets": [[
-                "4DNFICFZGFAV_hela_s3_r3_30m",
-                "4DNFIQXCZVVA_hela_s3_r3_60m",
-                "4DNFIB6PJFJ3_hela_s3_r3_90m",
-            ]]},
-        },
+            "r1": {
+                "triplets":
+                [
+                    ["4DNFIEQHTV1R_hela_s3_r1_210m",
+                     "4DNFIFW7GA64_hela_s3_r1_240m",
+                     "4DNFIXGXD67I_hela_s3_r1_270m"]
+                ]
+            },
+
+            "r2": {
+                "triplets":
+                [
+                    ["4DNFIMD9QNDX_hela_s3_r2_210m",
+                     "4DNFIATA1HD5_hela_s3_r2_240m",
+                     "4DNFIH9U4I7I_hela_s3_r2_270m"]
+                ]
+            },
+
+            "r3": {
+                "triplets":
+                [
+                    ["4DNFI2KM22QR_hela_s3_r3_210m",
+                     "4DNFIVF8Q45U_hela_s3_r3_240m",
+                     "4DNFI2RN3WFP_hela_s3_r3_270m"]
+                ]
+            }
+        }
+    },
+
+    "mouse": {
+        "embryo": {
+            "development": {
+                "triplets": [
+                    ["4DNFI1EYIGOC_zygote",
+                     "4DNFIK4CECUH_early2_cell",
+                     "4DNFICXCFGEI_late2_cell"],
+
+                    ["4DNFIFA89L5B_8cell",
+                     "4DNFIK5HY1GP_icm",
+                     "4DNFI5IAH9H1_mes_cell"]
+                ]
+            }
+        }
     }
 }
 
@@ -172,6 +228,12 @@ class LegacyFeatureDecoder(nn.Module):
 class LegacyInterpolator(nn.Module):
     def __init__(self, cfg):
         super().__init__()
+        try:
+            from src.flow_predictor import BackwardFlow, ForwardFlow
+        except ImportError as exc:
+            raise ImportError(
+                "LegacyInterpolator requires BackwardFlow/ForwardFlow"
+            ) from exc
         self.cfg = cfg
         self.in_channels = 1
         self.feature_channels = [32, 64, 128, 256, 512]
@@ -324,13 +386,10 @@ def linear_interpolation(x0: torch.Tensor, x1: torch.Tensor, t: float = 0.5) -> 
     return (1.0 - t) * x0 + t * x1
 
 
-def middle_indices(n: int, k: int = NUM_VIZ_SAMPLES) -> List[int]:
+def random_patch_indices(n: int, k: int = NUM_VIZ_SAMPLES) -> List[int]:
     if n <= 0:
         return []
-    if n == 1 or k == 1:
-        return [n // 2]
-    mid = n // 2
-    return sorted({max(0, mid - 1), min(n - 1, mid)})[:k]
+    return sorted(random.sample(range(n), min(k, n)))
 
 
 def prepare_matrix(matrix: np.ndarray) -> np.ndarray:
@@ -358,7 +417,7 @@ def log_norm_range(*matrices: np.ndarray) -> LogNorm:
 def heatmap_path(job_meta: dict, patch_index: int) -> str:
     res_dir = f"res_{job_meta['resolution']}_patch_{job_meta['patch_size']}"
     chr_dir = f"chr{job_meta['chromosome']}"
-    patch_name = f"patch_{patch_index:05d}_4methods.png"
+    patch_name = f"patch_{patch_index:05d}_6panels.png"
     rel = os.path.join(
         res_dir,
         job_meta["organism"],
@@ -371,14 +430,19 @@ def heatmap_path(job_meta: dict, patch_index: int) -> str:
     return os.path.join(OUTPUT_HEATMAP_DIR, rel)
 
 
-def save_methods_heatmaps(y, pred_hic, pred_linear, pred_of, out_path: str) -> None:
-    mats = [prepare_matrix(m) for m in (y, pred_hic, pred_linear, pred_of)]
+def save_comparison_heatmap(
+    x0, y, pred_hic, pred_linear, pred_of, x1, out_path: str
+) -> None:
+    mats = [
+        prepare_matrix(m)
+        for m in (x0, y, pred_hic, pred_linear, pred_of, x1)
+    ]
     norm = log_norm_range(*mats)
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4), dpi=300)
+    fig, axes = plt.subplots(1, 6, figsize=(24, 4), dpi=300)
     panels = zip(
         axes,
         mats,
-        ("Ground truth", "HiCInterpolate", "Linear", "Optical flow"),
+        ("x_0", "Ground truth", "HiCInterpolate", "Linear", "Optical flow", "x_1"),
     )
     for ax, matrix, title in panels:
         im = ax.imshow(matrix, cmap=CMAP_JUICEBOX,
@@ -411,12 +475,12 @@ def update_summary() -> None:
     if not os.path.exists(OUTPUT_FILE):
         return
     df = pd.read_csv(OUTPUT_FILE)
-    metric_cols = [col for col in df.columns if any(
-        col.endswith(f"_{m}") for m in METRICS)]
+    metric_cols = [col for col in build_metric_fields() if col in df.columns]
     if not metric_cols:
         return
-    summary = df.groupby(["resolution", "patch_size", "batch_size",
-                         "organism"], dropna=False)[metric_cols].mean()
+    summary = df.groupby(
+        ["resolution", "patch_size", "organism"], dropna=False
+    )[metric_cols].mean()
     summary.round(METRIC_PRECISION).reset_index().to_csv(
         SUMMARY_FILE, index=False)
 
@@ -445,7 +509,7 @@ def process_chromosome(cfg, model, device, ds, batch_size: int, job_meta: dict, 
     dl = get_dataloader(ds=ds, batch_size=batch_size, isDistributed=False)
     metrics = {method: {metric: [] for metric in METRICS}
                for method in METHODS}
-    plot_indices = set(middle_indices(
+    plot_indices = set(random_patch_indices(
         len(ds), NUM_VIZ_SAMPLES)) if save_plots else set()
     manifest_fields = MANIFEST_FIELDS
     saved_plots = 0
@@ -484,11 +548,13 @@ def process_chromosome(cfg, model, device, ds, batch_size: int, job_meta: dict, 
                 if patch_index not in plot_indices:
                     continue
                 out_path = heatmap_path(job_meta, patch_index)
-                save_methods_heatmaps(
+                save_comparison_heatmap(
+                    x0[local_idx].detach().cpu().numpy(),
                     y[local_idx].detach().cpu().numpy(),
                     pred_hic[local_idx].detach().cpu().numpy(),
                     pred_linear[local_idx].detach().cpu().numpy(),
                     pred_of[local_idx].detach().cpu().numpy(),
+                    x1[local_idx].detach().cpu().numpy(),
                     out_path,
                 )
                 append_csv(
@@ -504,15 +570,14 @@ def process_chromosome(cfg, model, device, ds, batch_size: int, job_meta: dict, 
     finally:
         shutdown_dataloader(dl)
 
-    row = dict(job_meta)
-    row["num_patches"] = seen
-    row["num_heatmaps"] = saved_plots
-    for method in METHODS:
-        for metric_name in METRICS:
+    row = {key: job_meta[key] for key in RESULT_ID_COLS}
+    for metric_name in METRICS:
+        for method in METHODS:
             values = metrics[method][metric_name]
-            col = f"{method}_{metric_name}"
+            col = f"{metric_name}_{method}"
             row[col] = round(
                 mean(values), METRIC_PRECISION) if values else np.nan
+    row["_num_heatmaps"] = saved_plots
     return row
 
 
@@ -530,7 +595,7 @@ def iter_known_jobs(organism_filter: Optional[str], chromosome_filter: Optional[
                     for sample, subsamples in samples.items():
                         for subsample, content in subsamples.items():
                             for triplet in content["triplets"]:
-                                frame_uuid = '_'.join(triplet)
+                                frame_uuid = triplet[1]
                                 chromosomes = CHROMOSOMES[organism]
                                 if chromosome_filter:
                                     chromosomes = [
@@ -575,6 +640,20 @@ def infer_sample_meta(organism: str, triplet: List[str]) -> tuple[str, str]:
     sample = "_".join(parts[1:-1]) or organism
     subsample = parts[-2] if len(parts) >= 4 else "unknown"
     return sample, subsample
+
+
+def resolve_model_path(res_tag: str, patch: int, batch_size: int) -> Optional[str]:
+    model_name = f"hicinterpolate_{patch}_p{patch}_b{batch_size}.pt"
+    subdir_candidates = [
+        f"config_dilated_{res_tag}_{patch}",
+        f"config_dilated_{res_tag}_p{patch}",
+        f"config_a1_{res_tag}_p{patch}_b{batch_size}",
+    ]
+    for subdir in subdir_candidates:
+        model_path = os.path.join(MODEL_DIR, subdir, model_name)
+        if os.path.exists(model_path):
+            return model_path
+    return None
 
 
 def record_path(job: dict) -> str:
@@ -658,31 +737,27 @@ def run_inference(
         _LOG = base_logger(os.path.join(
             OUTPUT_DIR, "test_hicinterpolate_diag.log"))
 
-    metric_fields = RESULT_ID_COLS + ["num_patches", "num_heatmaps"] + [
-        f"{method}_{metric}" for method in METHODS for metric in METRICS
-    ]
+    metric_fields = RESULT_ID_COLS + build_metric_fields()
     processed = 0
     skipped = 0
     discovered = 0
 
     for job in iter_record_jobs(organism_filter, chromosome_filter):
         ds_dict_filename = job["record_file"]
-        # model_subdir = f"config_a1_{job['res_tag']}_p{job['patch_size']}_b{job['batch_size']}"
-        # model_name = (
-        #     f"hicinterpolate_{job['patch_size']}_"
-        #     f"p{job['patch_size']}_b{job['batch_size']}.pt"
-        # )
         discovered += 1
-        model_subdir = "config_dilated_25k_128"
-        model_name = "hicinterpolate_128_p128_b30.pt"
-        model_path = os.path.join(MODEL_DIR, model_subdir, model_name)
+        model_path = resolve_model_path(
+            job["res_tag"], job["patch_size"], job["batch_size"]
+        )
         print(f"Processing {ds_dict_filename}")
         if not os.path.exists(ds_dict_filename):
             print(f"[WARN] Missing input file: {ds_dict_filename}")
             skipped += 1
             continue
-        if not os.path.exists(model_path):
-            print(f"[WARN] Missing model: {model_path}")
+        if model_path is None:
+            print(
+                f"[WARN] Missing model for res={job['res_tag']} "
+                f"patch={job['patch_size']} batch={job['batch_size']}"
+            )
             skipped += 1
             continue
 
@@ -705,7 +780,9 @@ def run_inference(
         try:
             model, device = get_or_load_model(
                 cfg, _LOG, model_path, dl_for_model)
-            job_meta = {key: job[key] for key in RESULT_ID_COLS}
+            job_meta = {key: job[key] for key in RESULT_ID_COLS if key != "frame_uuid"}
+            job_meta["frame_uuid"] = job["frame"]
+            job_meta["frame"] = job["frame"]
             row = process_chromosome(
                 cfg, model, device, ds, job["batch_size"], job_meta, save_plots=save_plots
             )
@@ -714,7 +791,7 @@ def run_inference(
             processed += 1
             print(
                 f"[OK] chr{job['chromosome']} metrics -> {OUTPUT_FILE}; "
-                f"plots={row['num_heatmaps']}"
+                f"plots={row['_num_heatmaps']}"
             )
         finally:
             shutdown_dataloader(dl_for_model)

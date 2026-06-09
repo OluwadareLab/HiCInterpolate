@@ -15,6 +15,7 @@ import gc
 import pandas as pd
 import traceback
 from collections import OrderedDict
+import torch.nn.functional as F
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -69,7 +70,7 @@ class Trainer:
             eps=1e-8
         )
         total_iterations = len(self.train_dl) * self.cfg.training.epochs
-        warmup_iterations = len(self.train_dl) * 10
+        warmup_iterations = len(self.train_dl) * 5
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer, T_max=warmup_iterations, eta_min=1e-6)
 
@@ -85,7 +86,7 @@ class Trainer:
         ], 'val_ssim': [], 'val_genome_disco': [], 'val_hicrep': [], 'best_val': []}
         self.metric_columns = ['epoch', 'lr', 'train_loss', 'val_loss',
                                'val_ssim', 'val_genome_disco', 'val_hicrep', 'best_val']
-        self.patience = 40
+        self.patience = 200
         self.epochs_no_improve = 0
         self.best_val = -float('inf')
         self.best_model = f'{self.cfg.file.model}'
@@ -138,7 +139,7 @@ class Trainer:
 
     @staticmethod
     def _validation_score(ssim, genome_disco, hicrep):
-        return 0.4 * ssim + 0.15 * genome_disco + 0.45 * hicrep
+        return 0.2 * ssim + 0.2 * genome_disco + 0.6 * hicrep
 
     def _update_metrics(self, epoch, train_samples, train_loss, val_samples, val_loss, val_ssim, val_genome_disco, val_hicrep):
         self.train_loss_per_epoch = self._safe_average(
@@ -254,8 +255,14 @@ class Trainer:
             self.optimizer.zero_grad()
 
             batch_size = y.size(0)
-            pred = self.model(x0, x1, time_frame)
-            train_loss = self.loss_fn(pred, y, self.epochs_run)
+            outputs = self.model(x0, x1, time_frame)
+            pred = outputs["final"]
+            pred_mask = outputs["mask_prob"]
+            gt_mask = (y > 0).float()
+
+            loss_sparsity = F.binary_cross_entropy(pred_mask, gt_mask)
+            train_loss = self.loss_fn(
+                pred, y, self.epochs_run) + (2.0 * loss_sparsity)
 
             train_loss.backward()
             torch.nn.utils.clip_grad_norm_(
@@ -284,8 +291,15 @@ class Trainer:
                 time_frame = time_frame.to(self.device)
 
                 batch_size = y.size(0)
-                pred = self.model(x0, x1, time_frame)
-                val_loss = self.loss_fn(pred, y, self.epochs_run)
+                outputs = self.model(x0, x1, time_frame)
+
+                pred = outputs["final"]
+                pred_mask = outputs["mask_prob"]
+                gt_mask = (y > 0).float()
+
+                loss_sparsity = F.binary_cross_entropy(pred_mask, gt_mask)
+                val_loss = self.loss_fn(
+                    pred, y, self.epochs_run) + (2.0 * loss_sparsity)
 
                 local_val_loss += val_loss.detach() * batch_size
 
