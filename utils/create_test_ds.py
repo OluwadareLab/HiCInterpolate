@@ -1,16 +1,18 @@
 import os
 import re
 
-ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets"
-DATASET_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset"
-OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset/test"
+ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets"
+DATASET_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset"
+OUTPUT_ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset/test"
 
 RESOLUTIONS = [25000, 10000, 5000]
 PATCHES = [64, 128]
 CHROMOSOMES = {
-    "human": ["11", "12", "13", "14", "15", "16",
+    "human": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+              "11", "12", "13", "14", "15", "16",
               "17", "18", "19", "20", "21", "22", "X", "Y"],
-    "mouse": ["11", "12", "13", "14", "15", "16",
+    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+              "11", "12", "13", "14", "15", "16",
               "17", "18", "19", "X", "Y"]
 }
 
@@ -26,35 +28,75 @@ DATASET = {
                 ]
             }
         },
+
+        "dtag": {
+            "v1": {
+                "triplets":
+                [
+                    ["4DNFI5EAPQTI_dtag_v1_0m",
+                     "4DNFIY1TCVLX_dtag_v1_30m",
+                     "4DNFIXWT5U42_dtag_v1_60m"]
+                ]
+            }
+        },
+
         "hct116": {
+            "1": {
+                "triplets":
+                [
+                    ["4DNFIDBFENL7_hct116_1_20m",
+                     "4DNFI9ZUXG61_hct116_1_40m",
+                     "4DNFIAUMRM2S_hct116_1_60m"]
+                ]
+            },
+
             "2": {
                 "triplets":
                 [
-                    ["4DNFIAAH19VM_hct116_2_20m",
-                     "4DNFI7QUSU5J_hct116_2_40m",
-                     "4DNFIXEB4UZO_hct116_2_60m"]
+                    ["4DNFITUPI4HA_hct116_2_no_atp_120m_20m",
+                     "4DNFIM7Q2FQQ_hct116_2_no_atp_120m_40m",
+                     "4DNFISATK9PF_hct116_2_no_atp_120m_60m"]
                 ]
             },
         },
 
         "hela_s3": {
+            "r1": {
+                "triplets":
+                [
+                    ["4DNFIEQHTV1R_hela_s3_r1_210m",
+                     "4DNFIFW7GA64_hela_s3_r1_240m",
+                     "4DNFIXGXD67I_hela_s3_r1_270m"]
+                ]
+            },
+
             "r2": {
                 "triplets":
                 [
-                    ["4DNFIPZBEXCP_hela_s3_r2_150m",
-                     "4DNFIWPKRZGU_hela_s3_r2_180m",
-                     "4DNFIMD9QNDX_hela_s3_r2_210m"]
+                    ["4DNFIMD9QNDX_hela_s3_r2_210m",
+                     "4DNFIATA1HD5_hela_s3_r2_240m",
+                     "4DNFIH9U4I7I_hela_s3_r2_270m"]
+                ]
+            },
+
+            "r3": {
+                "triplets":
+                [
+                    ["4DNFI2KM22QR_hela_s3_r3_210m",
+                     "4DNFIVF8Q45U_hela_s3_r3_240m",
+                     "4DNFI2RN3WFP_hela_s3_r3_270m"]
                 ]
             }
         }
     },
+
     "mouse": {
         "embryo": {
             "development": {
                 "triplets": [
-                    ["4DNFIK4CECUH_early2_cell",
-                     "4DNFICXCFGEI_late2_cell",
-                     "4DNFIFA89L5B_8cell"],
+                    ["4DNFI1EYIGOC_zygote",
+                     "4DNFIK4CECUH_early2_cell",
+                     "4DNFICXCFGEI_late2_cell"],
 
                     ["4DNFIFA89L5B_8cell",
                      "4DNFIK5HY1GP_icm",
@@ -93,7 +135,7 @@ def prepare_triplates():
                             for chromosome in CHROMOSOMES[organism]:
                                 record = f"{str(resolution)}/{str(patch)}/{organism}/{sample}/{subsample}/{str(uuid)}/{chromosome}"
 
-                                output_file = f"{OUTPUT_ROOT_PATH}/test_{resolution}_{patch}_{organism}_{uuid}_{chromosome}.txt"
+                                output_file = f"{OUTPUT_ROOT_PATH}/test_{resolution}_{patch}_{organism}_{triplet[1]}_{chromosome}.txt"
                                 os.makedirs(os.path.dirname(
                                     output_file), exist_ok=True)
 

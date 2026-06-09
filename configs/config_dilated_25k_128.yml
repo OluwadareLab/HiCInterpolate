@@ -1,15 +1,15 @@
 device: cuda
 
 dir:
-  root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
-  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset
-  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset
-  image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset
+  root: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
+  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/mm_triplets_dataset
+  output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/mm_triplets_dataset
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset
+  image: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset
 
 
 file:
-  dataset_dict: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset/train_25000_128.txt
+  dataset_dict: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset/train_25000_128.txt
   snapshot: ${dir.model_state}/${model.name}_p${data.patch}_b${data.batch_size}_snapshot.pt
   model: ${dir.model_state}/${model.name}_p${data.patch}_b${data.batch_size}.pt
   test_hic_map: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_hic_map.jpg
@@ -25,12 +25,12 @@ file:
 
 data:
   patch: 128
-  batch_size: 20
+  batch_size: 16
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.2, 0.025, 0.025]
+  train_val_test_ratio: [0.9, 0.1, 0.0]
 
 training:
   epochs: 100
@@ -56,7 +56,7 @@ model:
 
 loss:
   weight_parameters:
-    - name: awl
+    - name: stratified
       boundaries: [0]
       values: [1.0, 1.0]
     - name: l1
@@ -70,4 +70,7 @@ loss:
       values: [0.75, 0.75]
     - name: tv
       boundaries: [0]
-      values: [0.2, 0.2]
+      values: [0.4, 0.4]
+    - name: symmetry
+      boundaries: [0]
+      values: [1.0, 1.0]

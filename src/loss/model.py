@@ -17,8 +17,42 @@ class CharbonnierLoss(nn.Module):
         loss = torch.mean(torch.sqrt(diff ** 2 + epsilon ** 2))
         return loss
 
-import torch
-import torch.nn as nn
+
+class StratifiedGenomicLossWrapper(nn.Module):
+    def __init__(self, base_loss_module):
+        super(StratifiedGenomicLossWrapper, self).__init__()
+        self.base_loss = base_loss_module
+
+    def forward(self, pred, target):
+        # 1. Compute element-wise unreduced spatial loss matrix
+        raw_spatial_loss = self.base_loss(pred, target)
+        b, c, h, w = target.shape
+
+        # 2. Build a distance stratification normalization mask
+        rows = torch.arange(h, device=target.device).view(h, 1).repeat(1, w)
+        cols = torch.arange(w, device=target.device).view(1, w).repeat(h, 1)
+        distance_matrix = torch.abs(rows - cols).float()
+
+        # Calculate the empirical mean loss for each distance band in the target
+        # To avoid zero division, we add a tiny stability epsilon
+        eps = 1e-6
+        stratified_weights = torch.zeros_like(distance_matrix)
+
+        for d in range(h):
+            mask = (distance_matrix == d)
+            target_band_mean = target[:, :, mask].mean()
+            # If the target band is nearly empty, we amplify the loss weight
+            # to force the model to capture the sparse structure
+            stratified_weights[mask] = 1.0 / (target_band_mean + eps)
+
+        # Clamp max weights to avoid gradient explosions far out
+        stratified_weights = stratified_weights.clamp(
+            max=50.0).view(1, 1, h, w)
+
+        # 3. Apply the stratified mask to the loss landscape
+        balanced_loss = raw_spatial_loss * stratified_weights
+        return balanced_loss.mean()
+
 
 class DistanceWeightedWingLoss(nn.Module):
     def __init__(self, base_wing_loss):
@@ -28,27 +62,28 @@ class DistanceWeightedWingLoss(nn.Module):
     def forward(self, pred, target):
         # 1. Compute standard pixel-level loss matrix (unreduced)
         # Ensure your AdaptiveWingLoss returns an unreduced tensor [B, 1, H, W]
-        raw_loss = self.base_wing(pred, target) 
-        
+        raw_loss = self.base_wing(pred, target)
+
         # 2. Dynamically construct a distance-from-diagonal weight matrix
         b, c, h, w = target.shape
-        
+
         # Create a meshgrid of coordinates
         rows = torch.arange(h, device=target.device).view(h, 1).repeat(1, w)
         cols = torch.arange(w, device=target.device).view(1, w).repeat(h, 1)
-        
+
         # Calculate absolute distance from diagonal for each bin entry
         distance_matrix = torch.abs(rows - cols).float()
-        
+
         # Apply an inverse power-law weight mask: entries further out get amplified
         # This forces the optimizer to fix long-range loop errors instead of ignoring them
         weight_mask = torch.exp(distance_matrix * 0.05).clamp(max=10.0)
-        weight_mask = weight_mask.view(1, 1, h, w) # Broadcastable shape
-        
+        weight_mask = weight_mask.view(1, 1, h, w)  # Broadcastable shape
+
         # 3. Apply the weight mask to your spatial loss map
         weighted_loss = raw_loss * weight_mask
-        
+
         return weighted_loss.mean()
+
 
 class SymmetryLoss(nn.Module):
     def __init__(self):
@@ -273,12 +308,14 @@ class CombinedLoss(nn.Module):
             data_range=1.0).to(cfg.device)
         self.ms_ssim_loss = MultiScaleStructuralSimilarityIndexMeasure(
             data_range=1.0,
-            kernel_size=7,               # Size 7 provides excellent local neighborhood statistics
-            # Explicitly limits the internal downsampling to 4 scales
-            betas=(0.0448, 0.2856, 0.3001, 0.3695),
+            kernel_size=3,                             # Tightest possible window for fine loops
+            # Full 5 scales supported
+            betas=(0.0448, 0.2856, 0.3001, 0.3695, 0.4302),
             reduction="elementwise_mean"
         ).to(cfg.device)
         self.aw_loss = AdaptiveWingLoss2D().to(cfg.device)
+        self.stratified_loss = StratifiedGenomicLossWrapper(
+            self.aw_loss).to(cfg.device)
 
     @staticmethod
     def _to_3ch(x: Tensor) -> Tensor:
@@ -365,6 +402,8 @@ class CombinedLoss(nn.Module):
                 loss = loss + weight * self.dense_sparse_loss(pred, y)
             elif weight_params["name"] == "awl":
                 loss = loss + weight * self.aw_loss(pred, y)
+            elif weight_params["name"] == "stratified":
+                loss = loss + weight * self.stratified_loss(pred, y)
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 
