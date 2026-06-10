@@ -78,15 +78,15 @@ class DecoderBlock(nn.Module):
         # Branch A: Preserves sharp, localized boundaries (Loops, TAD Edges)
         self.fine_refinement = nn.Sequential(
             nn.Conv2d(out_channels, mid_channels,
-                      kernel_size=3, padding=1, bias=False),
+                      kernel_size=1, padding=0, bias=False),  # [CHANGED: k=1]
             nn.BatchNorm2d(mid_channels),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
         # Branch B: Preserves broad structural patterns (TAD interiors, Compartments)
         self.structural_refinement = nn.Sequential(
-            nn.Conv2d(out_channels, mid_channels, kernel_size=3,
-                      padding=2, dilation=2, bias=False),
+            nn.Conv2d(out_channels, mid_channels, kernel_size=1,
+                      padding=0, bias=False),  # [CHANGED: k=1]
             nn.BatchNorm2d(mid_channels),
             nn.LeakyReLU(0.2, inplace=True)
         )

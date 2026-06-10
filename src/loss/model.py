@@ -191,37 +191,50 @@ class TVLoss(nn.Module):
 class StyleLoss(nn.Module):
     def __init__(self, weights=None):
         super().__init__()
+
+        vgg = vgg19(weights=VGG19_Weights.IMAGENET1K_V1).features
+        vgg.eval()
+
+        self.slice1 = nn.Sequential(*vgg[:4])
+        self.slice2 = nn.Sequential(*vgg[4:9])
+        self.slice3 = nn.Sequential(*vgg[9:18])
+        self.slice4 = nn.Sequential(*vgg[18:27])
+        self.slice5 = nn.Sequential(*vgg[27:36])
+
+        self.normalize = MeanShift(
+            data_mean=[0.485, 0.456, 0.406],
+            data_std=[0.229, 0.224, 0.225],
+            data_range=1.0,
+            norm=True,
+        )
+
         self.criterion = nn.MSELoss()
-        if weights is None:
-            self.weights = [1.0, 1.0, 1.0, 1.0, 1.0]
-        else:
-            self.weights = weights
+        self.weights = weights if weights is not None else [1.0, 1.0, 1.0, 1.0, 1.0]
 
-    def gram_matrix(self, features: Tensor, mask: Tensor = None) -> torch.Tensor:
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def gram_matrix(self, features: Tensor) -> torch.Tensor:
         b, c, h, w = features.shape
-        if mask is not None:
-            mask = F.interpolate(mask, size=(
-                h, w), mode='bilinear', align_corners=False)
-            features = features * mask
-        features = features.view(b, c, h*w)
-        gram = torch.bmm(features, features.transpose(1, 2))
-        gram /= (h*w)
+        f = features.view(b, c, h * w)
+        return torch.bmm(f, f.transpose(1, 2)) / (c * h * w)
 
-        return gram
+    def forward(self, pred: Tensor, target: Tensor):
+        X = self.normalize(pred)
+        Y = self.normalize(target)
 
-    def forward(self, pred: Tensor, y: Tensor):
-        l1 = self.criterion(self.gram_matrix(pred['conv12']) / 255.0,
-                            self.gram_matrix(y['conv12']) / 255.0) * self.weights[0]
-        l2 = self.criterion(self.gram_matrix(pred['conv22']) / 255.0,
-                            self.gram_matrix(y['conv22']) / 255.0) * self.weights[1]
-        l3 = self.criterion(self.gram_matrix(pred['conv32']) / 255.0,
-                            self.gram_matrix(y['conv32']) / 255.0) * self.weights[2]
-        l4 = self.criterion(self.gram_matrix(pred['conv42']) / 255.0,
-                            self.gram_matrix(y['conv42']) / 255.0) * self.weights[3]
-        l5 = self.criterion(self.gram_matrix(pred['conv52']) / 255.0,
-                            self.gram_matrix(y['conv52']) / 255.0) * self.weights[4]
-        style_loss = l1 + l2 + l3 + l4 + l5
-        return style_loss
+        loss = pred.new_zeros(())
+        for weight, slice_layer in zip(
+            self.weights,
+            (self.slice1, self.slice2, self.slice3, self.slice4, self.slice5),
+        ):
+            X = slice_layer(X)
+            with torch.no_grad():
+                Y = slice_layer(Y)
+            loss = loss + weight * \
+                self.criterion(self.gram_matrix(X), self.gram_matrix(Y))
+
+        return loss
 
 
 class MeanShift(nn.Conv2d):
@@ -366,10 +379,12 @@ class CombinedLoss(nn.Module):
         cov = (weights * (x - mx) * (y - my)).sum(dim=1)
         var_x = (weights * (x - mx) ** 2).sum(dim=1)
         var_y = (weights * (y - my) ** 2).sum(dim=1)
-        corr = cov / (torch.sqrt(var_x * var_y) + 1e-12)
+        denom = torch.sqrt(var_x * var_y + 1e-8)
+        corr = (cov / denom).clamp(-1.0, 1.0)
         return corr.mean()
 
-    def forward(self, pred: Tensor, y: Tensor, epoch: int):
+    def forward(self, pred: Tensor, y: Tensor, epoch: int,
+                pred_mask: Tensor = None, gt_mask: Tensor = None):
         loss = pred.new_zeros(())
 
         for weight_params in self.cfg.loss.weight_parameters:
@@ -404,6 +419,12 @@ class CombinedLoss(nn.Module):
                 loss = loss + weight * self.aw_loss(pred, y)
             elif weight_params["name"] == "stratified":
                 loss = loss + weight * self.stratified_loss(pred, y)
+            elif weight_params["name"] == "bce":
+                if pred_mask is None or gt_mask is None:
+                    raise ValueError(
+                        "bce loss requires pred_mask and gt_mask arguments")
+                loss = loss + weight * \
+                    F.binary_cross_entropy_with_logits(pred_mask, gt_mask)
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 

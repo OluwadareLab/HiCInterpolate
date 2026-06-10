@@ -33,10 +33,21 @@ class FeatureExtractionBlock(nn.Module):
             nn.ReLU(inplace=True)
         )
 
+        # [SPARSITY MASK] Per-branch single-channel learnable sparsity gates
+        self.mask_pixel = nn.Conv2d(feature_channels, 1, kernel_size=1)   # [SPARSITY MASK]
+        self.mask_medium = nn.Conv2d(feature_channels, 1, kernel_size=1)  # [SPARSITY MASK]
+        self.mask_macro = nn.Conv2d(feature_channels, 1, kernel_size=1)   # [SPARSITY MASK]
+
     def forward(self, x):
         feat_pixel = self.branch_pixel(x)
         feat_medium = self.branch_medium(x)
         feat_macro = self.branch_macro(x)
+
+        # [SPARSITY MASK] Gate each scale by its own learned per-pixel presence probability
+        feat_pixel = feat_pixel * torch.sigmoid(self.mask_pixel(feat_pixel))      # [SPARSITY MASK]
+        feat_medium = feat_medium * torch.sigmoid(self.mask_medium(feat_medium))  # [SPARSITY MASK]
+        feat_macro = feat_macro * torch.sigmoid(self.mask_macro(feat_macro))      # [SPARSITY MASK]
+
         out = torch.cat([feat_pixel, feat_medium, feat_macro], dim=1)
         return out
 
@@ -189,8 +200,9 @@ class Interpolator(nn.Module):
         
         return {
             "final": final_output,          # Use this for HiCRep/SSIM/etc.
-            "mask_prob": predicted_mask_prob, # Use this for BCE Loss
-            "intensity": predicted_intensity  # Intermediate regression
+            "mask_prob": predicted_mask_prob, # Use this for metrics/inference
+            "intensity": predicted_intensity, # Intermediate regression
+            "mask_logits": mask_logits        # Use this for stable BCE-with-logits
         }
 
 

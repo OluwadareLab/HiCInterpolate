@@ -11,15 +11,14 @@ class EncoderBlock(nn.Module):
 
         self.fine_path = nn.Sequential(
             nn.Conv2d(in_channels, hidden_ch,
-                      kernel_size=3, padding=1, bias=False),
+                      kernel_size=1, padding=0, bias=False),  # [CHANGED: k=1]
             nn.BatchNorm2d(hidden_ch),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
         self.structural_path = nn.Sequential(
-            # Using dilation=2 on a 3x3 kernel gives a 5x5 field without the heavy blur
-            nn.Conv2d(in_channels, hidden_ch, kernel_size=3,
-                      padding=2, dilation=2, bias=False),
+            nn.Conv2d(in_channels, hidden_ch, kernel_size=1,
+                      padding=0, bias=False),  # [CHANGED: k=1]
             nn.BatchNorm2d(hidden_ch),
             nn.LeakyReLU(0.2, inplace=True)
         )

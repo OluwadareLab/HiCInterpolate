@@ -12,19 +12,19 @@ class FlowEstimationBlock(nn.Module):
         super().__init__()
         search_range = (2 * max_disp + 1)**2
         self.flow_estimator = nn.Sequential(
-            nn.Conv2d(search_range, 64, kernel_size=3,
-                      padding=1, bias=False),
+            nn.Conv2d(search_range, 64, kernel_size=1,
+                      padding=0, bias=False),  # [CHANGED: k=1]
             nn.BatchNorm2d(64),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(64, 32, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(64, 32, kernel_size=1, padding=0, bias=False),  # [CHANGED: k=1]
             nn.BatchNorm2d(32),
             nn.LeakyReLU(0.2, inplace=True),
             # Outputs U and V flow components
-            nn.Conv2d(32, 2, kernel_size=3, padding=1)
+            nn.Conv2d(32, 2, kernel_size=1, padding=0)  # [CHANGED: k=1]
         )
 
         self.mask_estimator = nn.Sequential(
-            nn.Conv2d(feature_channels * 2, 1, kernel_size=3, padding=1),
+            nn.Conv2d(feature_channels * 2, 1, kernel_size=1, padding=0),  # [CHANGED: k=1]
             nn.Sigmoid()
         )
 
