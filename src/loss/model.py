@@ -1,5 +1,3 @@
-import math
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,32 +22,24 @@ class StratifiedGenomicLossWrapper(nn.Module):
         self.base_loss = base_loss_module
 
     def forward(self, pred, target):
-        # 1. Compute element-wise unreduced spatial loss matrix
-        raw_spatial_loss = self.base_loss(pred, target)
+        raw_spatial_loss = self.base_loss(pred, target, reduction="none")
         b, c, h, w = target.shape
 
-        # 2. Build a distance stratification normalization mask
         rows = torch.arange(h, device=target.device).view(h, 1).repeat(1, w)
         cols = torch.arange(w, device=target.device).view(1, w).repeat(h, 1)
         distance_matrix = torch.abs(rows - cols).float()
 
-        # Calculate the empirical mean loss for each distance band in the target
-        # To avoid zero division, we add a tiny stability epsilon
         eps = 1e-6
         stratified_weights = torch.zeros_like(distance_matrix)
 
         for d in range(h):
             mask = (distance_matrix == d)
-            target_band_mean = target[:, :, mask].mean()
-            # If the target band is nearly empty, we amplify the loss weight
-            # to force the model to capture the sparse structure
-            stratified_weights[mask] = 1.0 / (target_band_mean + eps)
+            occupancy = (target[:, :, mask] > eps).float().mean()
+            stratified_weights[mask] = 1.0 / (occupancy + 0.05)
 
-        # Clamp max weights to avoid gradient explosions far out
-        stratified_weights = stratified_weights.clamp(
-            max=50.0).view(1, 1, h, w)
+        stratified_weights = stratified_weights / stratified_weights.mean().clamp_min(eps)
+        stratified_weights = stratified_weights.clamp(max=8.0).view(1, 1, h, w)
 
-        # 3. Apply the stratified mask to the loss landscape
         balanced_loss = raw_spatial_loss * stratified_weights
         return balanced_loss.mean()
 
@@ -60,9 +50,7 @@ class DistanceWeightedWingLoss(nn.Module):
         self.base_wing = base_wing_loss
 
     def forward(self, pred, target):
-        # 1. Compute standard pixel-level loss matrix (unreduced)
-        # Ensure your AdaptiveWingLoss returns an unreduced tensor [B, 1, H, W]
-        raw_loss = self.base_wing(pred, target)
+        raw_loss = self.base_wing(pred, target, reduction="none")
 
         # 2. Dynamically construct a distance-from-diagonal weight matrix
         b, c, h, w = target.shape
@@ -97,62 +85,67 @@ class SymmetryLoss(nn.Module):
 
 
 class AdaptiveWingLoss2D(nn.Module):
-    def __init__(self, omega=14.0, theta=0.5, epsilon=1.0, alpha=2.1):
+    def __init__(self, omega=14.0, theta=0.5, epsilon=1.0, alpha=2.1,
+                 reduction="mean"):
         """
         Args:
             omega (float): Controls the maximum gradient scale for small errors.
             theta (float): The threshold switching point between the log and linear zones.
             epsilon (float): Avoids division by zero and shapes the internal curve.
             alpha (float): Used in the (alpha - y) exponent to govern background sensitivity.
+            reduction (str): mean, sum, or none. Use none for spatial reweighting.
         """
         super(AdaptiveWingLoss2D, self).__init__()
         self.omega = omega
         self.theta = theta
         self.epsilon = epsilon
         self.alpha = alpha
+        self.reduction = reduction
 
-        # Precompute structural mathematical constants to save runtime FLOPs
-        self.A = omega * (1.0 / (1.0 + math.pow(theta / epsilon, alpha - theta))) * \
-            (alpha - theta) * (math.pow(theta / epsilon,
-                                        alpha - theta - 1.0)) * (1.0 / epsilon)
-
-        self.C = self.A * theta - omega * \
-            math.log(1.0 + math.pow(theta / epsilon, alpha - theta))
-
-    def forward(self, pred, target):
+    def forward(self, pred, target, reduction=None):
         """
         Args:
             pred (torch.Tensor): Output from the model prediction head [B, 1, H, W]
             target (torch.Tensor): Ground-truth target Hi-C matrix patch [B, 1, H, W]
         """
-        # 1. Compute absolute localized spatial error
         delta_y = torch.abs(pred - target)
+        reduction = self.reduction if reduction is None else reduction
 
-        # 2. Build the operating state masks based on the theta threshold
         small_error_mask = delta_y < self.theta
         large_error_mask = ~small_error_mask
 
-        # Allocate an empty loss tensor matching our inputs
         loss = torch.zeros_like(delta_y)
+        target_safe = target.clamp(min=0.0, max=self.alpha - 1e-3)
+        theta_over_eps = torch.as_tensor(
+            self.theta / self.epsilon, device=target.device, dtype=target.dtype)
 
-        # 3. Compute Small Error Phase (Logarithmic Zone)
-        # Isolate the target intensities for the small error zones
-        target_small = target[small_error_mask]
+        target_small = target_safe[small_error_mask]
         delta_y_small = delta_y[small_error_mask]
-
-        # Calculate dynamic exponents: (alpha - y)
-        pow_exponent = self.alpha - target_small
-
-        # Run the vectorized log function
+        pow_small = self.alpha - target_small
         loss[small_error_mask] = self.omega * torch.log(
-            1.0 + torch.pow(delta_y_small / self.epsilon, pow_exponent)
+            1.0 + torch.pow(delta_y_small / self.epsilon, pow_small)
         )
 
-        # 4. Compute Large Error Phase (Linear Zone)
+        target_large = target_safe[large_error_mask]
         delta_y_large = delta_y[large_error_mask]
-        loss[large_error_mask] = self.A * delta_y_large - self.C
+        pow_large = self.alpha - target_large
+        a = (
+            self.omega
+            * pow_large
+            * torch.pow(theta_over_eps, pow_large - 1.0)
+            / (self.epsilon * (1.0 + torch.pow(theta_over_eps, pow_large)))
+        )
+        c = self.theta * a - self.omega * torch.log(
+            1.0 + torch.pow(theta_over_eps, pow_large)
+        )
+        loss[large_error_mask] = a * delta_y_large - c
 
-        # 5. Return the batch-averaged spatial error mean
+        if reduction == "none":
+            return loss
+        if reduction == "sum":
+            return loss.sum()
+        if reduction != "mean":
+            raise ValueError(f"Unsupported reduction: {reduction}")
         return loss.mean()
 
 
@@ -160,32 +153,22 @@ class TVLoss(nn.Module):
     def __init__(self):
         super(TVLoss, self).__init__()
 
-    def forward(self, x):
-        b, c, h, w = x.shape
+    def forward(self, x, target=None):
+        if target is None:
+            target = x.detach()
 
-        # Enforce strict matrix symmetry before computing gradients
-        # This aligns the prediction with physical genomic topology
         x_sym = 0.5 * (x + x.transpose(-2, -1))
+        target_sym = 0.5 * (target + target.transpose(-2, -1))
 
-        # Calculate local differences (Gradients)
-        # Delta along the genomic genomic position axis (Vertical)
         diff_h = x_sym[:, :, 1:, :] - x_sym[:, :, :-1, :]
-        # Delta along the interacting genomic position axis (Horizontal)
         diff_w = x_sym[:, :, :, 1:] - x_sym[:, :, :, :-1]
+        target_h = target_sym[:, :, 1:, :] - target_sym[:, :, :-1, :]
+        target_w = target_sym[:, :, :, 1:] - target_sym[:, :, :, :-1]
 
-        # THE CRITICAL FIXED STEP: Use the L1 Norm (.abs()) instead of L2 (.square())
-        # This creates an anisotropic penalty that allows sharp step functions (TAD walls)
-        h_tv = diff_h.abs().sum()
-        w_tv = diff_w.abs().sum()
+        h_loss = F.l1_loss(diff_h, target_h)
+        w_loss = F.l1_loss(diff_w, target_w)
 
-        # Dynamic normalization using total element counts to prevent scaling bugs
-        count_h = diff_h.numel()
-        count_w = diff_w.numel()
-
-        # Average the total variation penalty across the batch size
-        total_tv = (h_tv / count_h + w_tv / count_w) / b
-
-        return total_tv
+        return 0.5 * (h_loss + w_loss)
 
 
 class StyleLoss(nn.Module):
@@ -311,8 +294,9 @@ class CombinedLoss(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.vgg_loss = VGGPerceptualLoss().to(cfg.device)
-        self.style_loss = StyleLoss().to(cfg.device)
+        loss_names = {weight_params["name"] for weight_params in cfg.loss.weight_parameters}
+        self.vgg_loss = VGGPerceptualLoss().to(cfg.device) if "vgg" in loss_names else None
+        self.style_loss = StyleLoss().to(cfg.device) if "style" in loss_names else None
         self.l1_loss = nn.L1Loss().to(cfg.device)
         self.mse_loss = nn.MSELoss().to(cfg.device)
         self.tv_loss = TVLoss().to(cfg.device)
@@ -384,7 +368,10 @@ class CombinedLoss(nn.Module):
         return corr.mean()
 
     def forward(self, pred: Tensor, y: Tensor, epoch: int,
-                pred_mask: Tensor = None, gt_mask: Tensor = None):
+                pred_mask: Tensor = None, gt_mask: Tensor = None,
+                diffusion_noise_pred: Tensor = None,
+                diffusion_noise_target: Tensor = None,
+                diffusion_mask: Tensor = None):
         loss = pred.new_zeros(())
 
         for weight_params in self.cfg.loss.weight_parameters:
@@ -406,7 +393,7 @@ class CombinedLoss(nn.Module):
                 loss = loss + weight * \
                     self.style_loss(self._to_3ch(pred), self._to_3ch(y))
             elif weight_params["name"] == "tv":
-                loss = loss + weight * self.tv_loss(pred)
+                loss = loss + weight * self.tv_loss(pred, y)
             elif weight_params["name"] == "symmetry":
                 loss = loss + weight * self.symmetry_loss(pred)
             elif weight_params["name"] == "ms_ssim":
@@ -425,6 +412,16 @@ class CombinedLoss(nn.Module):
                         "bce loss requires pred_mask and gt_mask arguments")
                 loss = loss + weight * \
                     F.binary_cross_entropy_with_logits(pred_mask, gt_mask)
+            elif weight_params["name"] == "diffusion":
+                if diffusion_noise_pred is None or diffusion_noise_target is None:
+                    continue
+                if diffusion_mask is None:
+                    diffusion_mask = torch.ones_like(diffusion_noise_target)
+                denom = diffusion_mask.sum().clamp_min(1.0)
+                loss = loss + weight * (
+                    ((diffusion_noise_pred - diffusion_noise_target) ** 2)
+                    * diffusion_mask
+                ).sum() / denom
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 

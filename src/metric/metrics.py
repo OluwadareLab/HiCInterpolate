@@ -129,6 +129,39 @@ def get_eval_metrics_gpu(preds: Tensor, target: Tensor, include_lpips: bool = Tr
     return metrics
 
 
+@torch.no_grad()
+def get_sparse_support_metrics(preds: Tensor, target: Tensor, threshold: float = 1e-3):
+    pred_support = preds > threshold
+    target_support = target > 0
+
+    tp = (pred_support & target_support).sum().float()
+    fp = (pred_support & ~target_support).sum().float()
+    fn = (~pred_support & target_support).sum().float()
+
+    precision = tp / (tp + fp + _EPSILON)
+    recall = tp / (tp + fn + _EPSILON)
+    f1 = 2.0 * precision * recall / (precision + recall + _EPSILON)
+    pred_density = pred_support.float().mean()
+    target_density = target_support.float().mean()
+    density_error = torch.abs(pred_density - target_density)
+
+    nonzero = target_support.float()
+    zero = (~target_support).float()
+    nonzero_mae = (torch.abs(preds - target) * nonzero).sum() / nonzero.sum().clamp_min(1.0)
+    zero_mae = (torch.abs(preds) * zero).sum() / zero.sum().clamp_min(1.0)
+
+    return {
+        "sparse_precision": precision,
+        "sparse_recall": recall,
+        "sparse_f1": f1,
+        "pred_density": pred_density,
+        "target_density": target_density,
+        "density_error": density_error,
+        "nonzero_mae": nonzero_mae,
+        "zero_mae": zero_mae,
+    }
+
+
 def get_scc(pred, target, eps=1e-8):
     assert pred.shape == target.shape, "Input shapes must match"
     B, C, H, W = pred.shape

@@ -103,6 +103,56 @@ class DenseGenomicRefinementBlock(nn.Module):
         return self.leaky_relu(self.fusion(fused))
 
 
+class SinusoidalTimeEmbedding(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, t):
+        half = self.dim // 2
+        device = t.device
+        freq = torch.exp(
+            -torch.log(torch.tensor(10000.0, device=device))
+            * torch.arange(half, device=device).float()
+            / max(half - 1, 1)
+        )
+        args = t.float().view(-1, 1) * freq.view(1, -1)
+        emb = torch.cat([torch.sin(args), torch.cos(args)], dim=1)
+        if self.dim % 2 == 1:
+            emb = F.pad(emb, (0, 1))
+        return emb
+
+
+class SparseDiffusionRefinementBlock(nn.Module):
+    def __init__(self, feature_channels=16, hidden_channels=32, time_channels=32):
+        super().__init__()
+        self.time_embedding = nn.Sequential(
+            SinusoidalTimeEmbedding(time_channels),
+            nn.Linear(time_channels, hidden_channels),
+            nn.SiLU(),
+            nn.Linear(hidden_channels, hidden_channels),
+        )
+        self.input_proj = nn.Conv2d(feature_channels + 2, hidden_channels, kernel_size=1, bias=False)
+        self.refine = nn.Sequential(
+            nn.BatchNorm2d(hidden_channels),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(hidden_channels, hidden_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(hidden_channels),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(hidden_channels, hidden_channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(hidden_channels),
+            nn.SiLU(inplace=True),
+        )
+        self.noise_head = nn.Conv2d(hidden_channels, 1, kernel_size=1)
+
+    def forward(self, features, noisy_x, base_x, timestep):
+        h = self.input_proj(torch.cat([features, noisy_x, base_x], dim=1))
+        t_emb = self.time_embedding(timestep).view(timestep.size(0), -1, 1, 1)
+        h = h + t_emb
+        h = h + self.refine(h)
+        return self.noise_head(h)
+
+
 class Interpolator(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -143,7 +193,20 @@ class Interpolator(nn.Module):
         self.regression_head = nn.Conv2d(16, 1, kernel_size=1)
         self.mask_head = nn.Conv2d(16, 1, kernel_size=1)
 
-
+        diffusion_cfg = getattr(self.cfg.model, "diffusion", None)
+        self.diffusion_enabled = bool(getattr(diffusion_cfg, "enabled", True))
+        self.diffusion_timesteps = int(getattr(diffusion_cfg, "timesteps", 64))
+        beta_start = float(getattr(diffusion_cfg, "beta_start", 1e-4))
+        beta_end = float(getattr(diffusion_cfg, "beta_end", 2e-2))
+        hidden_channels = int(getattr(diffusion_cfg, "hidden_channels", 32))
+        self.inference_timestep = int(getattr(diffusion_cfg, "inference_timestep", 4))
+        self.preserve_input_support = bool(getattr(diffusion_cfg, "preserve_input_support", True))
+        betas = torch.linspace(beta_start, beta_end, self.diffusion_timesteps)
+        alphas_cumprod = torch.cumprod(1.0 - betas, dim=0)
+        self.register_buffer("sqrt_alphas_cumprod", torch.sqrt(alphas_cumprod))
+        self.register_buffer("sqrt_one_minus_alphas_cumprod", torch.sqrt(1.0 - alphas_cumprod))
+        self.diffusion_refiner = SparseDiffusionRefinementBlock(
+            feature_channels=16, hidden_channels=hidden_channels)
 
     @staticmethod
     def concatenate_flow_ftr(ftr_0: list[Tensor], ftr_2: list[Tensor]) -> list[Tensor]:
@@ -152,7 +215,32 @@ class Interpolator(nn.Module):
             mid_ftr.append(torch.cat([feature1, feature2], dim=1))
         return mid_ftr
 
-    def forward(self, x0: Tensor, x2: Tensor, time: Tensor) -> Tensor:
+    def _sample_timesteps(self, batch_size: int, device: torch.device) -> Tensor:
+        return torch.randint(0, self.diffusion_timesteps, (batch_size,), device=device)
+
+    def _q_sample_sparse(self, clean: Tensor, support: Tensor, timesteps: Tensor):
+        noise = torch.randn_like(clean) * support
+        sqrt_alpha = self.sqrt_alphas_cumprod[timesteps].view(-1, 1, 1, 1)
+        sqrt_one_minus = self.sqrt_one_minus_alphas_cumprod[timesteps].view(-1, 1, 1, 1)
+        noisy = sqrt_alpha * clean + sqrt_one_minus * noise
+        noisy = noisy * support
+        return noisy, noise
+
+    def _predict_x0_from_noise(self, noisy: Tensor, noise_pred: Tensor, timesteps: Tensor) -> Tensor:
+        sqrt_alpha = self.sqrt_alphas_cumprod[timesteps].view(-1, 1, 1, 1).clamp_min(1e-6)
+        sqrt_one_minus = self.sqrt_one_minus_alphas_cumprod[timesteps].view(-1, 1, 1, 1)
+        return (noisy - sqrt_one_minus * noise_pred) / sqrt_alpha
+
+    def _diffusion_refine(self, features: Tensor, base_intensity: Tensor, support: Tensor, timestep_value: int):
+        timestep_value = max(0, min(timestep_value, self.diffusion_timesteps - 1))
+        timesteps = torch.full(
+            (base_intensity.size(0),), timestep_value,
+            device=base_intensity.device, dtype=torch.long)
+        noise_pred = self.diffusion_refiner(features, base_intensity * support, base_intensity, timesteps)
+        refined = self._predict_x0_from_noise(base_intensity, noise_pred * support, timesteps)
+        return refined.clamp_min(0.0) * support, noise_pred, timesteps
+
+    def forward(self, x0: Tensor, x2: Tensor, time: Tensor, target: Tensor = None) -> Tensor:
         # feature extractor
         x0_ftr = self.in_ftrs(x0)  # channels = 16*3 = 48
         x2_ftr = self.in_ftrs(x2)  # channels = 16*3 = 48
@@ -182,28 +270,46 @@ class Interpolator(nn.Module):
         # pred = residual + interpolatios[0]
 
         res_correction = self.regression_head(residual)
-        # raw_intensity = res_correction + interpolatios[0]
         raw_intensity = res_correction
-        
-        # Apply ReLU or Softplus to ensure intensity is physically non-negative
-        predicted_intensity = F.softplus(raw_intensity)
-        
-        # 2. Calculate Sparsity Mask (Probability Space)
-        # Sigmoid squashes output to [0, 1] range
+        base_intensity = F.softplus(raw_intensity)
+
         mask_logits = self.mask_head(residual)
         predicted_mask_prob = torch.sigmoid(mask_logits)
-        
-        # 3. Final Gated Output (The "Filtered" Result)
-        # During training, we use the probability. 
-        # During inference, we can use a hard threshold (e.g., > 0.5)
+
+        support_prob = predicted_mask_prob
+        if self.preserve_input_support:
+            endpoint_support = ((x0 > 0) | (x2 > 0)).float()
+            support_prob = torch.maximum(support_prob, endpoint_support)
+
+        predicted_intensity = base_intensity
+        diffusion_noise_pred = None
+        diffusion_noise_target = None
+        diffusion_mask = None
+        diffusion_t = None
+
+        if self.diffusion_enabled:
+            predicted_intensity, _, _ = self._diffusion_refine(
+                residual, base_intensity, support_prob, self.inference_timestep)
+
+            if target is not None:
+                diffusion_mask = (target > 0).float()
+                diffusion_t = self._sample_timesteps(target.size(0), target.device)
+                noisy_target, diffusion_noise_target = self._q_sample_sparse(
+                    target, diffusion_mask, diffusion_t)
+                diffusion_noise_pred = self.diffusion_refiner(
+                    residual, noisy_target, base_intensity.detach(), diffusion_t) * diffusion_mask
+                diffusion_noise_target = diffusion_noise_target * diffusion_mask
+
         final_output = predicted_intensity * predicted_mask_prob
-        
+
         return {
-            "final": final_output,          # Use this for HiCRep/SSIM/etc.
-            "mask_prob": predicted_mask_prob, # Use this for metrics/inference
-            "intensity": predicted_intensity, # Intermediate regression
-            "mask_logits": mask_logits        # Use this for stable BCE-with-logits
+            "final": final_output,
+            "mask_prob": predicted_mask_prob,
+            "intensity": predicted_intensity,
+            "base_intensity": base_intensity,
+            "mask_logits": mask_logits,
+            "diffusion_noise_pred": diffusion_noise_pred,
+            "diffusion_noise_target": diffusion_noise_target,
+            "diffusion_mask": diffusion_mask,
+            "diffusion_t": diffusion_t,
         }
-
-
-        return residual

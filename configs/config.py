@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict
 
 
@@ -46,12 +46,26 @@ class TrainingConfig:
     decay_steps: int
     decay_rate: float
     lr_staircase: bool
+    weight_decay: float = 5e-5
+    warmup_epochs: int = 3
+    grad_clip: float = 1.0
 
 
 @dataclass
 class FlowConfig:
     num_of_convs: List[int]
     out_channels: List[int]
+
+
+@dataclass
+class DiffusionConfig:
+    enabled: bool = True
+    timesteps: int = 64
+    beta_start: float = 0.0001
+    beta_end: float = 0.02
+    hidden_channels: int = 32
+    inference_timestep: int = 4
+    preserve_input_support: bool = True
 
 
 @dataclass
@@ -64,6 +78,7 @@ class ModelConfig:
     unique_levels: int
     flow: FlowConfig
     fusion_pyramid_level: int
+    diffusion: DiffusionConfig = field(default_factory=DiffusionConfig)
 
 
 @dataclass

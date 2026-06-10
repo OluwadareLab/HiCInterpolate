@@ -73,7 +73,8 @@ class Tester:
                 y = y.to(self.device)
                 x1 = x1.to(self.device)
                 time_frame = time_frame.to(self.device)
-                pred = self.model(x0, x1, time_frame)
+                outputs = self.model(x0, x1, time_frame)
+                pred = outputs["final"] if isinstance(outputs, dict) else outputs
 
                 psnr_val = eval_metric.get_psnr_gpu(pred, y)
                 ssim_val = eval_metric.get_ssim_gpu(pred, y)

@@ -62,15 +62,18 @@ class Trainer:
         # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         #     self.optimizer, mode='max', factor=0.5, patience=10)
 
+        decay_params, no_decay_params = self._split_weight_decay_params(self.model)
         self.optimizer = optim.AdamW(
-            self.model.parameters(),
-            lr=self.cfg.training.lr,              # Peak learning rate baseline
-            betas=(0.9, 0.999),    # Standard momentum coefficients
-            weight_decay=1e-4,    # Decoupled L2 regularization to prevent overfitting
+            [
+                {"params": decay_params, "weight_decay": self.cfg.training.weight_decay},
+                {"params": no_decay_params, "weight_decay": 0.0},
+            ],
+            lr=self.cfg.training.lr,
+            betas=(0.9, 0.99),
             eps=1e-8
         )
         total_iterations = len(self.train_dl) * self.cfg.training.epochs
-        warmup_iterations = len(self.train_dl) * 5
+        warmup_iterations = len(self.train_dl) * self.cfg.training.warmup_epochs
         warmup = torch.optim.lr_scheduler.LinearLR(
             self.optimizer, start_factor=0.01, total_iters=warmup_iterations)
         cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -83,15 +86,25 @@ class Trainer:
         self.epochs_run = 0
         self.train_loss_per_epoch = 0
         self.val_loss_per_epoch = 0
-        self.val_ssim_per_epoch = 0
-        self.val_genome_disco_per_epoch = 0
-        self.val_hicrep_per_epoch = 0
+        self.val_sparse_precision_per_epoch = 0
+        self.val_sparse_recall_per_epoch = 0
+        self.val_sparse_f1_per_epoch = 0
+        self.val_pred_density_per_epoch = 0
+        self.val_target_density_per_epoch = 0
+        self.val_density_error_per_epoch = 0
+        self.val_nonzero_mae_per_epoch = 0
+        self.val_zero_mae_per_epoch = 0
         self.val_score_per_epoch = 0
 
-        self.state = {'epoch': [], 'lr': [], 'train_loss': [], 'val_loss': [
-        ], 'val_ssim': [], 'val_genome_disco': [], 'val_hicrep': [], 'best_val': []}
+        self.state = {'epoch': [], 'lr': [], 'train_loss': [], 'val_loss': [],
+                      'val_sparse_precision': [], 'val_sparse_recall': [], 'val_sparse_f1': [],
+                      'val_pred_density': [], 'val_target_density': [], 'val_density_error': [],
+                      'val_nonzero_mae': [], 'val_zero_mae': [],
+                      'val_score': [], 'best_val': []}
         self.metric_columns = ['epoch', 'lr', 'train_loss', 'val_loss',
-                               'val_ssim', 'val_genome_disco', 'val_hicrep', 'best_val']
+                               'val_sparse_precision', 'val_sparse_recall', 'val_sparse_f1',
+                               'val_pred_density', 'val_target_density', 'val_density_error',
+                               'val_nonzero_mae', 'val_zero_mae', 'val_score', 'best_val']
         self.patience = 200
         self.epochs_no_improve = 0
         self.best_val = -float('inf')
@@ -104,6 +117,19 @@ class Trainer:
             print(f"[INFO] Loading snapshot...")
             self._load_snapshot(self.snapshot)
 
+    @staticmethod
+    def _split_weight_decay_params(model):
+        decay_params = []
+        no_decay_params = []
+        for name, param in model.named_parameters():
+            if not param.requires_grad:
+                continue
+            if param.ndim <= 1 or name.endswith(".bias") or "norm" in name.lower() or "bn" in name.lower():
+                no_decay_params.append(param)
+            else:
+                decay_params.append(param)
+        return decay_params, no_decay_params
+
     def _remove_module_prefix(self, state_dict):
         new_state_dict = OrderedDict()
         for k, v in state_dict.items():
@@ -111,15 +137,32 @@ class Trainer:
             new_state_dict[name] = v
         return new_state_dict
 
+
+    def _ensure_state_keys(self):
+        num_epochs = len(self.state.get('epoch', []))
+        for key in self.metric_columns:
+            if key not in self.state:
+                self.state[key] = [-float('inf')] * num_epochs if key == 'best_val' else [0.0] * num_epochs
+
+
+    def _load_optimizer_scheduler_state(self, snapshot):
+        try:
+            self.optimizer.load_state_dict(snapshot['optimizer'])
+            self.scheduler.load_state_dict(snapshot['scheduler'])
+        except ValueError as ex:
+            msg = f"Optimizer/scheduler state not loaded; using fresh state. Reason: {ex}"
+            self.log.info(msg)
+            print(f"[INFO] {msg}")
+
     def _load_snapshot(self, snapshot):
         if self.isDistributed:
             loc = f"cuda:{self.device}"
             snapshot = torch.load(snapshot, map_location=loc)
             self.epochs_run = snapshot['epoch']
             self.model.load_state_dict(snapshot['model'])
-            self.optimizer.load_state_dict(snapshot['optimizer'])
-            self.scheduler.load_state_dict(snapshot['scheduler'])
+            self._load_optimizer_scheduler_state(snapshot)
             self.state = snapshot['state']
+            self._ensure_state_keys()
             best_val_list = snapshot['state'].get('best_val', [])
             self.best_val = best_val_list[-1] if best_val_list else - \
                 float('inf')
@@ -128,9 +171,9 @@ class Trainer:
             self.epochs_run = snapshot['epoch']
             model_state_dict = self._remove_module_prefix(snapshot['model'])
             self.model.load_state_dict(model_state_dict)
-            self.optimizer.load_state_dict(snapshot['optimizer'])
-            self.scheduler.load_state_dict(snapshot['scheduler'])
+            self._load_optimizer_scheduler_state(snapshot)
             self.state = snapshot['state']
+            self._ensure_state_keys()
             best_val_list = self.state.get('best_val', [])
             self.best_val = best_val_list[-1] if best_val_list else - \
                 float('inf')
@@ -144,30 +187,43 @@ class Trainer:
         return total / count if count else 0.0
 
     @staticmethod
-    def _validation_score(ssim, genome_disco, hicrep):
-        return 0.2 * ssim + 0.2 * genome_disco + 0.6 * hicrep
+    def _validation_score(sparse_f1, density_error, nonzero_mae, zero_mae):
+        return sparse_f1 - density_error - 0.1 * nonzero_mae - 0.1 * zero_mae
 
-    def _update_metrics(self, epoch, train_samples, train_loss, val_samples, val_loss, val_ssim, val_genome_disco, val_hicrep):
+    def _update_metrics(self, epoch, train_samples, train_loss, val_samples, val_loss,
+                        val_sparse_precision, val_sparse_recall, val_sparse_f1, val_pred_density, val_target_density,
+                        val_density_error, val_nonzero_mae, val_zero_mae):
         self.train_loss_per_epoch = self._safe_average(
             train_loss, train_samples)
         self.val_loss_per_epoch = self._safe_average(val_loss, val_samples)
-        self.val_ssim_per_epoch = self._safe_average(val_ssim, val_samples)
-        self.val_genome_disco_per_epoch = self._safe_average(
-            val_genome_disco, val_samples)
-        self.val_hicrep_per_epoch = self._safe_average(val_hicrep, val_samples)
+        self.val_sparse_precision_per_epoch = self._safe_average(val_sparse_precision, val_samples)
+        self.val_sparse_recall_per_epoch = self._safe_average(val_sparse_recall, val_samples)
+        self.val_sparse_f1_per_epoch = self._safe_average(val_sparse_f1, val_samples)
+        self.val_pred_density_per_epoch = self._safe_average(val_pred_density, val_samples)
+        self.val_target_density_per_epoch = self._safe_average(val_target_density, val_samples)
+        self.val_density_error_per_epoch = self._safe_average(val_density_error, val_samples)
+        self.val_nonzero_mae_per_epoch = self._safe_average(val_nonzero_mae, val_samples)
+        self.val_zero_mae_per_epoch = self._safe_average(val_zero_mae, val_samples)
         self.val_score_per_epoch = self._validation_score(
-            self.val_ssim_per_epoch,
-            self.val_genome_disco_per_epoch,
-            self.val_hicrep_per_epoch,
+            self.val_sparse_f1_per_epoch,
+            self.val_density_error_per_epoch,
+            self.val_nonzero_mae_per_epoch,
+            self.val_zero_mae_per_epoch,
         )
 
         self.state['epoch'].append(epoch+1)
         self.state['lr'].append(self.optimizer.param_groups[0]['lr'])
         self.state['train_loss'].append(self.train_loss_per_epoch)
         self.state['val_loss'].append(self.val_loss_per_epoch)
-        self.state['val_ssim'].append(self.val_ssim_per_epoch)
-        self.state['val_genome_disco'].append(self.val_genome_disco_per_epoch)
-        self.state['val_hicrep'].append(self.val_hicrep_per_epoch)
+        self.state['val_sparse_precision'].append(self.val_sparse_precision_per_epoch)
+        self.state['val_sparse_recall'].append(self.val_sparse_recall_per_epoch)
+        self.state['val_sparse_f1'].append(self.val_sparse_f1_per_epoch)
+        self.state['val_pred_density'].append(self.val_pred_density_per_epoch)
+        self.state['val_target_density'].append(self.val_target_density_per_epoch)
+        self.state['val_density_error'].append(self.val_density_error_per_epoch)
+        self.state['val_nonzero_mae'].append(self.val_nonzero_mae_per_epoch)
+        self.state['val_zero_mae'].append(self.val_zero_mae_per_epoch)
+        self.state['val_score'].append(self.val_score_per_epoch)
 
     def _is_main_process(self):
         return (not self.isDistributed) or self.device == 0
@@ -213,14 +269,22 @@ class Trainer:
             'lr': self.state["lr"],
             'train_loss': self.state["train_loss"],
             'val_loss': self.state["val_loss"],
-            'val_ssim': self.state["val_ssim"],
-            'val_genome_disco': self.state["val_genome_disco"],
-            'val_hicrep': self.state["val_hicrep"],
+            'val_sparse_precision': self.state["val_sparse_precision"],
+            'val_sparse_recall': self.state["val_sparse_recall"],
+            'val_sparse_f1': self.state["val_sparse_f1"],
+            'val_pred_density': self.state["val_pred_density"],
+            'val_target_density': self.state["val_target_density"],
+            'val_density_error': self.state["val_density_error"],
+            'val_nonzero_mae': self.state["val_nonzero_mae"],
+            'val_zero_mae': self.state["val_zero_mae"],
+            'val_score': self.state["val_score"],
             'best_val': self.state["best_val"]
         }, columns=self.metric_columns)
 
-        metrics_to_round = ['train_loss', 'val_loss', 'val_ssim',
-                            'val_genome_disco', 'val_hicrep', 'best_val']
+        metrics_to_round = ['train_loss', 'val_loss',
+                            'val_sparse_precision', 'val_sparse_recall', 'val_sparse_f1',
+                            'val_pred_density', 'val_target_density', 'val_density_error',
+                            'val_nonzero_mae', 'val_zero_mae', 'val_score', 'best_val']
         metrics_df[metrics_to_round] = metrics_df[metrics_to_round].round(4)
         if 'lr' in metrics_df.columns:
             metrics_df['lr'] = metrics_df['lr'].round(6)
@@ -232,8 +296,11 @@ class Trainer:
         return (
             f"[{(self.epochs_run+1)}/{max_epochs}] LR: {self.optimizer.param_groups[0]['lr']:.6f}; "
             f"Batch Size: {self.batch_size}; Train Loss: {self.train_loss_per_epoch:.4f}; "
-            f"Val (Loss: {self.val_loss_per_epoch:.4f}, SSIM: {self.val_ssim_per_epoch:.4f}, "
-            f"GenomeDISCO: {self.val_genome_disco_per_epoch:.4f}, HiCRep: {self.val_hicrep_per_epoch:.4f}, "
+            f"Val (Loss: {self.val_loss_per_epoch:.4f}, SparseF1: {self.val_sparse_f1_per_epoch:.4f}, "
+            f"SparseP: {self.val_sparse_precision_per_epoch:.4f}, SparseR: {self.val_sparse_recall_per_epoch:.4f}, "
+            f"PredDensity: {self.val_pred_density_per_epoch:.4f}, TargetDensity: {self.val_target_density_per_epoch:.4f}, "
+            f"DensityErr: {self.val_density_error_per_epoch:.4f}, "
+            f"NZ-MAE: {self.val_nonzero_mae_per_epoch:.4f}, Z-MAE: {self.val_zero_mae_per_epoch:.4f}, "
             f"Score: {self.val_score_per_epoch:.4f});"
         )
 
@@ -241,9 +308,14 @@ class Trainer:
         self.epochs_run = epoch
         self.train_loss_per_epoch = 0
         self.val_loss_per_epoch = 0
-        self.val_ssim_per_epoch = 0
-        self.val_genome_disco_per_epoch = 0
-        self.val_hicrep_per_epoch = 0
+        self.val_sparse_precision_per_epoch = 0
+        self.val_sparse_recall_per_epoch = 0
+        self.val_sparse_f1_per_epoch = 0
+        self.val_pred_density_per_epoch = 0
+        self.val_target_density_per_epoch = 0
+        self.val_density_error_per_epoch = 0
+        self.val_nonzero_mae_per_epoch = 0
+        self.val_zero_mae_per_epoch = 0
         self.val_score_per_epoch = 0
 
         self.model.train()
@@ -261,13 +333,16 @@ class Trainer:
             self.optimizer.zero_grad()
 
             batch_size = y.size(0)
-            outputs = self.model(x0, x1, time_frame)
+            outputs = self.model(x0, x1, time_frame, target=y)
             pred = outputs["final"]
             pred_mask_logits = outputs["mask_logits"]
             gt_mask = (y > 0).float()
 
             train_loss = self.loss_fn(
-                pred, y, self.epochs_run, pred_mask=pred_mask_logits, gt_mask=gt_mask)
+                pred, y, self.epochs_run, pred_mask=pred_mask_logits, gt_mask=gt_mask,
+                diffusion_noise_pred=outputs.get("diffusion_noise_pred"),
+                diffusion_noise_target=outputs.get("diffusion_noise_target"),
+                diffusion_mask=outputs.get("diffusion_mask"))
 
             if not torch.isfinite(train_loss):
                 self.optimizer.zero_grad(set_to_none=True)
@@ -275,7 +350,7 @@ class Trainer:
 
             train_loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(), max_norm=1.0)
+                self.model.parameters(), max_norm=self.cfg.training.grad_clip)
             if not torch.isfinite(grad_norm):
                 self.optimizer.zero_grad(set_to_none=True)
                 continue
@@ -288,9 +363,14 @@ class Trainer:
             del x0, y, x1, time_frame, pred
 
         local_val_loss = torch.tensor(0.0, device=self.device)
-        local_val_ssim = torch.tensor(0.0, device=self.device)
-        local_val_genome_disco = torch.tensor(0.0, device=self.device)
-        local_val_hicrep = torch.tensor(0.0, device=self.device)
+        local_val_sparse_precision = torch.tensor(0.0, device=self.device)
+        local_val_sparse_recall = torch.tensor(0.0, device=self.device)
+        local_val_sparse_f1 = torch.tensor(0.0, device=self.device)
+        local_val_pred_density = torch.tensor(0.0, device=self.device)
+        local_val_target_density = torch.tensor(0.0, device=self.device)
+        local_val_density_error = torch.tensor(0.0, device=self.device)
+        local_val_nonzero_mae = torch.tensor(0.0, device=self.device)
+        local_val_zero_mae = torch.tensor(0.0, device=self.device)
         local_val_samples = torch.tensor(0.0, device=self.device)
         self.best_plot_batch = None
 
@@ -303,24 +383,30 @@ class Trainer:
                 time_frame = time_frame.to(self.device)
 
                 batch_size = y.size(0)
-                outputs = self.model(x0, x1, time_frame)
+                outputs = self.model(x0, x1, time_frame, target=y)
 
                 pred = outputs["final"]
                 pred_mask_logits = outputs["mask_logits"]
                 gt_mask = (y > 0).float()
 
                 val_loss = self.loss_fn(
-                    pred, y, self.epochs_run, pred_mask=pred_mask_logits, gt_mask=gt_mask)
+                    pred, y, self.epochs_run, pred_mask=pred_mask_logits, gt_mask=gt_mask,
+                    diffusion_noise_pred=outputs.get("diffusion_noise_pred"),
+                    diffusion_noise_target=outputs.get("diffusion_noise_target"),
+                    diffusion_mask=outputs.get("diffusion_mask"))
 
                 local_val_loss += val_loss.detach() * batch_size
 
-                ssim_val = eval_metric.get_ssim_gpu(pred, y)
-                genome_disco_val = eval_metric.get_genome_disco_gpu(pred, y)
-                hicrep_val = eval_metric.get_hicrep_gpu(pred, y)
+                sparse_metrics = eval_metric.get_sparse_support_metrics(pred, y)
 
-                local_val_ssim += ssim_val * batch_size
-                local_val_genome_disco += genome_disco_val * batch_size
-                local_val_hicrep += hicrep_val * batch_size
+                local_val_sparse_precision += sparse_metrics["sparse_precision"] * batch_size
+                local_val_sparse_recall += sparse_metrics["sparse_recall"] * batch_size
+                local_val_sparse_f1 += sparse_metrics["sparse_f1"] * batch_size
+                local_val_pred_density += sparse_metrics["pred_density"] * batch_size
+                local_val_target_density += sparse_metrics["target_density"] * batch_size
+                local_val_density_error += sparse_metrics["density_error"] * batch_size
+                local_val_nonzero_mae += sparse_metrics["nonzero_mae"] * batch_size
+                local_val_zero_mae += sparse_metrics["zero_mae"] * batch_size
                 local_val_samples += batch_size
 
                 if self.best_plot_batch is None:
@@ -339,9 +425,14 @@ class Trainer:
                 local_val_samples,
                 local_train_loss,
                 local_val_loss,
-                local_val_ssim,
-                local_val_genome_disco,
-                local_val_hicrep,
+                local_val_sparse_precision,
+                local_val_sparse_recall,
+                local_val_sparse_f1,
+                local_val_pred_density,
+                local_val_target_density,
+                local_val_density_error,
+                local_val_nonzero_mae,
+                local_val_zero_mae,
             ):
                 dist.all_reduce(value, op=dist.ReduceOp.SUM)
 
@@ -351,9 +442,14 @@ class Trainer:
             local_train_loss.item(),
             local_val_samples.item(),
             local_val_loss.item(),
-            local_val_ssim.item(),
-            local_val_genome_disco.item(),
-            local_val_hicrep.item(),
+            local_val_sparse_precision.item(),
+            local_val_sparse_recall.item(),
+            local_val_sparse_f1.item(),
+            local_val_pred_density.item(),
+            local_val_target_density.item(),
+            local_val_density_error.item(),
+            local_val_nonzero_mae.item(),
+            local_val_zero_mae.item(),
         )
 
     def train(self, max_epochs: int):
