@@ -33,21 +33,24 @@ class SkipFusion(nn.Module):
 
 
 class DecoderBlock(nn.Module):
-    def __init__(self, deep_channels, native_channels, out_channels):
+    def __init__(self, deep_channels, native_channels, out_channels, warp_channels=None):
         """
         Args:
             deep_channels (int): Channel width of features coming from the bottleneck/lower level (e.g., 256)
-            native_channels (int): Channel width of current level skips, flows, and warps (e.g., 128)
+            native_channels (int): Channel width of current level skips, flows, and interp (e.g., 128)
             out_channels (int): Target channel output width for this decoder block (e.g., 128)
+            warp_channels (int): Channel width of the warps (w0, w1). Equals native_channels except at
+                the top level, where the warps come from the raw 1-channel input.
         """
         super().__init__()
+
+        warp_ch = warp_channels if warp_channels is not None else native_channels
 
         # Aligns SkipFusion strictly with the native encoder channel sizes, fixing Bug #1
         self.skip_fusion = SkipFusion(channels=native_channels)
 
         # 1x1 Channel Compression for the upsampled context feature map
         self.has_deep_context = deep_channels > 0
-        self.is_fine_level = native_channels <= 32  # Levels 1 & 2 are the "fine" levels with sharper features
         if self.has_deep_context:
             self.upsample_conv = nn.Conv2d(
                 in_channels=deep_channels,
@@ -55,16 +58,13 @@ class DecoderBlock(nn.Module):
                 kernel_size=1,
                 bias=False
             )
-            # Total input width: upsampled_context (native) + unified_skip (native) + interp (native) + w0 (native) + w1 (native)
-            total_fused_channels = native_channels * 5
+            # Total input width: upsampled_context (native) + unified_skip (native) + interp (native) + w0 (warp) + w1 (warp)
+            total_fused_channels = native_channels * 3 + 2 * warp_ch
          # No deep context, but we keep the full skip at fine levels to preserve crisp details
         else:
-            # At Level 4 (Bottleneck), there is no deep context layer from below
-            # Total input width: unified_skip (native) + interp (native) + w0 (native) + w1 (native)
-            total_fused_channels = native_channels * 3
-        
-        if self.has_deep_context and self.is_fine_level:
-            total_fused_channels = native_channels * 3 + 2 
+            # At the bottleneck, there is no deep context layer from below
+            # Total input width: interp (native) + w0 (warp) + w1 (warp)
+            total_fused_channels = native_channels + 2 * warp_ch
 
         
 
@@ -78,15 +78,15 @@ class DecoderBlock(nn.Module):
         # Branch A: Preserves sharp, localized boundaries (Loops, TAD Edges)
         self.fine_refinement = nn.Sequential(
             nn.Conv2d(out_channels, mid_channels,
-                      kernel_size=3, padding=1, bias=False),
+                      kernel_size=1, padding=0, bias=False),  # [CHANGED: k=1]
             nn.BatchNorm2d(mid_channels),
             nn.LeakyReLU(0.2, inplace=True)
         )
 
         # Branch B: Preserves broad structural patterns (TAD interiors, Compartments)
         self.structural_refinement = nn.Sequential(
-            nn.Conv2d(out_channels, mid_channels, kernel_size=3,
-                      padding=2, dilation=2, bias=False),
+            nn.Conv2d(out_channels, mid_channels, kernel_size=1,
+                      padding=0, bias=False),  # [CHANGED: k=1]
             nn.BatchNorm2d(mid_channels),
             nn.LeakyReLU(0.2, inplace=True)
         )
@@ -160,6 +160,7 @@ class FeatureDecoder(nn.Module):
             deep_channels=self.feature_channels[1],
             native_channels=self.feature_channels[0],
             out_channels=self.feature_channels[0],
+            warp_channels=1,
         )
 
     def forward(self, skips0: List[Tensor], skips2: List[Tensor], interpolations: List[Tensor], warps_0: Tensor, warps_2: Tensor) -> Tensor:

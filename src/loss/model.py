@@ -9,13 +9,53 @@ from torchvision.models import vgg19, VGG19_Weights
 
 
 class CharbonnierLoss(nn.Module):
+    def __init__(self, epsilon=1e-3):
+        super(CharbonnierLoss, self).__init__()
+        self.eps_sq = epsilon ** 2
+
+    def forward(self, pred, target):
+        # Using add_ prevents potential issues with very small values
+        diff_sq = torch.pow(pred - target, 2)
+        loss = torch.mean(torch.sqrt(diff_sq + self.eps_sq))
+        return loss
+
+
+class LogCoshLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, pred: Tensor, y: Tensor, epsilon=1e-3):
-        diff = pred - y
-        loss = torch.mean(torch.sqrt(diff ** 2 + epsilon ** 2))
-        return loss
+    def forward(self, pred: Tensor, target: Tensor):
+        # Numerically stable log(cosh(x)) = |x| + softplus(-2|x|) - log(2)
+        diff = (pred - target).abs()
+        return torch.mean(diff + F.softplus(-2.0 * diff) - math.log(2.0))
+
+
+class DistanceWeightedLoss(nn.Module):
+    _weight_cache: dict[tuple[int, int, torch.device], Tensor] = {}
+
+    def __init__(self, decay=0.05, min_weight=0.05):
+        super().__init__()
+        self.decay = decay
+        self.min_weight = min_weight
+
+    def _weights(self, h: int, w: int, device: torch.device) -> Tensor:
+        key = (h, w, device)
+        if key not in self._weight_cache:
+            rows = torch.arange(h, device=device).view(h, 1)
+            cols = torch.arange(w, device=device).view(1, w)
+            d = (rows - cols).abs().float()
+            # Down-weight long-range entries to emphasize near-diagonal TADs/loops
+            wmat = torch.exp(-self.decay * d).clamp(min=self.min_weight)
+            self._weight_cache[key] = wmat.view(1, 1, h, w)
+        return self._weight_cache[key]
+
+    def forward(self, pred: Tensor, target: Tensor):
+        diff = (pred - target).abs()
+        per_pixel = diff + F.softplus(-2.0 * diff) - math.log(2.0)
+        w = self._weights(
+            pred.shape[-2], pred.shape[-1], pred.device).to(per_pixel.dtype)
+        # Scale-stable weighted mean
+        return (per_pixel * w).mean() / w.mean()
 
 
 class StratifiedGenomicLossWrapper(nn.Module):
@@ -54,37 +94,6 @@ class StratifiedGenomicLossWrapper(nn.Module):
         return balanced_loss.mean()
 
 
-class DistanceWeightedWingLoss(nn.Module):
-    def __init__(self, base_wing_loss):
-        super(DistanceWeightedWingLoss, self).__init__()
-        self.base_wing = base_wing_loss
-
-    def forward(self, pred, target):
-        # 1. Compute standard pixel-level loss matrix (unreduced)
-        # Ensure your AdaptiveWingLoss returns an unreduced tensor [B, 1, H, W]
-        raw_loss = self.base_wing(pred, target)
-
-        # 2. Dynamically construct a distance-from-diagonal weight matrix
-        b, c, h, w = target.shape
-
-        # Create a meshgrid of coordinates
-        rows = torch.arange(h, device=target.device).view(h, 1).repeat(1, w)
-        cols = torch.arange(w, device=target.device).view(1, w).repeat(h, 1)
-
-        # Calculate absolute distance from diagonal for each bin entry
-        distance_matrix = torch.abs(rows - cols).float()
-
-        # Apply an inverse power-law weight mask: entries further out get amplified
-        # This forces the optimizer to fix long-range loop errors instead of ignoring them
-        weight_mask = torch.exp(distance_matrix * 0.05).clamp(max=10.0)
-        weight_mask = weight_mask.view(1, 1, h, w)  # Broadcastable shape
-
-        # 3. Apply the weight mask to your spatial loss map
-        weighted_loss = raw_loss * weight_mask
-
-        return weighted_loss.mean()
-
-
 class SymmetryLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -97,19 +106,21 @@ class SymmetryLoss(nn.Module):
 
 
 class AdaptiveWingLoss2D(nn.Module):
-    def __init__(self, omega=14.0, theta=0.5, epsilon=1.0, alpha=2.1):
+    def __init__(self, omega=14.0, theta=0.5, epsilon=1.0, alpha=2.1, reduction="mean"):
         """
         Args:
             omega (float): Controls the maximum gradient scale for small errors.
             theta (float): The threshold switching point between the log and linear zones.
             epsilon (float): Avoids division by zero and shapes the internal curve.
             alpha (float): Used in the (alpha - y) exponent to govern background sensitivity.
+            reduction (str): 'mean', 'sum', or 'none' (returns the per-pixel [B,1,H,W] map).
         """
         super(AdaptiveWingLoss2D, self).__init__()
         self.omega = omega
         self.theta = theta
         self.epsilon = epsilon
         self.alpha = alpha
+        self.reduction = reduction
 
         # Precompute structural mathematical constants to save runtime FLOPs
         self.A = omega * (1.0 / (1.0 + math.pow(theta / epsilon, alpha - theta))) * \
@@ -152,7 +163,11 @@ class AdaptiveWingLoss2D(nn.Module):
         delta_y_large = delta_y[large_error_mask]
         loss[large_error_mask] = self.A * delta_y_large - self.C
 
-        # 5. Return the batch-averaged spatial error mean
+        # 5. Reduce according to the configured reduction mode
+        if self.reduction == "none":
+            return loss
+        if self.reduction == "sum":
+            return loss.sum()
         return loss.mean()
 
 
@@ -182,8 +197,8 @@ class TVLoss(nn.Module):
         count_h = diff_h.numel()
         count_w = diff_w.numel()
 
-        # Average the total variation penalty across the batch size
-        total_tv = (h_tv / count_h + w_tv / count_w) / b
+        # count_h/count_w already include the batch dimension, so this is a true mean
+        total_tv = (h_tv / count_h + w_tv / count_w)
 
         return total_tv
 
@@ -191,37 +206,50 @@ class TVLoss(nn.Module):
 class StyleLoss(nn.Module):
     def __init__(self, weights=None):
         super().__init__()
+
+        vgg = vgg19(weights=VGG19_Weights.IMAGENET1K_V1).features
+        vgg.eval()
+
+        self.slice1 = nn.Sequential(*vgg[:4])
+        self.slice2 = nn.Sequential(*vgg[4:9])
+        self.slice3 = nn.Sequential(*vgg[9:18])
+        self.slice4 = nn.Sequential(*vgg[18:27])
+        self.slice5 = nn.Sequential(*vgg[27:36])
+
+        self.normalize = MeanShift(
+            data_mean=[0.485, 0.456, 0.406],
+            data_std=[0.229, 0.224, 0.225],
+            data_range=1.0,
+            norm=True,
+        )
+
         self.criterion = nn.MSELoss()
-        if weights is None:
-            self.weights = [1.0, 1.0, 1.0, 1.0, 1.0]
-        else:
-            self.weights = weights
+        self.weights = weights if weights is not None else [1.0, 1.0, 1.0, 1.0, 1.0]
 
-    def gram_matrix(self, features: Tensor, mask: Tensor = None) -> torch.Tensor:
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def gram_matrix(self, features: Tensor) -> torch.Tensor:
         b, c, h, w = features.shape
-        if mask is not None:
-            mask = F.interpolate(mask, size=(
-                h, w), mode='bilinear', align_corners=False)
-            features = features * mask
-        features = features.view(b, c, h*w)
-        gram = torch.bmm(features, features.transpose(1, 2))
-        gram /= (h*w)
+        f = features.view(b, c, h * w)
+        return torch.bmm(f, f.transpose(1, 2)) / (c * h * w)
 
-        return gram
+    def forward(self, pred: Tensor, target: Tensor):
+        X = self.normalize(pred)
+        Y = self.normalize(target)
 
-    def forward(self, pred: Tensor, y: Tensor):
-        l1 = self.criterion(self.gram_matrix(pred['conv12']) / 255.0,
-                            self.gram_matrix(y['conv12']) / 255.0) * self.weights[0]
-        l2 = self.criterion(self.gram_matrix(pred['conv22']) / 255.0,
-                            self.gram_matrix(y['conv22']) / 255.0) * self.weights[1]
-        l3 = self.criterion(self.gram_matrix(pred['conv32']) / 255.0,
-                            self.gram_matrix(y['conv32']) / 255.0) * self.weights[2]
-        l4 = self.criterion(self.gram_matrix(pred['conv42']) / 255.0,
-                            self.gram_matrix(y['conv42']) / 255.0) * self.weights[3]
-        l5 = self.criterion(self.gram_matrix(pred['conv52']) / 255.0,
-                            self.gram_matrix(y['conv52']) / 255.0) * self.weights[4]
-        style_loss = l1 + l2 + l3 + l4 + l5
-        return style_loss
+        loss = pred.new_zeros(())
+        for weight, slice_layer in zip(
+            self.weights,
+            (self.slice1, self.slice2, self.slice3, self.slice4, self.slice5),
+        ):
+            X = slice_layer(X)
+            with torch.no_grad():
+                Y = slice_layer(Y)
+            loss = loss + weight * \
+                self.criterion(self.gram_matrix(X), self.gram_matrix(Y))
+
+        return loss
 
 
 class MeanShift(nn.Conv2d):
@@ -303,6 +331,8 @@ class CombinedLoss(nn.Module):
         self.l1_loss = nn.L1Loss().to(cfg.device)
         self.mse_loss = nn.MSELoss().to(cfg.device)
         self.tv_loss = TVLoss().to(cfg.device)
+        self.logcosh_loss = LogCoshLoss().to(cfg.device)
+        self.dist_weighted_loss = DistanceWeightedLoss().to(cfg.device)
         self.symmetry_loss = SymmetryLoss().to(cfg.device)
         self.ssim_loss = StructuralSimilarityIndexMeasure(
             data_range=1.0).to(cfg.device)
@@ -314,8 +344,11 @@ class CombinedLoss(nn.Module):
             reduction="elementwise_mean"
         ).to(cfg.device)
         self.aw_loss = AdaptiveWingLoss2D().to(cfg.device)
+        self.aw_loss_unreduced = AdaptiveWingLoss2D(
+            reduction="none").to(cfg.device)
         self.stratified_loss = StratifiedGenomicLossWrapper(
-            self.aw_loss).to(cfg.device)
+            self.aw_loss_unreduced).to(cfg.device)
+        self.charbonnier_loss = CharbonnierLoss().to(cfg.device)
 
     @staticmethod
     def _to_3ch(x: Tensor) -> Tensor:
@@ -366,10 +399,12 @@ class CombinedLoss(nn.Module):
         cov = (weights * (x - mx) * (y - my)).sum(dim=1)
         var_x = (weights * (x - mx) ** 2).sum(dim=1)
         var_y = (weights * (y - my) ** 2).sum(dim=1)
-        corr = cov / (torch.sqrt(var_x * var_y) + 1e-12)
+        denom = torch.sqrt(var_x * var_y + 1e-8)
+        corr = (cov / denom).clamp(-1.0, 1.0)
         return corr.mean()
 
-    def forward(self, pred: Tensor, y: Tensor, epoch: int):
+    def forward(self, pred: Tensor, y: Tensor, epoch: int,
+                pred_mask: Tensor = None, gt_mask: Tensor = None):
         loss = pred.new_zeros(())
 
         for weight_params in self.cfg.loss.weight_parameters:
@@ -383,19 +418,25 @@ class CombinedLoss(nn.Module):
             elif weight_params["name"] == "mse":
                 loss = loss + weight * self.mse_loss(pred, y)
             elif weight_params["name"] == "ssim":
-                loss = loss + weight * (1.0 - self.ssim_loss(pred, y))
+                loss = loss + weight * \
+                    (1.0 - self.ssim_loss(pred.clamp(0, 1), y.clamp(0, 1)))
             elif weight_params["name"] == "vgg":
-                loss = loss + weight * \
-                    self.vgg_loss(self._to_3ch(pred), self._to_3ch(y))
+                loss = loss + weight * self.vgg_loss(
+                    self._to_3ch(pred.clamp(0, 1)), self._to_3ch(y.clamp(0, 1)))
             elif weight_params["name"] == "style":
-                loss = loss + weight * \
-                    self.style_loss(self._to_3ch(pred), self._to_3ch(y))
+                loss = loss + weight * self.style_loss(
+                    self._to_3ch(pred.clamp(0, 1)), self._to_3ch(y.clamp(0, 1)))
             elif weight_params["name"] == "tv":
                 loss = loss + weight * self.tv_loss(pred)
+            elif weight_params["name"] == "logcosh":
+                loss = loss + weight * self.logcosh_loss(pred, y)
+            elif weight_params["name"] == "dist_weighted":
+                loss = loss + weight * self.dist_weighted_loss(pred, y)
             elif weight_params["name"] == "symmetry":
                 loss = loss + weight * self.symmetry_loss(pred)
             elif weight_params["name"] == "ms_ssim":
-                loss = loss + weight * (1.0 - self.ms_ssim_loss(pred, y))
+                loss = loss + weight * \
+                    (1.0 - self.ms_ssim_loss(pred.clamp(0, 1), y.clamp(0, 1)))
             elif weight_params["name"] == "dwpc":
                 loss = loss + weight * (1.0 - self.dwpc_loss(pred, y))
             elif weight_params["name"] == "ds":
@@ -404,6 +445,14 @@ class CombinedLoss(nn.Module):
                 loss = loss + weight * self.aw_loss(pred, y)
             elif weight_params["name"] == "stratified":
                 loss = loss + weight * self.stratified_loss(pred, y)
+            elif weight_params["name"] == "charbonnier":
+                loss = loss + weight * self.charbonnier_loss(pred, y)
+            elif weight_params["name"] == "bce":
+                if pred_mask is None or gt_mask is None:
+                    raise ValueError(
+                        "bce loss requires pred_mask and gt_mask arguments")
+                loss = loss + weight * \
+                    F.binary_cross_entropy_with_logits(pred_mask, gt_mask)
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 

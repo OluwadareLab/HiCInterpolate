@@ -28,15 +28,26 @@ class FeatureExtractionBlock(nn.Module):
 
         self.branch_macro = nn.Sequential(
             nn.Conv2d(in_channels, feature_channels,
-                      kernel_size=3, padding=3, dilation=3),
+                      kernel_size=5, padding=2),
             nn.BatchNorm2d(feature_channels),
             nn.ReLU(inplace=True)
         )
+
+        # [SPARSITY MASK] Per-branch single-channel learnable sparsity gates
+        self.mask_pixel = nn.Conv2d(feature_channels, 1, kernel_size=1)   # [SPARSITY MASK]
+        self.mask_medium = nn.Conv2d(feature_channels, 1, kernel_size=1)  # [SPARSITY MASK]
+        self.mask_macro = nn.Conv2d(feature_channels, 1, kernel_size=1)   # [SPARSITY MASK]
 
     def forward(self, x):
         feat_pixel = self.branch_pixel(x)
         feat_medium = self.branch_medium(x)
         feat_macro = self.branch_macro(x)
+
+        # [SPARSITY MASK] Gate each scale by its own learned per-pixel presence probability
+        feat_pixel = feat_pixel * torch.sigmoid(self.mask_pixel(feat_pixel))      # [SPARSITY MASK]
+        feat_medium = feat_medium * torch.sigmoid(self.mask_medium(feat_medium))  # [SPARSITY MASK]
+        feat_macro = feat_macro * torch.sigmoid(self.mask_macro(feat_macro))      # [SPARSITY MASK]
+
         out = torch.cat([feat_pixel, feat_medium, feat_macro], dim=1)
         return out
 
@@ -98,26 +109,36 @@ class Interpolator(nn.Module):
         self.cfg = cfg
 
         self.input_features = 1
-        self.init_ftr_channels = 16
+        self.init_ftr_channels = 128
         self.in_ftrs = FeatureExtractionBlock(
             self.input_features, self.init_ftr_channels)
 
-        self.enc_ftr_channels = list([32, 64, 128, 256])
+        self.enc_ftr_channels = list([256, 128, 64, 32])
         self.feature_encoder = FeatureEncoder(
             self.cfg, in_channels=3*self.init_ftr_channels, out_channels=self.enc_ftr_channels)
 
-        self.flow_ftr_channels = list([32, 64, 128, 256])
+        self.flow_ftr_channels = list([256, 128, 64, 32])
         self.flow_predictor = FlowPredictor(
             self.cfg, feature_channels=self.flow_ftr_channels, max_disp=4)
 
-        self.dec_ftr_channels = list([32, 64, 128, 256])
+        self.dec_ftr_channels = list([256, 128, 64, 32])
         self.output_features = 1
         self.feature_decoder = FeatureDecoder(
             self.cfg, feature_channels=self.dec_ftr_channels, out_channels=self.output_features)
 
         self.refinement_channels = self.dec_ftr_channels[0]
-        self.refinement = DenseGenomicRefinementBlock(
-            self.refinement_channels, 16)
+        self.refinement = nn.Sequential(
+            nn.Conv2d(self.refinement_channels, 128, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(128, 64, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 32, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(0.2, inplace=True),
+            DenseGenomicRefinementBlock(32, 16),
+        )
         # self.refinement = nn.Sequential(
         #     nn.Conv2d(self.refinement_channels, 16,
         #               kernel_size=3, padding=1, bias=False),
@@ -167,18 +188,14 @@ class Interpolator(nn.Module):
 
         # residual = self.projection(residual)
         # residual = self.sharpening_head(residual)
-        residual = self.scaling_head(residual)
+        # residual = self.scaling_head(residual)
         # pred = residual + interpolatios[0]
 
         res_correction = self.regression_head(residual)
         # raw_intensity = res_correction + interpolatios[0]
         raw_intensity = res_correction
         
-        # Apply ReLU or Softplus to ensure intensity is physically non-negative
         predicted_intensity = F.softplus(raw_intensity)
-        
-        # 2. Calculate Sparsity Mask (Probability Space)
-        # Sigmoid squashes output to [0, 1] range
         mask_logits = self.mask_head(residual)
         predicted_mask_prob = torch.sigmoid(mask_logits)
         
@@ -189,8 +206,9 @@ class Interpolator(nn.Module):
         
         return {
             "final": final_output,          # Use this for HiCRep/SSIM/etc.
-            "mask_prob": predicted_mask_prob, # Use this for BCE Loss
-            "intensity": predicted_intensity  # Intermediate regression
+            "mask_prob": predicted_mask_prob, # Use this for metrics/inference
+            "intensity": predicted_intensity, # Intermediate regression
+            "mask_logits": mask_logits        # Use this for stable BCE-with-logits
         }
 
 

@@ -71,8 +71,14 @@ class Trainer:
         )
         total_iterations = len(self.train_dl) * self.cfg.training.epochs
         warmup_iterations = len(self.train_dl) * 5
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=warmup_iterations, eta_min=1e-6)
+        warmup = torch.optim.lr_scheduler.LinearLR(
+            self.optimizer, start_factor=0.01, total_iters=warmup_iterations)
+        cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer,
+            T_max=max(1, total_iterations - warmup_iterations),
+            eta_min=self.cfg.training.min_lr)
+        self.scheduler = torch.optim.lr_scheduler.SequentialLR(
+            self.optimizer, schedulers=[warmup, cosine], milestones=[warmup_iterations])
 
         self.epochs_run = 0
         self.train_loss_per_epoch = 0
@@ -257,16 +263,22 @@ class Trainer:
             batch_size = y.size(0)
             outputs = self.model(x0, x1, time_frame)
             pred = outputs["final"]
-            pred_mask = outputs["mask_prob"]
+            pred_mask_logits = outputs["mask_logits"]
             gt_mask = (y > 0).float()
 
-            loss_sparsity = F.binary_cross_entropy(pred_mask, gt_mask)
             train_loss = self.loss_fn(
-                pred, y, self.epochs_run) + (2.0 * loss_sparsity)
+                pred, y, self.epochs_run, pred_mask=pred_mask_logits, gt_mask=gt_mask)
+
+            if not torch.isfinite(train_loss):
+                self.optimizer.zero_grad(set_to_none=True)
+                continue
 
             train_loss.backward()
-            torch.nn.utils.clip_grad_norm_(
+            grad_norm = torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(), max_norm=1.0)
+            if not torch.isfinite(grad_norm):
+                self.optimizer.zero_grad(set_to_none=True)
+                continue
             self.optimizer.step()
             self.scheduler.step()
 
@@ -294,12 +306,11 @@ class Trainer:
                 outputs = self.model(x0, x1, time_frame)
 
                 pred = outputs["final"]
-                pred_mask = outputs["mask_prob"]
+                pred_mask_logits = outputs["mask_logits"]
                 gt_mask = (y > 0).float()
 
-                loss_sparsity = F.binary_cross_entropy(pred_mask, gt_mask)
                 val_loss = self.loss_fn(
-                    pred, y, self.epochs_run) + (2.0 * loss_sparsity)
+                    pred, y, self.epochs_run, pred_mask=pred_mask_logits, gt_mask=gt_mask)
 
                 local_val_loss += val_loss.detach() * batch_size
 
