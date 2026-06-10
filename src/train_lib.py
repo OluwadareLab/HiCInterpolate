@@ -86,12 +86,16 @@ class Trainer:
         self.val_ssim_per_epoch = 0
         self.val_genome_disco_per_epoch = 0
         self.val_hicrep_per_epoch = 0
+        self.val_scc_per_epoch = 0
+        self.val_pcc_per_epoch = 0
         self.val_score_per_epoch = 0
 
         self.state = {'epoch': [], 'lr': [], 'train_loss': [], 'val_loss': [
-        ], 'val_ssim': [], 'val_genome_disco': [], 'val_hicrep': [], 'best_val': []}
+        ], 'val_ssim': [], 'val_genome_disco': [], 'val_hicrep': [],
+            'val_scc': [], 'val_pcc': [], 'best_val': []}
         self.metric_columns = ['epoch', 'lr', 'train_loss', 'val_loss',
-                               'val_ssim', 'val_genome_disco', 'val_hicrep', 'best_val']
+                               'val_ssim', 'val_genome_disco', 'val_hicrep',
+                               'val_scc', 'val_pcc', 'best_val']
         self.patience = 200
         self.epochs_no_improve = 0
         self.best_val = -float('inf')
@@ -147,7 +151,7 @@ class Trainer:
     def _validation_score(ssim, genome_disco, hicrep):
         return 0.2 * ssim + 0.2 * genome_disco + 0.6 * hicrep
 
-    def _update_metrics(self, epoch, train_samples, train_loss, val_samples, val_loss, val_ssim, val_genome_disco, val_hicrep):
+    def _update_metrics(self, epoch, train_samples, train_loss, val_samples, val_loss, val_ssim, val_genome_disco, val_hicrep, val_scc, val_pcc):
         self.train_loss_per_epoch = self._safe_average(
             train_loss, train_samples)
         self.val_loss_per_epoch = self._safe_average(val_loss, val_samples)
@@ -155,6 +159,8 @@ class Trainer:
         self.val_genome_disco_per_epoch = self._safe_average(
             val_genome_disco, val_samples)
         self.val_hicrep_per_epoch = self._safe_average(val_hicrep, val_samples)
+        self.val_scc_per_epoch = self._safe_average(val_scc, val_samples)
+        self.val_pcc_per_epoch = self._safe_average(val_pcc, val_samples)
         self.val_score_per_epoch = self._validation_score(
             self.val_ssim_per_epoch,
             self.val_genome_disco_per_epoch,
@@ -168,6 +174,8 @@ class Trainer:
         self.state['val_ssim'].append(self.val_ssim_per_epoch)
         self.state['val_genome_disco'].append(self.val_genome_disco_per_epoch)
         self.state['val_hicrep'].append(self.val_hicrep_per_epoch)
+        self.state['val_scc'].append(self.val_scc_per_epoch)
+        self.state['val_pcc'].append(self.val_pcc_per_epoch)
 
     def _is_main_process(self):
         return (not self.isDistributed) or self.device == 0
@@ -216,11 +224,14 @@ class Trainer:
             'val_ssim': self.state["val_ssim"],
             'val_genome_disco': self.state["val_genome_disco"],
             'val_hicrep': self.state["val_hicrep"],
+            'val_scc': self.state["val_scc"],
+            'val_pcc': self.state["val_pcc"],
             'best_val': self.state["best_val"]
         }, columns=self.metric_columns)
 
         metrics_to_round = ['train_loss', 'val_loss', 'val_ssim',
-                            'val_genome_disco', 'val_hicrep', 'best_val']
+                            'val_genome_disco', 'val_hicrep', 'val_scc',
+                            'val_pcc', 'best_val']
         metrics_df[metrics_to_round] = metrics_df[metrics_to_round].round(4)
         if 'lr' in metrics_df.columns:
             metrics_df['lr'] = metrics_df['lr'].round(6)
@@ -234,6 +245,7 @@ class Trainer:
             f"Batch Size: {self.batch_size}; Train Loss: {self.train_loss_per_epoch:.4f}; "
             f"Val (Loss: {self.val_loss_per_epoch:.4f}, SSIM: {self.val_ssim_per_epoch:.4f}, "
             f"GenomeDISCO: {self.val_genome_disco_per_epoch:.4f}, HiCRep: {self.val_hicrep_per_epoch:.4f}, "
+            f"SCC: {self.val_scc_per_epoch:.4f}, PCC: {self.val_pcc_per_epoch:.4f}, "
             f"Score: {self.val_score_per_epoch:.4f});"
         )
 
@@ -244,6 +256,8 @@ class Trainer:
         self.val_ssim_per_epoch = 0
         self.val_genome_disco_per_epoch = 0
         self.val_hicrep_per_epoch = 0
+        self.val_scc_per_epoch = 0
+        self.val_pcc_per_epoch = 0
         self.val_score_per_epoch = 0
 
         self.model.train()
@@ -291,6 +305,8 @@ class Trainer:
         local_val_ssim = torch.tensor(0.0, device=self.device)
         local_val_genome_disco = torch.tensor(0.0, device=self.device)
         local_val_hicrep = torch.tensor(0.0, device=self.device)
+        local_val_scc = torch.tensor(0.0, device=self.device)
+        local_val_pcc = torch.tensor(0.0, device=self.device)
         local_val_samples = torch.tensor(0.0, device=self.device)
         self.best_plot_batch = None
 
@@ -317,10 +333,14 @@ class Trainer:
                 ssim_val = eval_metric.get_ssim_gpu(pred, y)
                 genome_disco_val = eval_metric.get_genome_disco_gpu(pred, y)
                 hicrep_val = eval_metric.get_hicrep_gpu(pred, y)
+                scc_val = eval_metric.get_scc_gpu(pred, y)
+                pcc_val = eval_metric.get_pcc_gpu(pred, y)
 
                 local_val_ssim += ssim_val * batch_size
                 local_val_genome_disco += genome_disco_val * batch_size
                 local_val_hicrep += hicrep_val * batch_size
+                local_val_scc += scc_val * batch_size
+                local_val_pcc += pcc_val * batch_size
                 local_val_samples += batch_size
 
                 if self.best_plot_batch is None:
@@ -342,6 +362,8 @@ class Trainer:
                 local_val_ssim,
                 local_val_genome_disco,
                 local_val_hicrep,
+                local_val_scc,
+                local_val_pcc,
             ):
                 dist.all_reduce(value, op=dist.ReduceOp.SUM)
 
@@ -354,6 +376,8 @@ class Trainer:
             local_val_ssim.item(),
             local_val_genome_disco.item(),
             local_val_hicrep.item(),
+            local_val_scc.item(),
+            local_val_pcc.item(),
         )
 
     def train(self, max_epochs: int):

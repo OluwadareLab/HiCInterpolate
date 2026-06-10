@@ -89,6 +89,10 @@ def draw_metric(cfg, state):
     plt.plot(state["val_ssim"], label="SSIM")
     plt.plot(state["val_genome_disco"], label="GenomeDISCO")
     plt.plot(state["val_hicrep"], label="HiCRep")
+    if state.get("val_scc"):
+        plt.plot(state["val_scc"], label="SCC")
+    if state.get("val_pcc"):
+        plt.plot(state["val_pcc"], label="PCC")
     plt.title("loss trend")
     plt.xlabel("epoch")
     plt.ylabel("loss")

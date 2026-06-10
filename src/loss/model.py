@@ -94,6 +94,19 @@ class StratifiedGenomicLossWrapper(nn.Module):
         return balanced_loss.mean()
 
 
+class SoftDiceLoss(nn.Module):
+    def __init__(self, smooth=1.0):
+        super().__init__()
+        self.smooth = smooth
+
+    def forward(self, logits: Tensor, target: Tensor):
+        prob = torch.sigmoid(logits)
+        dims = (1, 2, 3)
+        num = 2 * (prob * target).sum(dims) + self.smooth
+        den = prob.sum(dims) + target.sum(dims) + self.smooth
+        return (1 - num / den).mean()
+
+
 class SymmetryLoss(nn.Module):
     def __init__(self):
         super().__init__()
@@ -349,6 +362,7 @@ class CombinedLoss(nn.Module):
         self.stratified_loss = StratifiedGenomicLossWrapper(
             self.aw_loss_unreduced).to(cfg.device)
         self.charbonnier_loss = CharbonnierLoss().to(cfg.device)
+        self.dice_loss = SoftDiceLoss().to(cfg.device)
 
     @staticmethod
     def _to_3ch(x: Tensor) -> Tensor:
@@ -453,6 +467,11 @@ class CombinedLoss(nn.Module):
                         "bce loss requires pred_mask and gt_mask arguments")
                 loss = loss + weight * \
                     F.binary_cross_entropy_with_logits(pred_mask, gt_mask)
+            elif weight_params["name"] == "dice":
+                if pred_mask is None or gt_mask is None:
+                    raise ValueError(
+                        "dice loss requires pred_mask and gt_mask arguments")
+                loss = loss + weight * self.dice_loss(pred_mask, gt_mask)
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 

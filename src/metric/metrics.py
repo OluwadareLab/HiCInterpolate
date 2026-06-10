@@ -12,9 +12,36 @@ import numpy as np
 
 _EPSILON = 1e-8
 
+_PSNR_CACHE: dict = {}
+_SSIM_CACHE: dict = {}
+_LPIPS_CACHE: dict = {}
+
+
+def _get_psnr_module(device, data_range: float):
+    key = (str(device), data_range)
+    if key not in _PSNR_CACHE:
+        _PSNR_CACHE[key] = PeakSignalNoiseRatio(data_range=data_range).to(device)
+    return _PSNR_CACHE[key]
+
+
+def _get_ssim_module(device, data_range: float):
+    key = (str(device), data_range)
+    if key not in _SSIM_CACHE:
+        _SSIM_CACHE[key] = StructuralSimilarityIndexMeasure(
+            data_range=data_range).to(device)
+    return _SSIM_CACHE[key]
+
+
+def _get_lpips_module(device):
+    key = str(device)
+    if key not in _LPIPS_CACHE:
+        _LPIPS_CACHE[key] = LearnedPerceptualImagePatchSimilarity(
+            net_type='vgg').to(device)
+    return _LPIPS_CACHE[key]
+
 
 def get_psnr(preds: Tensor, target: Tensor, data_range: float = 1.0):
-    psnr = PeakSignalNoiseRatio(data_range=data_range).to(preds.device)
+    psnr = _get_psnr_module(preds.device, data_range)
     psnr_score = psnr(preds, target)
     return psnr_score
 
@@ -25,8 +52,7 @@ def get_psnr_gpu(preds: Tensor, target: Tensor, data_range: float = 1.0):
 
 
 def get_ssim(preds: Tensor, target: Tensor, data_range: float = 1.0):
-    ssim = StructuralSimilarityIndexMeasure(
-        data_range=data_range).to(preds.device)
+    ssim = _get_ssim_module(preds.device, data_range)
     ssim_score = ssim(preds, target)
     return ssim_score
 
@@ -76,14 +102,22 @@ def get_hicrep_gpu(preds: Tensor, target: Tensor):
 
 
 def get_ent3c(preds: Tensor, target: Tensor):
-    ent3c_score = torch.tensor(
-        0.0).float().to(preds.device)
-    return ent3c_score
+    scores = []
+    for p, t in zip(preds, target):
+        p_np = p.squeeze(0).detach().cpu().numpy()
+        t_np = t.squeeze(0).detach().cpu().numpy()
+        try:
+            q = ent3c_similarity(t_np, p_np)
+            if q is not None and np.isfinite(q):
+                scores.append(float(q))
+        except Exception:
+            continue
+    ent3c_score = float(np.mean(scores)) if scores else 0.0
+    return torch.tensor(ent3c_score).float().to(preds.device)
 
 
 def get_lpips(preds, target):
-    lpips = LearnedPerceptualImagePatchSimilarity(
-        net_type='vgg').to(preds.device)
+    lpips = _get_lpips_module(preds.device)
     preds_min = preds.amin(dim=(1, 2, 3), keepdim=True)
     preds_max = preds.amax(dim=(1, 2, 3), keepdim=True)
     preds_norm = (preds - preds_min) / (preds_max - preds_min + _EPSILON)
@@ -99,12 +133,24 @@ def get_lpips_gpu(preds: Tensor, target: Tensor):
     return get_lpips(preds, target)
 
 
+@torch.no_grad()
+def get_scc_gpu(preds: Tensor, target: Tensor):
+    return get_scc(preds, target)
+
+
+@torch.no_grad()
+def get_pcc_gpu(preds: Tensor, target: Tensor):
+    return get_pcc(preds, target)
+
+
 GPU_METRIC_FUNCS = {
     "psnr": get_psnr_gpu,
     "ssim": get_ssim_gpu,
     "genome_disco": get_genome_disco_gpu,
     "hicrep": get_hicrep_gpu,
     "lpips": get_lpips_gpu,
+    "scc": get_scc_gpu,
+    "pcc": get_pcc_gpu,
 }
 
 
@@ -123,6 +169,8 @@ def get_eval_metrics_gpu(preds: Tensor, target: Tensor, include_lpips: bool = Tr
         "ssim": get_ssim_gpu(preds, target),
         "genome_disco": get_genome_disco_gpu(preds, target),
         "hicrep": get_hicrep_gpu(preds, target),
+        "scc": get_scc_gpu(preds, target),
+        "pcc": get_pcc_gpu(preds, target),
     }
     if include_lpips:
         metrics["lpips"] = get_lpips_gpu(preds, target)

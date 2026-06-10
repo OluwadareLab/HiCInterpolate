@@ -11,45 +11,48 @@ import torch.nn.functional as F
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
+class SparseAttentionGate(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.logits = nn.Conv2d(channels, channels, kernel_size=1)
+        # Learnable temperature sharpens the gate toward binary 0/1 to keep
+        # genuine sparse pixels crisp instead of smoothing them away.
+        self.temperature = nn.Parameter(torch.ones(1))
+
+    def forward(self, x):
+        gate = torch.sigmoid(self.temperature * self.logits(x))
+        return x * gate
+
+
 class FeatureExtractionBlock(nn.Module):
     def __init__(self, in_channels, feature_channels):
         super().__init__()
-        self.branch_pixel = nn.Sequential(
-            nn.Conv2d(in_channels, feature_channels, kernel_size=1, padding=0),
-            nn.BatchNorm2d(feature_channels),
-            nn.ReLU(inplace=True)
+        self.stage1 = nn.Sequential(
+            nn.Conv2d(in_channels, 32, kernel_size=1, padding=0),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            SparseAttentionGate(32),
         )
 
-        self.branch_medium = nn.Sequential(
-            nn.Conv2d(in_channels, feature_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(feature_channels),
-            nn.ReLU(inplace=True)
+        self.stage2 = nn.Sequential(
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            SparseAttentionGate(64),
         )
 
-        self.branch_macro = nn.Sequential(
-            nn.Conv2d(in_channels, feature_channels,
-                      kernel_size=5, padding=2),
+        self.stage3 = nn.Sequential(
+            nn.Conv2d(64, feature_channels, kernel_size=7, padding=3),
             nn.BatchNorm2d(feature_channels),
-            nn.ReLU(inplace=True)
+            nn.ReLU(inplace=True),
+            SparseAttentionGate(feature_channels),
         )
-
-        # [SPARSITY MASK] Per-branch single-channel learnable sparsity gates
-        self.mask_pixel = nn.Conv2d(feature_channels, 1, kernel_size=1)   # [SPARSITY MASK]
-        self.mask_medium = nn.Conv2d(feature_channels, 1, kernel_size=1)  # [SPARSITY MASK]
-        self.mask_macro = nn.Conv2d(feature_channels, 1, kernel_size=1)   # [SPARSITY MASK]
 
     def forward(self, x):
-        feat_pixel = self.branch_pixel(x)
-        feat_medium = self.branch_medium(x)
-        feat_macro = self.branch_macro(x)
-
-        # [SPARSITY MASK] Gate each scale by its own learned per-pixel presence probability
-        feat_pixel = feat_pixel * torch.sigmoid(self.mask_pixel(feat_pixel))      # [SPARSITY MASK]
-        feat_medium = feat_medium * torch.sigmoid(self.mask_medium(feat_medium))  # [SPARSITY MASK]
-        feat_macro = feat_macro * torch.sigmoid(self.mask_macro(feat_macro))      # [SPARSITY MASK]
-
-        out = torch.cat([feat_pixel, feat_medium, feat_macro], dim=1)
-        return out
+        x = self.stage1(x)
+        x = self.stage2(x)
+        x = self.stage3(x)
+        return x
 
 
 class GenomicSharpeningHead(nn.Module):
@@ -115,7 +118,7 @@ class Interpolator(nn.Module):
 
         self.enc_ftr_channels = list([256, 128, 64, 32])
         self.feature_encoder = FeatureEncoder(
-            self.cfg, in_channels=3*self.init_ftr_channels, out_channels=self.enc_ftr_channels)
+            self.cfg, in_channels=self.init_ftr_channels, out_channels=self.enc_ftr_channels)
 
         self.flow_ftr_channels = list([256, 128, 64, 32])
         self.flow_predictor = FlowPredictor(
@@ -134,10 +137,10 @@ class Interpolator(nn.Module):
             nn.Conv2d(128, 64, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(64),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(64, 32, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(64, 128, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2, inplace=True),
-            DenseGenomicRefinementBlock(32, 16),
+            DenseGenomicRefinementBlock(128, 128),
         )
         # self.refinement = nn.Sequential(
         #     nn.Conv2d(self.refinement_channels, 16,
@@ -149,9 +152,20 @@ class Interpolator(nn.Module):
         # self.sharpening_head = GenomicSharpeningHead()
         self.scaling_head = GenomicAffineScalingHead()
 
-        self.projection = nn.Conv2d(16, 1, kernel_size=1)
-        self.regression_head = nn.Conv2d(16, 1, kernel_size=1)
-        self.mask_head = nn.Conv2d(16, 1, kernel_size=1)
+        # Mirrored contraction of the FeatureExtractionBlock expansion
+        # (kernels reversed, no dilation), each stage sparse-gated.
+        self.projection = nn.Sequential(
+            nn.Conv2d(128, 64, kernel_size=7, padding=3, bias=False),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2, inplace=True),
+            SparseAttentionGate(64),
+            nn.Conv2d(64, 32, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(0.2, inplace=True),
+            SparseAttentionGate(32),
+        )
+        self.regression_head = nn.Conv2d(32, 1, kernel_size=1)
+        self.mask_head = nn.Conv2d(32, 1, kernel_size=1)
 
 
 
@@ -184,12 +198,7 @@ class Interpolator(nn.Module):
             ftrs0, ftrs2, interpolatios, warped0, warped2)
         residual = self.refinement(residual)
 
-
-
-        # residual = self.projection(residual)
-        # residual = self.sharpening_head(residual)
-        # residual = self.scaling_head(residual)
-        # pred = residual + interpolatios[0]
+        residual = self.projection(residual)
 
         res_correction = self.regression_head(residual)
         # raw_intensity = res_correction + interpolatios[0]
