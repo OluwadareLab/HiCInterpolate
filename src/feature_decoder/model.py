@@ -50,7 +50,7 @@ class DecoderBlock(nn.Module):
         fused_skip = self.skip_fusion(skip0, skip2)
         parts = [fused_skip, interp, warp0, warp2]
         if self.deep_proj is not None:
-            deep = F.interpolate(deep, size=interp.shape[-2:], mode="nearest")
+            deep = F.interpolate(deep, size=interp.shape[-2:], mode="bilinear", align_corners=True)
             parts.insert(0, self.deep_proj(deep))
         return self.refine(torch.cat(parts, dim=1))
 

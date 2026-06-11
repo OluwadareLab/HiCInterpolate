@@ -2,7 +2,6 @@ import os
 import sys
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 from src.feature_encoder import FeatureEncoder
 from src.flow_predictor import FlowPredictor
@@ -56,11 +55,14 @@ class OutputProjection(nn.Module):
             nn.Conv2d(32, 16, kernel_size=1, bias=False),
             nn.BatchNorm2d(16),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(16, 1, kernel_size=1),
+            nn.Conv2d(16, 2, kernel_size=1),
         )
 
-    def forward(self, features: Tensor) -> Tensor:
-        return F.softplus(self.intensity(features))
+    def forward(self, features: Tensor) -> tuple[Tensor, Tensor]:
+        intensity_logits, mask_logits = self.intensity(features).chunk(2, dim=1)
+        intensity = torch.sigmoid(intensity_logits)
+        mask = torch.sigmoid(mask_logits)
+        return intensity * mask, mask
 
 
 class Interpolator(nn.Module):
@@ -88,8 +90,9 @@ class Interpolator(nn.Module):
         ftrs2 = self.feature_encoder(x2_ftr)
         interpolations, warped0, warped2, _ = self.flow_predictor(ftrs0, ftrs2, x0, x2)
         decoded = self.feature_decoder(interpolations, warped0, warped2, ftrs0, ftrs2)
-        pred = self.output_projection(decoded)
+        pred, mask = self.output_projection(decoded)
 
         return {
-            "pred": pred
+            "pred": pred,
+            "mask": mask,
         }

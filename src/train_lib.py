@@ -308,22 +308,22 @@ class Trainer:
             batch_size = y.size(0)
             outputs = self.model(x0, x1)
             pred = outputs["pred"]
-            # pred_mask = outputs["mask"]
-            # gt_mask = (y > 0).float()
+            pred_mask = outputs.get("mask")
+            gt_mask = (y > 0).float()
 
             train_loss = self.loss_fn(
-                pred, y, self.epochs_run)
+                pred, y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
 
             # if not torch.isfinite(train_loss):
             #     self.optimizer.zero_grad(set_to_none=True)
             #     continue
 
             train_loss.backward()
-            # grad_norm = torch.nn.utils.clip_grad_norm_(
-            #     self.model.parameters(), max_norm=self.cfg.training.grad_clip)
-            # if not torch.isfinite(grad_norm):
-            #     self.optimizer.zero_grad(set_to_none=True)
-            #     continue
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), max_norm=self.cfg.training.grad_clip)
+            if not torch.isfinite(grad_norm):
+                self.optimizer.zero_grad(set_to_none=True)
+                continue
             self.optimizer.step()
             self.scheduler.step()
 
@@ -351,12 +351,12 @@ class Trainer:
                 outputs = self.model(x0, x1)
 
                 pred = outputs["pred"]
-                # pred_mask = outputs["mask"]
-                # gt_mask = (y > 0).float()
+                pred_mask = outputs.get("mask")
+                gt_mask = (y > 0).float()
 
                 # Compute the validation loss
                 val_loss = self.loss_fn(
-                    pred, y, self.epochs_run)
+                    pred, y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
 
                 local_val_loss += val_loss.detach() * batch_size
 

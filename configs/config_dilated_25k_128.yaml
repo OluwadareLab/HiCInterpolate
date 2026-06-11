@@ -2,14 +2,14 @@ device: cuda
 
 dir:
   root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
-  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
-  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
-  image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
+  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset
+  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset
+  image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset
 
 
 file:
-  dataset_dict: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/train/train_25000_128.txt
+  dataset_dict: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset/train/train_25000_128.txt
 # dir:
 #   root: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
 #   model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
@@ -43,7 +43,7 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.2, 0.025, 0.025]
+  train_val_test_ratio: [0.2, 0.0125, 0.0125]
 
 training:
   epochs: 100
@@ -66,7 +66,7 @@ model:
     out_channels: [16, 32, 64]
   fusion_pyramid_level: 4
   diffusion:
-    enabled: true
+    enabled: false
     timesteps: 64
     beta_start: 0.0001
     beta_end: 0.02
@@ -79,21 +79,21 @@ loss:
     - name: l1
       boundaries: [0]
       values: [1.0, 1.0]
-    # - name: tv
-    #   boundaries: [0]
-    #   values: [0.15, 0.15]
-    - name: symmetry
+    - name: ds
       boundaries: [0]
-      values: [1.0, 1.0]
-    - name: ms_ssim
+      values: [0.5, 0.5]
+    - name: bce
       boundaries: [0]
       values: [0.25, 0.25]
-    # - name: bce
-    #   boundaries: [5]
-    #   values: [0.5, 1.0]
-    # - name: diffusion
-    #   boundaries: [10]
-    #   values: [0.05, 0.15]
+    - name: dwpc
+      boundaries: [0]
+      values: [0.2, 0.2]
+    - name: ms_ssim
+      boundaries: [0]
+      values: [0.1, 0.1]
+    - name: symmetry
+      boundaries: [0]
+      values: [0.1, 0.1]
 
 
 evaluation:

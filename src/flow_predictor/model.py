@@ -65,8 +65,8 @@ class FlowEstimationBlock(nn.Module):
             flow = flow + base_flow
         grid0 = self.flow_to_grid(0.5 * flow)
         grid2 = self.flow_to_grid(-0.5 * flow)
-        warped0 = F.grid_sample(ftr0, grid0, mode="nearest", padding_mode="zeros", align_corners=True)
-        warped2 = F.grid_sample(ftr2, grid2, mode="nearest", padding_mode="zeros", align_corners=True)
+        warped0 = F.grid_sample(ftr0, grid0, mode="bilinear", padding_mode="border", align_corners=True)
+        warped2 = F.grid_sample(ftr2, grid2, mode="bilinear", padding_mode="border", align_corners=True)
         alpha = self.blend_mask(torch.cat([warped0, warped2, flow], dim=1))
         midpoint = alpha * warped0 + (1.0 - alpha) * warped2
         return midpoint, warped0, warped2, flow
@@ -86,7 +86,7 @@ class FlowPredictor(nn.Module):
     def _upsample_flow(flow: Tensor, size: tuple[int, int]) -> Tensor:
         _, _, h_old, w_old = flow.shape
         h_new, w_new = size
-        flow = F.interpolate(flow, size=size, mode="nearest")
+        flow = F.interpolate(flow, size=size, mode="bilinear", align_corners=True)
         flow[:, 0] *= w_new / max(w_old, 1)
         flow[:, 1] *= h_new / max(h_old, 1)
         return flow

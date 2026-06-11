@@ -21,18 +21,42 @@ class TripletDataset(Dataset):
     def __len__(self):
         return len(self.triplet_dicts)
 
-    def get_image(self, image_file: str) -> Tensor:
+    def _load_valid_matrix(self, image_file: str):
         img = np.load(image_file)
-        # Filter out matrices with NaNs, Infs, or those that are "identical" (constant values like all zeros)
+        # Filter out matrices with NaNs, Infs, or constant values.
         if np.isnan(img).any() or np.isinf(img).any() or img.min() == img.max():
             return None
-        img = self.log1p(img)
-        # img = self.min_max_norm(img)
-        img = torch.from_numpy(img).float().unsqueeze(0)
         return img
+
+    def get_image(self, image_file: str) -> Tensor:
+        img = self._load_valid_matrix(image_file)
+        if img is None:
+            return None
+        img = self.normalize_counts(img)
+        return torch.from_numpy(img).float().unsqueeze(0)
 
     def log1p(self, matrix):
         return np.log1p(matrix)
+
+    def normalize_counts(self, matrix, upper=None):
+        matrix = self.log1p(matrix)
+        if upper is None:
+            upper = np.percentile(matrix, CLIPPING_PERCENTILE)
+        if upper <= _EPSILON:
+            return np.zeros_like(matrix, dtype=np.float32)
+        matrix = np.clip(matrix, 0.0, upper) / upper
+        return matrix.astype(np.float32)
+
+    def normalize_triplet(self, x0, y, x1):
+        logged = [self.log1p(matrix) for matrix in (x0, y, x1)]
+        upper = max(np.percentile(matrix, CLIPPING_PERCENTILE) for matrix in logged)
+        if upper <= _EPSILON:
+            return None
+        tensors = []
+        for matrix in logged:
+            matrix = np.clip(matrix, 0.0, upper) / upper
+            tensors.append(torch.from_numpy(matrix.astype(np.float32)).unsqueeze(0))
+        return tensors
 
     def min_max_norm(self, matrix):
         _min = matrix.min()
@@ -48,13 +72,17 @@ class TripletDataset(Dataset):
 
     def __getitem__(self, idx):
         key = self.triplet_dicts[idx]
-        x0 = self.get_image(image_file=key["frame_0"])
-        y = self.get_image(image_file=key["frame_1"])
-        x1 = self.get_image(image_file=key["frame_2"])
+        x0_raw = self._load_valid_matrix(image_file=key["frame_0"])
+        y_raw = self._load_valid_matrix(image_file=key["frame_1"])
+        x1_raw = self._load_valid_matrix(image_file=key["frame_2"])
         time = torch.tensor([key["time"]], dtype=torch.float32)
-        if x0 is None or y is None or x1 is None:
+        if x0_raw is None or y_raw is None or x1_raw is None:
             return None
 
+        normalized = self.normalize_triplet(x0_raw, y_raw, x1_raw)
+        if normalized is None:
+            return None
+        x0, y, x1 = normalized
         return x0, y, x1, time
 
 
