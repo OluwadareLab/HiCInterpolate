@@ -1,13 +1,14 @@
-from src.loss import CombinedLoss, ExponentialDecay
+from src.loss import CombinedLoss
 from src.metric import metrics as eval_metric
 from src.misc import plots as plot
-from src.interpolator import Interpolator, model
+from src.interpolator import Interpolator
 from tqdm import tqdm
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 import os
 import sys
+import math
 import torch
 import torch.distributed as dist
 import time
@@ -15,11 +16,13 @@ import gc
 import pandas as pd
 import traceback
 from collections import OrderedDict
-import torch.nn.functional as F
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Trainer:
+    EVAL_METRICS = ("psnr", "ssim", "scc",
+                    "hicrep", "genome_disco", "lpips")
+
     def __init__(self, cfg, log, train_dl: DataLoader, val_dl: DataLoader, load_snapshot: bool = False, isDistributed: bool = False) -> None:
         self.cfg = cfg
         self.log = log
@@ -35,6 +38,7 @@ class Trainer:
         self.isDistributed = isDistributed and dist.is_available() and dist.is_initialized()
         if self.isDistributed:
             self.device = int(os.environ.get('LOCAL_RANK', 0))
+            self.cfg.device = f"cuda:{self.device}"
             self.model = self.model.to(self.device)
             self.model = DDP(self.model, device_ids=[self.device])
         else:
@@ -49,20 +53,8 @@ class Trainer:
         self.log.info(log_txt)
 
         self.loss_fn = CombinedLoss(self.cfg)
-        # self.optimizer = optim.Adam(self.model.parameters(),
-        #                             lr=self.cfg.training.lr)
-
-        # decay_rate = (self.cfg.training.min_lr / self.cfg.training.lr) ** (1 /
-        #                                                                    (self.cfg.training.epochs // self.cfg.training.decay_steps))
-        # print(f"[DEBUG] Calculated decay_rate: {decay_rate:.4f}")
-        # self.log.debug(f"Calculated decay_rate: {decay_rate:.4f}")
-        # self.scheduler = ExponentialDecay(optimizer=self.optimizer, decay_steps=self.cfg.training.decay_steps,
-        #                                   decay_rate=decay_rate, staircase=self.cfg.training.lr_staircase)
-
-        # self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        #     self.optimizer, mode='max', factor=0.5, patience=10)
-
-        decay_params, no_decay_params = self._split_weight_decay_params(self.model)
+        decay_params, no_decay_params = self._split_weight_decay_params(
+            self.model)
         self.optimizer = optim.AdamW(
             [
                 {"params": decay_params, "weight_decay": self.cfg.training.weight_decay},
@@ -72,39 +64,42 @@ class Trainer:
             betas=(0.9, 0.99),
             eps=1e-8
         )
-        total_iterations = len(self.train_dl) * self.cfg.training.epochs
-        warmup_iterations = len(self.train_dl) * self.cfg.training.warmup_epochs
-        warmup = torch.optim.lr_scheduler.LinearLR(
-            self.optimizer, start_factor=0.01, total_iters=warmup_iterations)
-        cosine = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer,
-            T_max=max(1, total_iterations - warmup_iterations),
-            eta_min=self.cfg.training.min_lr)
-        self.scheduler = torch.optim.lr_scheduler.SequentialLR(
-            self.optimizer, schedulers=[warmup, cosine], milestones=[warmup_iterations])
+        total_iterations = max(1, len(self.train_dl) * self.cfg.training.epochs)
+        warmup_iterations = max(
+            0, len(self.train_dl) * self.cfg.training.warmup_epochs)
+        if warmup_iterations > 0:
+            start_factor = 0.01
+            min_lr_factor = self.cfg.training.min_lr / self.cfg.training.lr
+            cosine_iterations = max(1, total_iterations - warmup_iterations)
+
+            def lr_lambda(step):
+                if step < warmup_iterations:
+                    return start_factor + (1.0 - start_factor) * step / warmup_iterations
+                progress = min((step - warmup_iterations) /
+                               cosine_iterations, 1.0)
+                cosine_factor = 0.5 * (1.0 + math.cos(math.pi * progress))
+                return min_lr_factor + (1.0 - min_lr_factor) * cosine_factor
+
+            self.scheduler = torch.optim.lr_scheduler.LambdaLR(
+                self.optimizer, lr_lambda=lr_lambda)
+        else:
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer, T_max=total_iterations, eta_min=self.cfg.training.min_lr)
 
         self.epochs_run = 0
         self.train_loss_per_epoch = 0
         self.val_loss_per_epoch = 0
-        self.val_sparse_precision_per_epoch = 0
-        self.val_sparse_recall_per_epoch = 0
-        self.val_sparse_f1_per_epoch = 0
-        self.val_pred_density_per_epoch = 0
-        self.val_target_density_per_epoch = 0
-        self.val_density_error_per_epoch = 0
-        self.val_nonzero_mae_per_epoch = 0
-        self.val_zero_mae_per_epoch = 0
-        self.val_score_per_epoch = 0
+        self.active_eval_metrics = self._get_active_eval_metrics()
+        self.monitor_metric = self._get_monitor_metric()
+        self.metric_values_per_epoch = {
+            metric: 0.0 for metric in self.active_eval_metrics}
 
         self.state = {'epoch': [], 'lr': [], 'train_loss': [], 'val_loss': [],
-                      'val_sparse_precision': [], 'val_sparse_recall': [], 'val_sparse_f1': [],
-                      'val_pred_density': [], 'val_target_density': [], 'val_density_error': [],
-                      'val_nonzero_mae': [], 'val_zero_mae': [],
-                      'val_score': [], 'best_val': []}
+                      **{f'val_{metric}': [] for metric in self.active_eval_metrics},
+                      'best_val': []}
         self.metric_columns = ['epoch', 'lr', 'train_loss', 'val_loss',
-                               'val_sparse_precision', 'val_sparse_recall', 'val_sparse_f1',
-                               'val_pred_density', 'val_target_density', 'val_density_error',
-                               'val_nonzero_mae', 'val_zero_mae', 'val_score', 'best_val']
+                               *[f'val_{metric}' for metric in self.active_eval_metrics],
+                               'best_val']
         self.patience = 200
         self.epochs_no_improve = 0
         self.best_val = -float('inf')
@@ -137,13 +132,12 @@ class Trainer:
             new_state_dict[name] = v
         return new_state_dict
 
-
     def _ensure_state_keys(self):
         num_epochs = len(self.state.get('epoch', []))
         for key in self.metric_columns:
             if key not in self.state:
-                self.state[key] = [-float('inf')] * num_epochs if key == 'best_val' else [0.0] * num_epochs
-
+                self.state[key] = [-float('inf')] * \
+                    num_epochs if key == 'best_val' else [0.0] * num_epochs
 
     def _load_optimizer_scheduler_state(self, snapshot):
         try:
@@ -186,44 +180,46 @@ class Trainer:
     def _safe_average(total, count):
         return total / count if count else 0.0
 
-    @staticmethod
-    def _validation_score(sparse_f1, density_error, nonzero_mae, zero_mae):
-        return sparse_f1 - density_error - 0.1 * nonzero_mae - 0.1 * zero_mae
+    def _get_active_eval_metrics(self):
+        cfg_eval = getattr(self.cfg, "evaluation", None)
+        metric_cfg = getattr(cfg_eval, "metrics", None)
+        active_metrics = []
+        for metric in self.EVAL_METRICS:
+            enabled = True if metric_cfg is None else bool(
+                getattr(metric_cfg, metric, True))
+            if enabled:
+                active_metrics.append(metric)
+        return active_metrics
 
-    def _update_metrics(self, epoch, train_samples, train_loss, val_samples, val_loss,
-                        val_sparse_precision, val_sparse_recall, val_sparse_f1, val_pred_density, val_target_density,
-                        val_density_error, val_nonzero_mae, val_zero_mae):
+    def _get_monitor_metric(self):
+        cfg_eval = getattr(self.cfg, "evaluation", None)
+        monitor = getattr(cfg_eval, "monitor", "ssim")
+        if monitor == "loss" or monitor in self.active_eval_metrics:
+            return monitor
+        return self.active_eval_metrics[0] if self.active_eval_metrics else "loss"
+
+    def _get_monitor_value(self):
+        if self.monitor_metric == "loss":
+            return -self.val_loss_per_epoch
+        value = self.metric_values_per_epoch.get(
+            self.monitor_metric, -self.val_loss_per_epoch)
+        return -value if self.monitor_metric == "lpips" else value
+
+    def _update_metrics(self, epoch, train_samples, train_loss, val_samples, val_loss, metric_totals):
         self.train_loss_per_epoch = self._safe_average(
             train_loss, train_samples)
         self.val_loss_per_epoch = self._safe_average(val_loss, val_samples)
-        self.val_sparse_precision_per_epoch = self._safe_average(val_sparse_precision, val_samples)
-        self.val_sparse_recall_per_epoch = self._safe_average(val_sparse_recall, val_samples)
-        self.val_sparse_f1_per_epoch = self._safe_average(val_sparse_f1, val_samples)
-        self.val_pred_density_per_epoch = self._safe_average(val_pred_density, val_samples)
-        self.val_target_density_per_epoch = self._safe_average(val_target_density, val_samples)
-        self.val_density_error_per_epoch = self._safe_average(val_density_error, val_samples)
-        self.val_nonzero_mae_per_epoch = self._safe_average(val_nonzero_mae, val_samples)
-        self.val_zero_mae_per_epoch = self._safe_average(val_zero_mae, val_samples)
-        self.val_score_per_epoch = self._validation_score(
-            self.val_sparse_f1_per_epoch,
-            self.val_density_error_per_epoch,
-            self.val_nonzero_mae_per_epoch,
-            self.val_zero_mae_per_epoch,
-        )
+        self.metric_values_per_epoch = {
+            metric: self._safe_average(metric_totals[metric], val_samples)
+            for metric in self.active_eval_metrics
+        }
 
         self.state['epoch'].append(epoch+1)
         self.state['lr'].append(self.optimizer.param_groups[0]['lr'])
         self.state['train_loss'].append(self.train_loss_per_epoch)
         self.state['val_loss'].append(self.val_loss_per_epoch)
-        self.state['val_sparse_precision'].append(self.val_sparse_precision_per_epoch)
-        self.state['val_sparse_recall'].append(self.val_sparse_recall_per_epoch)
-        self.state['val_sparse_f1'].append(self.val_sparse_f1_per_epoch)
-        self.state['val_pred_density'].append(self.val_pred_density_per_epoch)
-        self.state['val_target_density'].append(self.val_target_density_per_epoch)
-        self.state['val_density_error'].append(self.val_density_error_per_epoch)
-        self.state['val_nonzero_mae'].append(self.val_nonzero_mae_per_epoch)
-        self.state['val_zero_mae'].append(self.val_zero_mae_per_epoch)
-        self.state['val_score'].append(self.val_score_per_epoch)
+        for metric, value in self.metric_values_per_epoch.items():
+            self.state[f'val_{metric}'].append(value)
 
     def _is_main_process(self):
         return (not self.isDistributed) or self.device == 0
@@ -244,7 +240,7 @@ class Trainer:
         print(f"[DEBUG] Epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int, save_artifacts: bool = True):
-        best_val = self.val_score_per_epoch
+        best_val = self._get_monitor_value()
 
         if best_val > self.best_val:
             self.epochs_no_improve = 0
@@ -260,31 +256,16 @@ class Trainer:
                     f"Epoch {self.epochs_run+1} saved best model.")
                 print(
                     f"[DEBUG] Epoch {self.epochs_run+1} saved best model.")
-        elif self.epochs_run > 10:
+        elif self.epochs_run > 5:
             self.epochs_no_improve += 1
 
     def _save_and_draw_metrics(self):
-        metrics_df = pd.DataFrame({
-            'epoch': self.state["epoch"],  # Usually an int, no rounding needed
-            'lr': self.state["lr"],
-            'train_loss': self.state["train_loss"],
-            'val_loss': self.state["val_loss"],
-            'val_sparse_precision': self.state["val_sparse_precision"],
-            'val_sparse_recall': self.state["val_sparse_recall"],
-            'val_sparse_f1': self.state["val_sparse_f1"],
-            'val_pred_density': self.state["val_pred_density"],
-            'val_target_density': self.state["val_target_density"],
-            'val_density_error': self.state["val_density_error"],
-            'val_nonzero_mae': self.state["val_nonzero_mae"],
-            'val_zero_mae': self.state["val_zero_mae"],
-            'val_score': self.state["val_score"],
-            'best_val': self.state["best_val"]
-        }, columns=self.metric_columns)
+        metrics_df = pd.DataFrame(
+            {key: self.state[key] for key in self.metric_columns},
+            columns=self.metric_columns)
 
-        metrics_to_round = ['train_loss', 'val_loss',
-                            'val_sparse_precision', 'val_sparse_recall', 'val_sparse_f1',
-                            'val_pred_density', 'val_target_density', 'val_density_error',
-                            'val_nonzero_mae', 'val_zero_mae', 'val_score', 'best_val']
+        metrics_to_round = [column for column in self.metric_columns
+                            if column not in ("epoch", "lr")]
         metrics_df[metrics_to_round] = metrics_df[metrics_to_round].round(4)
         if 'lr' in metrics_df.columns:
             metrics_df['lr'] = metrics_df['lr'].round(6)
@@ -293,30 +274,23 @@ class Trainer:
         plot.draw_metric(self.cfg, self.state)
 
     def _format_scores(self, max_epochs: int):
+        val_metrics = ", ".join(
+            f"{metric.upper()}: {value:.4f}"
+            for metric, value in self.metric_values_per_epoch.items())
         return (
             f"[{(self.epochs_run+1)}/{max_epochs}] LR: {self.optimizer.param_groups[0]['lr']:.6f}; "
             f"Batch Size: {self.batch_size}; Train Loss: {self.train_loss_per_epoch:.4f}; "
-            f"Val (Loss: {self.val_loss_per_epoch:.4f}, SparseF1: {self.val_sparse_f1_per_epoch:.4f}, "
-            f"SparseP: {self.val_sparse_precision_per_epoch:.4f}, SparseR: {self.val_sparse_recall_per_epoch:.4f}, "
-            f"PredDensity: {self.val_pred_density_per_epoch:.4f}, TargetDensity: {self.val_target_density_per_epoch:.4f}, "
-            f"DensityErr: {self.val_density_error_per_epoch:.4f}, "
-            f"NZ-MAE: {self.val_nonzero_mae_per_epoch:.4f}, Z-MAE: {self.val_zero_mae_per_epoch:.4f}, "
-            f"Score: {self.val_score_per_epoch:.4f});"
+            f"Val (Loss: {self.val_loss_per_epoch:.4f}"
+            f"{', ' + val_metrics if val_metrics else ''}); "
+            f"Monitor: {self.monitor_metric};"
         )
 
     def _run_epoch(self, epoch):
         self.epochs_run = epoch
         self.train_loss_per_epoch = 0
         self.val_loss_per_epoch = 0
-        self.val_sparse_precision_per_epoch = 0
-        self.val_sparse_recall_per_epoch = 0
-        self.val_sparse_f1_per_epoch = 0
-        self.val_pred_density_per_epoch = 0
-        self.val_target_density_per_epoch = 0
-        self.val_density_error_per_epoch = 0
-        self.val_nonzero_mae_per_epoch = 0
-        self.val_zero_mae_per_epoch = 0
-        self.val_score_per_epoch = 0
+        self.metric_values_per_epoch = {
+            metric: 0.0 for metric in self.active_eval_metrics}
 
         self.model.train()
         if self.isDistributed and hasattr(self.train_dl.sampler, "set_epoch"):
@@ -325,88 +299,70 @@ class Trainer:
         local_train_loss = torch.tensor(0.0, device=self.device)
         local_train_samples = torch.tensor(0.0, device=self.device)
 
-        for step, (x0, y, x1, time_frame) in enumerate(tqdm(self.train_dl)):
+        for step, (x0, y, x1, _) in enumerate(tqdm(self.train_dl)):
             x0 = x0.to(self.device)
             y = y.to(self.device)
             x1 = x1.to(self.device)
-            time_frame = time_frame.to(self.device)
             self.optimizer.zero_grad()
 
             batch_size = y.size(0)
-            outputs = self.model(x0, x1, time_frame, target=y)
-            pred = outputs["final"]
-            pred_mask_logits = outputs["mask_logits"]
-            gt_mask = (y > 0).float()
+            outputs = self.model(x0, x1)
+            pred = outputs["pred"]
+            # pred_mask = outputs["mask"]
+            # gt_mask = (y > 0).float()
 
             train_loss = self.loss_fn(
-                pred, y, self.epochs_run, pred_mask=pred_mask_logits, gt_mask=gt_mask,
-                diffusion_noise_pred=outputs.get("diffusion_noise_pred"),
-                diffusion_noise_target=outputs.get("diffusion_noise_target"),
-                diffusion_mask=outputs.get("diffusion_mask"))
+                pred, y, self.epochs_run)
 
-            if not torch.isfinite(train_loss):
-                self.optimizer.zero_grad(set_to_none=True)
-                continue
+            # if not torch.isfinite(train_loss):
+            #     self.optimizer.zero_grad(set_to_none=True)
+            #     continue
 
             train_loss.backward()
-            grad_norm = torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(), max_norm=self.cfg.training.grad_clip)
-            if not torch.isfinite(grad_norm):
-                self.optimizer.zero_grad(set_to_none=True)
-                continue
+            # grad_norm = torch.nn.utils.clip_grad_norm_(
+            #     self.model.parameters(), max_norm=self.cfg.training.grad_clip)
+            # if not torch.isfinite(grad_norm):
+            #     self.optimizer.zero_grad(set_to_none=True)
+            #     continue
             self.optimizer.step()
             self.scheduler.step()
 
             local_train_loss += train_loss.detach() * batch_size
             local_train_samples += batch_size
 
-            del x0, y, x1, time_frame, pred
+            del x0, y, x1, pred
 
         local_val_loss = torch.tensor(0.0, device=self.device)
-        local_val_sparse_precision = torch.tensor(0.0, device=self.device)
-        local_val_sparse_recall = torch.tensor(0.0, device=self.device)
-        local_val_sparse_f1 = torch.tensor(0.0, device=self.device)
-        local_val_pred_density = torch.tensor(0.0, device=self.device)
-        local_val_target_density = torch.tensor(0.0, device=self.device)
-        local_val_density_error = torch.tensor(0.0, device=self.device)
-        local_val_nonzero_mae = torch.tensor(0.0, device=self.device)
-        local_val_zero_mae = torch.tensor(0.0, device=self.device)
+        local_metric_totals = {
+            metric: torch.tensor(0.0, device=self.device)
+            for metric in self.active_eval_metrics
+        }
         local_val_samples = torch.tensor(0.0, device=self.device)
         self.best_plot_batch = None
 
         with torch.no_grad():
             self.model.eval()
-            for _, (x0, y, x1, time_frame) in enumerate(self.val_dl):
+            for _, (x0, y, x1, _) in enumerate(self.val_dl):
                 x0 = x0.to(self.device)
                 y = y.to(self.device)
                 x1 = x1.to(self.device)
-                time_frame = time_frame.to(self.device)
 
                 batch_size = y.size(0)
-                outputs = self.model(x0, x1, time_frame, target=y)
+                outputs = self.model(x0, x1)
 
-                pred = outputs["final"]
-                pred_mask_logits = outputs["mask_logits"]
-                gt_mask = (y > 0).float()
+                pred = outputs["pred"]
+                # pred_mask = outputs["mask"]
+                # gt_mask = (y > 0).float()
 
+                # Compute the validation loss
                 val_loss = self.loss_fn(
-                    pred, y, self.epochs_run, pred_mask=pred_mask_logits, gt_mask=gt_mask,
-                    diffusion_noise_pred=outputs.get("diffusion_noise_pred"),
-                    diffusion_noise_target=outputs.get("diffusion_noise_target"),
-                    diffusion_mask=outputs.get("diffusion_mask"))
+                    pred, y, self.epochs_run)
 
                 local_val_loss += val_loss.detach() * batch_size
 
-                sparse_metrics = eval_metric.get_sparse_support_metrics(pred, y)
-
-                local_val_sparse_precision += sparse_metrics["sparse_precision"] * batch_size
-                local_val_sparse_recall += sparse_metrics["sparse_recall"] * batch_size
-                local_val_sparse_f1 += sparse_metrics["sparse_f1"] * batch_size
-                local_val_pred_density += sparse_metrics["pred_density"] * batch_size
-                local_val_target_density += sparse_metrics["target_density"] * batch_size
-                local_val_density_error += sparse_metrics["density_error"] * batch_size
-                local_val_nonzero_mae += sparse_metrics["nonzero_mae"] * batch_size
-                local_val_zero_mae += sparse_metrics["zero_mae"] * batch_size
+                for metric in self.active_eval_metrics:
+                    metric_value = eval_metric.get_metric_gpu(metric, pred, y)
+                    local_metric_totals[metric] += metric_value.detach() * batch_size
                 local_val_samples += batch_size
 
                 if self.best_plot_batch is None:
@@ -417,7 +373,7 @@ class Trainer:
                         x1[:2].detach().cpu(),
                     )
 
-                del x0, y, x1, time_frame, pred
+                del x0, y, x1, pred
 
         if self.isDistributed:
             for value in (
@@ -425,14 +381,7 @@ class Trainer:
                 local_val_samples,
                 local_train_loss,
                 local_val_loss,
-                local_val_sparse_precision,
-                local_val_sparse_recall,
-                local_val_sparse_f1,
-                local_val_pred_density,
-                local_val_target_density,
-                local_val_density_error,
-                local_val_nonzero_mae,
-                local_val_zero_mae,
+                *local_metric_totals.values(),
             ):
                 dist.all_reduce(value, op=dist.ReduceOp.SUM)
 
@@ -442,14 +391,8 @@ class Trainer:
             local_train_loss.item(),
             local_val_samples.item(),
             local_val_loss.item(),
-            local_val_sparse_precision.item(),
-            local_val_sparse_recall.item(),
-            local_val_sparse_f1.item(),
-            local_val_pred_density.item(),
-            local_val_target_density.item(),
-            local_val_density_error.item(),
-            local_val_nonzero_mae.item(),
-            local_val_zero_mae.item(),
+            {metric: value.item()
+             for metric, value in local_metric_totals.items()},
         )
 
     def train(self, max_epochs: int):

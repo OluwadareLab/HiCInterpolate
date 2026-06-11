@@ -26,7 +26,7 @@ class TripletDataset(Dataset):
         # Filter out matrices with NaNs, Infs, or those that are "identical" (constant values like all zeros)
         if np.isnan(img).any() or np.isinf(img).any() or img.min() == img.max():
             return None
-        # img = self.log1p(img)
+        img = self.log1p(img)
         # img = self.min_max_norm(img)
         img = torch.from_numpy(img).float().unsqueeze(0)
         return img

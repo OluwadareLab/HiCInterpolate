@@ -1,73 +1,46 @@
 from typing import List
-import torch
 import torch.nn as nn
 from torch import Tensor
 
 
 class EncoderBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, use_maxpool: bool = True):
+    def __init__(self, in_channels: int, out_channels: int, kernel_size: int, downsample: bool):
         super().__init__()
-        hidden_ch = out_channels // 2
-
-        self.fine_path = nn.Sequential(
-            nn.Conv2d(in_channels, hidden_ch,
-                      kernel_size=1, padding=0, bias=False),  # [CHANGED: k=1]
-            nn.BatchNorm2d(hidden_ch),
-            nn.LeakyReLU(0.2, inplace=True)
+        padding = kernel_size // 2
+        self.proj = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,
+                      padding=padding, dilation=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.LeakyReLU(0.2, inplace=True),
         )
+        self.downsample = nn.MaxPool2d(kernel_size=2, stride=2) if downsample else nn.Identity()
 
-        self.structural_path = nn.Sequential(
-            nn.Conv2d(in_channels, hidden_ch, kernel_size=1,
-                      padding=0, bias=False),  # [CHANGED: k=1]
-            nn.BatchNorm2d(hidden_ch),
-            nn.LeakyReLU(0.2, inplace=True)
-        )
-
-        # Identity mapping to allow a local residual shortcut if channel sizes match
-        self.shortcut = nn.Conv2d(
-            in_channels, out_channels, kernel_size=1) if in_channels != out_channels else nn.Identity()
-        self.pool = nn.MaxPool2d(
-            kernel_size=2, stride=2) if use_maxpool else nn.Identity()
-
-    def forward(self, x):
-        # 1. Extract parallel features
-        f1 = self.fine_path(x)
-        f2 = self.structural_path(x)
-        combined = torch.cat([f1, f2], dim=1)
-
-        # 2. Local residual connection to maintain crisp features
-        skip_out = combined + self.shortcut(x)
-
-        # 3. Downsample for the next level
-        pooled_out = self.pool(skip_out)
-
-        # We return pooled_out for the next deep layer,
-        # and skip_out to send across to the UNet Decoder
-        return pooled_out, skip_out
+    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        skip = self.proj(x)
+        return self.downsample(skip), skip
 
 
 class FeatureEncoder(nn.Module):
-    def __init__(self, cfg, in_channels=48, out_channels=[32, 64, 128, 256]):
+    def __init__(self, cfg, in_channels: int = 384, out_channels: List[int] = None):
         super().__init__()
         self.cfg = cfg
+        self.out_channels = out_channels or [256, 128, 64, 32]
+        kernels = [1, 1, 3, 3]
 
-        self.level1 = EncoderBlock(
-            in_channels, out_channels[0], use_maxpool=True)
-        self.level2 = EncoderBlock(
-            out_channels[0], out_channels[1], use_maxpool=True)
-        self.level3 = EncoderBlock(
-            out_channels[1], out_channels[2], use_maxpool=True)
-        self.level4 = EncoderBlock(
-            out_channels[2], out_channels[3], use_maxpool=False)
+        blocks = []
+        prev_channels = in_channels
+        for idx, (channels, kernel) in enumerate(zip(self.out_channels, kernels)):
+            blocks.append(EncoderBlock(
+                prev_channels, channels, kernel_size=kernel,
+                downsample=idx < len(self.out_channels) - 1,
+            ))
+            prev_channels = channels
+        self.blocks = nn.ModuleList(blocks)
 
     def forward(self, ftr: Tensor) -> List[Tensor]:
         outputs = []
-        x, out1 = self.level1(ftr)
-        outputs.append(out1)
-        x, out2 = self.level2(x)
-        outputs.append(out2)
-        x, out3 = self.level3(x)
-        outputs.append(out3)
-        x, out4 = self.level4(x)
-        outputs.append(out4)
+        x = ftr
+        for block in self.blocks:
+            x, skip = block(x)
+            outputs.append(skip)
         return outputs

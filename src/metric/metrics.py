@@ -1,16 +1,21 @@
 
 import torch
 from torch import Tensor
-from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure, LearnedPerceptualImagePatchSimilarity
+from torchmetrics.image import (
+    PeakSignalNoiseRatio,
+    StructuralSimilarityIndexMeasure,
+    MultiScaleStructuralSimilarityIndexMeasure,
+    LearnedPerceptualImagePatchSimilarity,
+)
 from src.metric.genome_disco import compute_reproducibility
 from src.metric.genome_disco_gpu import compute_reproducibility_gpu
 from src.metric.hicrep import hicrepSCC as hicrep_scc
 from src.metric.hicrep_gpu import hicrepSCCGPU as hicrep_scc_gpu
-from src.metric.ent3c import get_similarity as ent3c_similarity
 from scipy.sparse import csr_matrix
 import numpy as np
 
 _EPSILON = 1e-8
+_LPIPS_CACHE = {}
 
 
 def get_psnr(preds: Tensor, target: Tensor, data_range: float = 1.0):
@@ -35,6 +40,22 @@ def get_ssim(preds: Tensor, target: Tensor, data_range: float = 1.0):
 def get_ssim_gpu(preds: Tensor, target: Tensor, data_range: float = 1.0):
     return get_ssim(preds, target, data_range=data_range)
 
+
+def get_ms_ssim(preds: Tensor, target: Tensor, data_range: float = 1.0):
+    ms_ssim = MultiScaleStructuralSimilarityIndexMeasure(
+        data_range=data_range,
+        betas=(0.0448, 0.2856, 0.3001),
+    ).to(preds.device)
+    return ms_ssim(preds, target)
+
+
+@torch.no_grad()
+def get_ms_ssim_gpu(preds: Tensor, target: Tensor, data_range: float = 1.0):
+    return get_ms_ssim(preds, target, data_range=data_range)
+
+
+get_msssim = get_ms_ssim
+get_msssim_gpu = get_ms_ssim_gpu
 
 
 def get_genome_disco(preds: Tensor, target: Tensor):
@@ -81,15 +102,26 @@ def get_ent3c(preds: Tensor, target: Tensor):
     return ent3c_score
 
 
-def get_lpips(preds, target):
-    lpips = LearnedPerceptualImagePatchSimilarity(
-        net_type='vgg').to(preds.device)
-    preds_min = preds.amin(dim=(1, 2, 3), keepdim=True)
-    preds_max = preds.amax(dim=(1, 2, 3), keepdim=True)
-    preds_norm = (preds - preds_min) / (preds_max - preds_min + _EPSILON)
+def _minmax_01(x: Tensor):
+    x_min = x.amin(dim=(1, 2, 3), keepdim=True)
+    x_max = x.amax(dim=(1, 2, 3), keepdim=True)
+    return (x - x_min) / (x_max - x_min + _EPSILON)
 
-    tmp_preds = preds_norm.repeat(1, 3, 1, 1)
-    tmp_target = target.repeat(1, 3, 1, 1)
+
+def _get_lpips_module(device: torch.device):
+    key = str(device)
+    if key not in _LPIPS_CACHE:
+        _LPIPS_CACHE[key] = LearnedPerceptualImagePatchSimilarity(
+            net_type='vgg',
+            normalize=True,
+        ).to(device).eval()
+    return _LPIPS_CACHE[key]
+
+
+def get_lpips(preds: Tensor, target: Tensor):
+    lpips = _get_lpips_module(preds.device)
+    tmp_preds = _minmax_01(preds).repeat(1, 3, 1, 1)
+    tmp_target = _minmax_01(target).repeat(1, 3, 1, 1)
     lpips_score = lpips(tmp_preds, tmp_target)
     return lpips_score
 
@@ -97,36 +129,6 @@ def get_lpips(preds, target):
 @torch.no_grad()
 def get_lpips_gpu(preds: Tensor, target: Tensor):
     return get_lpips(preds, target)
-
-
-GPU_METRIC_FUNCS = {
-    "psnr": get_psnr_gpu,
-    "ssim": get_ssim_gpu,
-    "genome_disco": get_genome_disco_gpu,
-    "hicrep": get_hicrep_gpu,
-    "lpips": get_lpips_gpu,
-}
-
-
-@torch.no_grad()
-def get_metric_gpu(metric_name: str, preds: Tensor, target: Tensor):
-    if metric_name not in GPU_METRIC_FUNCS:
-        valid_metrics = ", ".join(GPU_METRIC_FUNCS)
-        raise ValueError(f"Unknown GPU metric '{metric_name}'. Valid metrics: {valid_metrics}")
-    return GPU_METRIC_FUNCS[metric_name](preds, target)
-
-
-@torch.no_grad()
-def get_eval_metrics_gpu(preds: Tensor, target: Tensor, include_lpips: bool = True):
-    metrics = {
-        "psnr": get_psnr_gpu(preds, target),
-        "ssim": get_ssim_gpu(preds, target),
-        "genome_disco": get_genome_disco_gpu(preds, target),
-        "hicrep": get_hicrep_gpu(preds, target),
-    }
-    if include_lpips:
-        metrics["lpips"] = get_lpips_gpu(preds, target)
-    return metrics
 
 
 @torch.no_grad()
@@ -162,17 +164,35 @@ def get_sparse_support_metrics(preds: Tensor, target: Tensor, threshold: float =
     }
 
 
-def get_scc(pred, target, eps=1e-8):
+def _rank_average_ties(x: Tensor) -> Tensor:
+    ranks = torch.empty_like(x, dtype=torch.float32)
+    positions = torch.arange(x.size(1), device=x.device, dtype=torch.float32)
+
+    for i in range(x.size(0)):
+        values, order = torch.sort(x[i])
+        _, counts = torch.unique_consecutive(values, return_counts=True)
+        starts = torch.cumsum(
+            torch.cat([counts.new_zeros(1), counts[:-1]]), dim=0)
+        ends = starts + counts - 1
+        avg_ranks = (starts.to(torch.float32) + ends.to(torch.float32)) / 2.0
+        sorted_ranks = torch.repeat_interleave(avg_ranks, counts)
+        sample_ranks = torch.empty_like(positions)
+        sample_ranks.scatter_(0, order, sorted_ranks)
+        ranks[i] = sample_ranks
+
+    return ranks
+
+
+def get_scc(pred: Tensor, target: Tensor, eps=1e-8):
     assert pred.shape == target.shape, "Input shapes must match"
     B, C, H, W = pred.shape
     assert H == W, "Matrix must be square"
 
-    B = pred.size(0)
-    pred_flat = pred.view(B, -1)
-    target_flat = target.view(B, -1)
+    pred_flat = pred.reshape(B, -1)
+    target_flat = target.reshape(B, -1)
 
-    pred_rank = pred_flat.argsort(dim=1).argsort(dim=1).float()
-    target_rank = target_flat.argsort(dim=1).argsort(dim=1).float()
+    pred_rank = _rank_average_ties(pred_flat)
+    target_rank = _rank_average_ties(target_flat)
     pred_mean = pred_rank.mean(dim=1, keepdim=True)
     target_mean = target_rank.mean(dim=1, keepdim=True)
 
@@ -186,6 +206,46 @@ def get_scc(pred, target, eps=1e-8):
     per_sample_rho = numerator / denominator
     mean_scc = per_sample_rho.mean()
     return mean_scc
+
+
+@torch.no_grad()
+def get_scc_gpu(preds: Tensor, target: Tensor):
+    return get_scc(preds, target)
+
+
+GPU_METRIC_FUNCS = {
+    "psnr": get_psnr_gpu,
+    "ssim": get_ssim_gpu,
+    "ms_ssim": get_ms_ssim_gpu,
+    "msssim": get_ms_ssim_gpu,
+    "genome_disco": get_genome_disco_gpu,
+    "hicrep": get_hicrep_gpu,
+    "scc": get_scc_gpu,
+    "lpips": get_lpips_gpu,
+}
+
+
+@torch.no_grad()
+def get_metric_gpu(metric_name: str, preds: Tensor, target: Tensor):
+    if metric_name not in GPU_METRIC_FUNCS:
+        valid_metrics = ", ".join(GPU_METRIC_FUNCS)
+        raise ValueError(f"Unknown GPU metric '{metric_name}'. Valid metrics: {valid_metrics}")
+    return GPU_METRIC_FUNCS[metric_name](preds, target)
+
+
+@torch.no_grad()
+def get_eval_metrics_gpu(preds: Tensor, target: Tensor, include_lpips: bool = True):
+    metrics = {
+        "psnr": get_psnr_gpu(preds, target),
+        "ssim": get_ssim_gpu(preds, target),
+        "ms_ssim": get_ms_ssim_gpu(preds, target),
+        "genome_disco": get_genome_disco_gpu(preds, target),
+        "hicrep": get_hicrep_gpu(preds, target),
+        "scc": get_scc_gpu(preds, target),
+    }
+    if include_lpips:
+        metrics["lpips"] = get_lpips_gpu(preds, target)
+    return metrics
 
 
 def get_pcc(pred, target, eps=1e-8):

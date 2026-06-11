@@ -2,8 +2,68 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-from torchmetrics.image import StructuralSimilarityIndexMeasure, MultiScaleStructuralSimilarityIndexMeasure
-from torchvision.models import vgg19, VGG19_Weights
+try:
+    from torchmetrics.image import (
+        StructuralSimilarityIndexMeasure,
+        MultiScaleStructuralSimilarityIndexMeasure,
+    )
+except ModuleNotFoundError:
+    StructuralSimilarityIndexMeasure = None
+    MultiScaleStructuralSimilarityIndexMeasure = None
+try:
+    from torchvision.models import vgg19, VGG19_Weights
+except ImportError:
+    from torchvision.models import vgg19
+    VGG19_Weights = None
+
+
+def vgg19_features():
+    if VGG19_Weights is None:
+        return vgg19(pretrained=True).features
+    try:
+        return vgg19(weights=VGG19_Weights.IMAGENET1K_V1).features
+    except TypeError:
+        return vgg19(pretrained=True).features
+
+
+class SSIMLossMetric(nn.Module):
+    def __init__(self, data_range=1.0, kernel_size=7):
+        super().__init__()
+        self.data_range = data_range
+        self.kernel_size = kernel_size
+
+    def forward(self, pred: Tensor, target: Tensor):
+        pad = self.kernel_size // 2
+        mu_x = F.avg_pool2d(pred, self.kernel_size, stride=1, padding=pad)
+        mu_y = F.avg_pool2d(target, self.kernel_size, stride=1, padding=pad)
+        sigma_x = F.avg_pool2d(pred * pred, self.kernel_size, stride=1, padding=pad) - mu_x.square()
+        sigma_y = F.avg_pool2d(target * target, self.kernel_size, stride=1, padding=pad) - mu_y.square()
+        sigma_xy = F.avg_pool2d(pred * target, self.kernel_size, stride=1, padding=pad) - mu_x * mu_y
+        c1 = (0.01 * self.data_range) ** 2
+        c2 = (0.03 * self.data_range) ** 2
+        score = ((2.0 * mu_x * mu_y + c1) * (2.0 * sigma_xy + c2))
+        denom = (mu_x.square() + mu_y.square() + c1) * (sigma_x + sigma_y + c2)
+        return (score / denom.clamp_min(1e-8)).mean().clamp(0.0, 1.0)
+
+
+class MSSSIMLossMetric(nn.Module):
+    def __init__(self, data_range=1.0, kernel_size=3, betas=None,
+                 reduction="elementwise_mean"):
+        super().__init__()
+        self.ssim = SSIMLossMetric(data_range=data_range, kernel_size=kernel_size)
+        self.betas = betas if betas is not None else (0.0448, 0.2856, 0.3001, 0.3695, 0.4302)
+        self.reduction = reduction
+
+    def forward(self, pred: Tensor, target: Tensor):
+        score = pred.new_tensor(1.0)
+        x, y = pred, target
+        for beta in self.betas:
+            score = score * self.ssim(x, y).clamp_min(1e-6).pow(beta)
+            if min(x.shape[-2:]) < 2:
+                break
+            x = F.avg_pool2d(x, kernel_size=2, stride=2)
+            y = F.avg_pool2d(y, kernel_size=2, stride=2)
+        return score.clamp(0.0, 1.0)
 
 
 class CharbonnierLoss(nn.Module):
@@ -16,61 +76,94 @@ class CharbonnierLoss(nn.Module):
         return loss
 
 
+class AdaptiveWingLoss2D(nn.Module):
+    def __init__(self, omega=14.0, theta=0.5, epsilon=1.0, alpha=2.1,
+                 reduction="mean"):
+        super().__init__()
+        self.omega = omega
+        self.theta = theta
+        self.epsilon = epsilon
+        self.alpha = alpha
+        self.reduction = reduction
+
+    def forward(self, pred: Tensor, target: Tensor, reduction: str = None):
+        reduction = self.reduction if reduction is None else reduction
+        delta = (pred - target).abs()
+        target_safe = target.clamp(min=0.0, max=self.alpha - 1e-3)
+        exponent = self.alpha - target_safe
+
+        theta = torch.as_tensor(self.theta, device=pred.device, dtype=pred.dtype)
+        eps = torch.as_tensor(self.epsilon, device=pred.device, dtype=pred.dtype)
+        theta_eps = theta / eps
+
+        small = delta < theta
+        small_loss = self.omega * torch.log1p((delta / eps).pow(exponent))
+
+        a = (
+            self.omega
+            * exponent
+            * theta_eps.pow(exponent - 1.0)
+            / (eps * (1.0 + theta_eps.pow(exponent)))
+        )
+        c = theta * a - self.omega * torch.log1p(theta_eps.pow(exponent))
+        large_loss = a * delta - c
+        loss = torch.where(small, small_loss, large_loss)
+
+        if reduction == "none":
+            return loss
+        if reduction == "sum":
+            return loss.sum()
+        if reduction != "mean":
+            raise ValueError(f"Unsupported reduction: {reduction}")
+        return loss.mean()
+
+
+class DistanceWeightedLoss(nn.Module):
+    def __init__(self, base_loss: nn.Module, scale=0.05, max_weight=10.0):
+        super().__init__()
+        self.base_loss = base_loss
+        self.scale = scale
+        self.max_weight = max_weight
+
+    def forward(self, pred: Tensor, target: Tensor):
+        raw_loss = self.base_loss(pred, target, reduction="none")
+        h, w = target.shape[-2:]
+        rows = torch.arange(h, device=target.device).view(h, 1)
+        cols = torch.arange(w, device=target.device).view(1, w)
+        distance = (rows - cols).abs().to(dtype=target.dtype)
+        weights = torch.exp(distance * self.scale).clamp(max=self.max_weight)
+        weights = weights / weights.mean().clamp_min(1e-6)
+        return (raw_loss * weights.view(1, 1, h, w)).mean()
+
+
 class StratifiedGenomicLossWrapper(nn.Module):
-    def __init__(self, base_loss_module):
-        super(StratifiedGenomicLossWrapper, self).__init__()
-        self.base_loss = base_loss_module
+    def __init__(self, base_loss: nn.Module, eps=1e-6, prior=0.05,
+                 max_weight=8.0):
+        super().__init__()
+        self.base_loss = base_loss
+        self.eps = eps
+        self.prior = prior
+        self.max_weight = max_weight
 
-    def forward(self, pred, target):
-        raw_spatial_loss = self.base_loss(pred, target, reduction="none")
-        b, c, h, w = target.shape
+    def forward(self, pred: Tensor, target: Tensor):
+        raw_loss = self.base_loss(pred, target, reduction="none")
+        h, w = target.shape[-2:]
+        rows = torch.arange(h, device=target.device).view(h, 1)
+        cols = torch.arange(w, device=target.device).view(1, w)
+        distance = (rows - cols).abs().long()
 
-        rows = torch.arange(h, device=target.device).view(h, 1).repeat(1, w)
-        cols = torch.arange(w, device=target.device).view(1, w).repeat(h, 1)
-        distance_matrix = torch.abs(rows - cols).float()
+        flat_dist = distance.reshape(-1)
+        flat_active = (target > self.eps).float().mean(dim=(0, 1)).reshape(-1)
+        counts = torch.bincount(flat_dist, minlength=max(h, w)).clamp_min(1)
+        occupancy = torch.bincount(
+            flat_dist, weights=flat_active, minlength=max(h, w)
+        ) / counts
 
-        eps = 1e-6
-        stratified_weights = torch.zeros_like(distance_matrix)
-
-        for d in range(h):
-            mask = (distance_matrix == d)
-            occupancy = (target[:, :, mask] > eps).float().mean()
-            stratified_weights[mask] = 1.0 / (occupancy + 0.05)
-
-        stratified_weights = stratified_weights / stratified_weights.mean().clamp_min(eps)
-        stratified_weights = stratified_weights.clamp(max=8.0).view(1, 1, h, w)
-
-        balanced_loss = raw_spatial_loss * stratified_weights
-        return balanced_loss.mean()
-
-
-class DistanceWeightedWingLoss(nn.Module):
-    def __init__(self, base_wing_loss):
-        super(DistanceWeightedWingLoss, self).__init__()
-        self.base_wing = base_wing_loss
-
-    def forward(self, pred, target):
-        raw_loss = self.base_wing(pred, target, reduction="none")
-
-        # 2. Dynamically construct a distance-from-diagonal weight matrix
-        b, c, h, w = target.shape
-
-        # Create a meshgrid of coordinates
-        rows = torch.arange(h, device=target.device).view(h, 1).repeat(1, w)
-        cols = torch.arange(w, device=target.device).view(1, w).repeat(h, 1)
-
-        # Calculate absolute distance from diagonal for each bin entry
-        distance_matrix = torch.abs(rows - cols).float()
-
-        # Apply an inverse power-law weight mask: entries further out get amplified
-        # This forces the optimizer to fix long-range loop errors instead of ignoring them
-        weight_mask = torch.exp(distance_matrix * 0.05).clamp(max=10.0)
-        weight_mask = weight_mask.view(1, 1, h, w)  # Broadcastable shape
-
-        # 3. Apply the weight mask to your spatial loss map
-        weighted_loss = raw_loss * weight_mask
-
-        return weighted_loss.mean()
+        diag_weights = 1.0 / (occupancy + self.prior)
+        weights = diag_weights[distance].to(dtype=target.dtype)
+        weights = weights / weights.mean().clamp_min(self.eps)
+        weights = weights.clamp(max=self.max_weight).view(1, 1, h, w)
+        return (raw_loss * weights).mean()
 
 
 class SymmetryLoss(nn.Module):
@@ -82,71 +175,6 @@ class SymmetryLoss(nn.Module):
         diff = pred - transposed
         loss = torch.abs(diff).mean()
         return loss
-
-
-class AdaptiveWingLoss2D(nn.Module):
-    def __init__(self, omega=14.0, theta=0.5, epsilon=1.0, alpha=2.1,
-                 reduction="mean"):
-        """
-        Args:
-            omega (float): Controls the maximum gradient scale for small errors.
-            theta (float): The threshold switching point between the log and linear zones.
-            epsilon (float): Avoids division by zero and shapes the internal curve.
-            alpha (float): Used in the (alpha - y) exponent to govern background sensitivity.
-            reduction (str): mean, sum, or none. Use none for spatial reweighting.
-        """
-        super(AdaptiveWingLoss2D, self).__init__()
-        self.omega = omega
-        self.theta = theta
-        self.epsilon = epsilon
-        self.alpha = alpha
-        self.reduction = reduction
-
-    def forward(self, pred, target, reduction=None):
-        """
-        Args:
-            pred (torch.Tensor): Output from the model prediction head [B, 1, H, W]
-            target (torch.Tensor): Ground-truth target Hi-C matrix patch [B, 1, H, W]
-        """
-        delta_y = torch.abs(pred - target)
-        reduction = self.reduction if reduction is None else reduction
-
-        small_error_mask = delta_y < self.theta
-        large_error_mask = ~small_error_mask
-
-        loss = torch.zeros_like(delta_y)
-        target_safe = target.clamp(min=0.0, max=self.alpha - 1e-3)
-        theta_over_eps = torch.as_tensor(
-            self.theta / self.epsilon, device=target.device, dtype=target.dtype)
-
-        target_small = target_safe[small_error_mask]
-        delta_y_small = delta_y[small_error_mask]
-        pow_small = self.alpha - target_small
-        loss[small_error_mask] = self.omega * torch.log(
-            1.0 + torch.pow(delta_y_small / self.epsilon, pow_small)
-        )
-
-        target_large = target_safe[large_error_mask]
-        delta_y_large = delta_y[large_error_mask]
-        pow_large = self.alpha - target_large
-        a = (
-            self.omega
-            * pow_large
-            * torch.pow(theta_over_eps, pow_large - 1.0)
-            / (self.epsilon * (1.0 + torch.pow(theta_over_eps, pow_large)))
-        )
-        c = self.theta * a - self.omega * torch.log(
-            1.0 + torch.pow(theta_over_eps, pow_large)
-        )
-        loss[large_error_mask] = a * delta_y_large - c
-
-        if reduction == "none":
-            return loss
-        if reduction == "sum":
-            return loss.sum()
-        if reduction != "mean":
-            raise ValueError(f"Unsupported reduction: {reduction}")
-        return loss.mean()
 
 
 class TVLoss(nn.Module):
@@ -175,7 +203,7 @@ class StyleLoss(nn.Module):
     def __init__(self, weights=None):
         super().__init__()
 
-        vgg = vgg19(weights=VGG19_Weights.IMAGENET1K_V1).features
+        vgg = vgg19_features()
         vgg.eval()
 
         self.slice1 = nn.Sequential(*vgg[:4])
@@ -192,7 +220,8 @@ class StyleLoss(nn.Module):
         )
 
         self.criterion = nn.MSELoss()
-        self.weights = weights if weights is not None else [1.0, 1.0, 1.0, 1.0, 1.0]
+        self.weights = weights if weights is not None else [
+            1.0, 1.0, 1.0, 1.0, 1.0]
 
         for param in self.parameters():
             param.requires_grad = False
@@ -245,7 +274,7 @@ class VGGPerceptualLoss(nn.Module):
     def __init__(self):
         super(VGGPerceptualLoss, self).__init__()
 
-        vgg = vgg19(weights=VGG19_Weights.IMAGENET1K_V1).features
+        vgg = vgg19_features()
         vgg.eval()
 
         self.slice1 = nn.Sequential(*vgg[:4])
@@ -294,23 +323,26 @@ class CombinedLoss(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        loss_names = {weight_params["name"] for weight_params in cfg.loss.weight_parameters}
-        self.vgg_loss = VGGPerceptualLoss().to(cfg.device) if "vgg" in loss_names else None
+        loss_names = {weight_params["name"]
+                      for weight_params in cfg.loss.weight_parameters}
+        self.vgg_loss = VGGPerceptualLoss().to(
+            cfg.device) if "vgg" in loss_names else None
         self.style_loss = StyleLoss().to(cfg.device) if "style" in loss_names else None
         self.l1_loss = nn.L1Loss().to(cfg.device)
         self.mse_loss = nn.MSELoss().to(cfg.device)
         self.tv_loss = TVLoss().to(cfg.device)
         self.symmetry_loss = SymmetryLoss().to(cfg.device)
-        self.ssim_loss = StructuralSimilarityIndexMeasure(
-            data_range=1.0).to(cfg.device)
-        self.ms_ssim_loss = MultiScaleStructuralSimilarityIndexMeasure(
+        ssim_cls = StructuralSimilarityIndexMeasure or SSIMLossMetric
+        ms_ssim_cls = MultiScaleStructuralSimilarityIndexMeasure or MSSSIMLossMetric
+        self.ssim = ssim_cls(data_range=1.0).to(cfg.device)
+        self.ms_ssim = ms_ssim_cls(
             data_range=1.0,
-            kernel_size=3,                             # Tightest possible window for fine loops
-            # Full 5 scales supported
+            kernel_size=3,
             betas=(0.0448, 0.2856, 0.3001, 0.3695, 0.4302),
             reduction="elementwise_mean"
         ).to(cfg.device)
         self.aw_loss = AdaptiveWingLoss2D().to(cfg.device)
+        self.dw_loss = DistanceWeightedLoss(self.aw_loss).to(cfg.device)
         self.stratified_loss = StratifiedGenomicLossWrapper(
             self.aw_loss).to(cfg.device)
 
@@ -327,15 +359,13 @@ class CombinedLoss(nn.Module):
 
     @classmethod
     def dense_sparse_loss(cls, pred, target):
-        zero_mask = (target == 0).float()
+        zero_mask = (target <= 0).float()
         nonzero_mask = (target > 0).float()
-        dense_loss = F.l1_loss(pred * nonzero_mask,
-                               target * nonzero_mask).to(pred.device)
-        sparse_penalty = F.mse_loss(
-            pred * zero_mask, torch.zeros_like(pred)).to(pred.device)
-        lambda_sparse = 2.0
-        total_loss = dense_loss + lambda_sparse * sparse_penalty
-        return total_loss
+        dense_loss = (pred - target).abs().mul(nonzero_mask).sum()
+        dense_loss = dense_loss / nonzero_mask.sum().clamp_min(1.0)
+        sparse_loss = pred.square().mul(zero_mask).sum()
+        sparse_loss = sparse_loss / zero_mask.sum().clamp_min(1.0)
+        return dense_loss + 2.0 * sparse_loss
 
     @classmethod
     def dwpc_loss(cls, pred, target):
@@ -352,20 +382,27 @@ class CombinedLoss(nn.Module):
             cls._triu_cache[cache_key] = torch.triu_indices(
                 n, n, offset=1, device=pred.device)
         rows, cols = cls._triu_cache[cache_key]
-        weights = (cols - rows).to(dtype=pred.dtype) + 1
-        weights = weights.view(1, -1)
+        weights = (cols - rows).to(dtype=pred.dtype).view(1, -1)
 
         x = pred[:, rows, cols]
         y = target[:, rows, cols]
-        weight_sum = weights.sum(dim=1, keepdim=True)
+        weight_sum = weights.sum(dim=1, keepdim=True).clamp_min(1.0)
         mx = (weights * x).sum(dim=1, keepdim=True) / weight_sum
         my = (weights * y).sum(dim=1, keepdim=True) / weight_sum
         cov = (weights * (x - mx) * (y - my)).sum(dim=1)
-        var_x = (weights * (x - mx) ** 2).sum(dim=1)
-        var_y = (weights * (y - my) ** 2).sum(dim=1)
-        denom = torch.sqrt(var_x * var_y + 1e-8)
-        corr = (cov / denom).clamp(-1.0, 1.0)
-        return corr.mean()
+        var_x = (weights * (x - mx).square()).sum(dim=1)
+        var_y = (weights * (y - my).square()).sum(dim=1)
+        corr = cov / torch.sqrt(var_x * var_y + 1e-8)
+        return corr.clamp(-1.0, 1.0).mean()
+
+    @staticmethod
+    def bce_loss(pred_mask: Tensor, gt_mask: Tensor):
+        if pred_mask.shape != gt_mask.shape:
+            gt_mask = gt_mask.expand_as(pred_mask)
+        if pred_mask.detach().amin() >= 0.0 and pred_mask.detach().amax() <= 1.0:
+            return F.binary_cross_entropy(pred_mask.clamp(1e-6, 1.0 - 1e-6),
+                                          gt_mask)
+        return F.binary_cross_entropy_with_logits(pred_mask, gt_mask)
 
     def forward(self, pred: Tensor, y: Tensor, epoch: int,
                 pred_mask: Tensor = None, gt_mask: Tensor = None,
@@ -385,7 +422,7 @@ class CombinedLoss(nn.Module):
             elif weight_params["name"] == "mse":
                 loss = loss + weight * self.mse_loss(pred, y)
             elif weight_params["name"] == "ssim":
-                loss = loss + weight * (1.0 - self.ssim_loss(pred, y))
+                loss = loss + weight * (1.0 - self.ssim(pred, y))
             elif weight_params["name"] == "vgg":
                 loss = loss + weight * \
                     self.vgg_loss(self._to_3ch(pred), self._to_3ch(y))
@@ -397,31 +434,33 @@ class CombinedLoss(nn.Module):
             elif weight_params["name"] == "symmetry":
                 loss = loss + weight * self.symmetry_loss(pred)
             elif weight_params["name"] == "ms_ssim":
-                loss = loss + weight * (1.0 - self.ms_ssim_loss(pred, y))
+                loss = loss + weight * (1.0 - self.ms_ssim(pred, y))
             elif weight_params["name"] == "dwpc":
                 loss = loss + weight * (1.0 - self.dwpc_loss(pred, y))
             elif weight_params["name"] == "ds":
                 loss = loss + weight * self.dense_sparse_loss(pred, y)
             elif weight_params["name"] == "awl":
                 loss = loss + weight * self.aw_loss(pred, y)
+            elif weight_params["name"] == "distance_awl":
+                loss = loss + weight * self.dw_loss(pred, y)
             elif weight_params["name"] == "stratified":
                 loss = loss + weight * self.stratified_loss(pred, y)
             elif weight_params["name"] == "bce":
                 if pred_mask is None or gt_mask is None:
                     raise ValueError(
                         "bce loss requires pred_mask and gt_mask arguments")
-                loss = loss + weight * \
-                    F.binary_cross_entropy_with_logits(pred_mask, gt_mask)
+                loss = loss + weight * self.bce_loss(pred_mask, gt_mask)
             elif weight_params["name"] == "diffusion":
                 if diffusion_noise_pred is None or diffusion_noise_target is None:
                     continue
                 if diffusion_mask is None:
                     diffusion_mask = torch.ones_like(diffusion_noise_target)
                 denom = diffusion_mask.sum().clamp_min(1.0)
-                loss = loss + weight * (
-                    ((diffusion_noise_pred - diffusion_noise_target) ** 2)
+                diffusion_loss = (
+                    (diffusion_noise_pred - diffusion_noise_target).square()
                     * diffusion_mask
                 ).sum() / denom
+                loss = loss + weight * diffusion_loss
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 

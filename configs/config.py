@@ -19,10 +19,13 @@ class FileConfig:
     test_hic_map: str
     val_metrics: str
     num_visualization_samples: int
+    psnr_val_plot: str
     ssim_val_plot: str
-    genome_disco_val_plot: str
-    train_val_loss_plot: str
+    scc_val_plot: str
     hicrep_val_plot: str
+    genome_disco_val_plot: str
+    lpips_val_plot: str
+    train_val_loss_plot: str
     lr_plot: str
     log: str
     val_metrics_plot: str
@@ -39,13 +42,9 @@ class DataConfig:
 @dataclass
 class TrainingConfig:
     epochs: int
-    restart_every: int
     save_every: int
     lr: float
     min_lr: float
-    decay_steps: int
-    decay_rate: float
-    lr_staircase: bool
     weight_decay: float = 5e-5
     warmup_epochs: int = 3
     grad_clip: float = 1.0
@@ -94,6 +93,22 @@ class LossConfig:
 
 
 @dataclass
+class EvalMetricConfig:
+    psnr: bool = True
+    ssim: bool = True
+    scc: bool = True
+    hicrep: bool = True
+    genome_disco: bool = True
+    lpips: bool = True
+
+
+@dataclass
+class EvaluationConfig:
+    monitor: str = "ssim"
+    metrics: EvalMetricConfig = field(default_factory=EvalMetricConfig)
+
+
+@dataclass
 class Config:
     device: str
     dir: DirConfig
@@ -102,3 +117,4 @@ class Config:
     training: TrainingConfig
     model: ModelConfig
     loss: LossConfig
+    evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)

@@ -1,4 +1,3 @@
-from torch import Tensor
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
@@ -20,7 +19,7 @@ CMAP_ = mcolors.LinearSegmentedColormap.from_list(
 
 def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, x1: np.ndarray, file):
     data_groups = [x0, y, pred, x1]
-    titles = ["$x_0$", "$y_{t=0.5}$", "$\hat{y}_{t=0.5}$", "$x_1$"]
+    titles = ["$x_0$", "$y_{t=0.5}$", r"$\hat{y}_{t=0.5}$", "$x_1$"]
 
     fig, axes = plt.subplots(num_examples, 4, figsize=(20, num_examples * 5))
     axes = np.atleast_2d(axes)
@@ -43,7 +42,7 @@ def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, 
 
 def draw_inf_hic_map(y: np.ndarray, pred: np.ndarray, file):
     data_groups = [y, pred]
-    titles = ["$y_{t=0.5}$", "$\hat{y}_{t=0.5}$"]
+    titles = ["$y_{t=0.5}$", r"$\hat{y}_{t=0.5}$"]
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     axes = np.atleast_2d(axes)
@@ -62,6 +61,19 @@ def draw_inf_hic_map(y: np.ndarray, pred: np.ndarray, file):
 
     plt.tight_layout()
     plt.savefig(f"{file}.png", dpi=300, format='png')
+    plt.close()
+
+
+def _plot_state_series(state, key, title, ylabel, file):
+    if key not in state:
+        return
+    plt.figure()
+    plt.plot(state[key], label=key)
+    plt.title(title)
+    plt.xlabel("epoch")
+    plt.ylabel(ylabel)
+    plt.legend(loc="best")
+    plt.savefig(file, dpi=300, format='png')
     plt.close()
 
 
@@ -84,67 +96,29 @@ def draw_metric(cfg, state):
     plt.savefig(cfg.file.train_val_loss_plot, dpi=300, format='png')
     plt.close()
 
-    plt.style.use("ggplot")
+    metric_specs = {
+        "psnr": ("val_psnr", "PSNR on validation set", "PSNR", getattr(cfg.file, "psnr_val_plot", None)),
+        "ssim": ("val_ssim", "SSIM on validation set", "SSIM", getattr(cfg.file, "ssim_val_plot", None)),
+        "scc": ("val_scc", "SCC on validation set", "SCC", getattr(cfg.file, "scc_val_plot", None)),
+        "hicrep": ("val_hicrep", "HiCRep on validation set", "HiCRep", getattr(cfg.file, "hicrep_val_plot", None)),
+        "genome_disco": ("val_genome_disco", "GenomeDISCO on validation set", "GenomeDISCO", getattr(cfg.file, "genome_disco_val_plot", None)),
+        "lpips": ("val_lpips", "LPIPS on validation set", "LPIPS", getattr(cfg.file, "lpips_val_plot", None)),
+    }
+
+    for _, (key, title, ylabel, file) in metric_specs.items():
+        if file is not None:
+            _plot_state_series(state, key, title, ylabel, file)
+
     plt.figure()
-    if "val_sparse_f1" in state:
-        plt.plot(state["val_sparse_f1"], label="SparseF1")
-    if "val_score" in state:
-        plt.plot(state["val_score"], label="SparseScore")
-    plt.title("sparse validation metrics")
-    plt.xlabel("epoch")
-    plt.ylabel("score")
-    plt.legend(loc="upper left")
-    plt.savefig(cfg.file.val_metrics_plot, dpi=300, format='png')
-    plt.close()
-
-    # plt.figure()
-    # plt.plot(state["val_psnr"])
-    # plt.title("PSNR on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("PSNR")
-    # plt.savefig(cfg.file.psnr_val_plot, dpi=300, format='png')
-    # plt.close()
-
-
-    if "val_sparse_f1" in state:
-        plt.figure()
-        plt.plot(state["val_sparse_precision"], label="Precision")
-        plt.plot(state["val_sparse_recall"], label="Recall")
-        plt.plot(state["val_sparse_f1"], label="F1")
-        plt.title("Sparse support metrics")
+    has_metric = False
+    for _, (key, _, _, _) in metric_specs.items():
+        if key in state:
+            plt.plot(state[key], label=key.replace("val_", "").upper())
+            has_metric = True
+    if has_metric:
+        plt.title("validation metrics")
         plt.xlabel("epoch")
         plt.ylabel("score")
-        plt.legend(loc="lower right")
-        plt.savefig(f"{cfg.dir.output}/{cfg.model.name}_sparse_support_plot.png", dpi=300, format='png')
-        plt.close()
-
-    if "val_pred_density" in state:
-        plt.figure()
-        plt.plot(state["val_pred_density"], label="PredDensity")
-        plt.plot(state["val_target_density"], label="TargetDensity")
-        plt.plot(state["val_density_error"], label="DensityError")
-        plt.title("Sparse density")
-        plt.xlabel("epoch")
-        plt.ylabel("fraction")
-        plt.legend(loc="upper right")
-        plt.savefig(f"{cfg.dir.output}/{cfg.model.name}_density_plot.png", dpi=300, format='png')
-        plt.close()
-
-    if "val_nonzero_mae" in state:
-        plt.figure()
-        plt.plot(state["val_nonzero_mae"], label="NonzeroMAE")
-        plt.plot(state["val_zero_mae"], label="ZeroMAE")
-        plt.title("Sparse intensity error")
-        plt.xlabel("epoch")
-        plt.ylabel("MAE")
-        plt.legend(loc="upper right")
-        plt.savefig(f"{cfg.dir.output}/{cfg.model.name}_sparse_mae_plot.png", dpi=300, format='png')
-        plt.close()
-
-    # plt.figure()
-    # plt.plot(state["val_lpips"])
-    # plt.title("LPIPS on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("LPIPS")
-    # plt.savefig(cfg.file.lpips_val_plot, dpi=300, format='png')
-    # plt.close()
+        plt.legend(loc="best")
+        plt.savefig(cfg.file.val_metrics_plot, dpi=300, format='png')
+    plt.close()

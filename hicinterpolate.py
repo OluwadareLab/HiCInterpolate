@@ -32,9 +32,17 @@ def set_seed(seed_v: int = 42):
 
 
 def ddp_setup():
+    if not torch.cuda.is_available():
+        raise RuntimeError("Distributed training requires CUDA/NCCL, but CUDA is not available.")
+    if "LOCAL_RANK" not in os.environ:
+        raise RuntimeError(
+            "Distributed training requires torchrun. Example: "
+            "torchrun --standalone --nproc_per_node=<num_gpus> hicinterpolate.py --distributed --train --config <config>"
+        )
     local_rank = int(os.environ["LOCAL_RANK"])
     torch.cuda.set_device(local_rank)
     dist.init_process_group(backend="nccl")
+    return local_rank
 
 
 def collate_fn(batch):
@@ -68,9 +76,14 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False, isDi
 
 
 def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool = False, train: bool = False, test: bool = False):
-    yaml_cfg = OmegaConf.load(f"./configs/{config_filename}.yml")
+    yaml_cfg = OmegaConf.load(f"./configs/{config_filename}.yaml")
     structured_cfg = OmegaConf.structured(Config)
     cfg = OmegaConf.merge(structured_cfg, yaml_cfg)
+
+    isDistributed = isDistributed or int(os.environ.get("WORLD_SIZE", "1")) > 1
+    if isDistributed:
+        local_rank = ddp_setup()
+        OmegaConf.update(cfg, "device", f"cuda:{local_rank}", force_add=True)
 
     # OmegaConf.update(cfg, "dir.root", "/home/mohit/Documents/project/interpolation/HiCInterpolate")
     # OmegaConf.update(cfg, "dir.data", "/home/mohit/Documents/project/interpolation/data/triplets/normalized")
@@ -83,8 +96,6 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
     OmegaConf.update(cfg, "dir.model_state", model_state_dir)
 
     log = base_logger(cfg.file.log)
-    if isDistributed:
-        ddp_setup()
 
     batch_size = cfg.data.batch_size
     cds = CustomDataset(record_file=cfg.file.dataset_dict, img_dir=cfg.dir.image,
