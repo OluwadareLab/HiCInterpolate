@@ -59,20 +59,24 @@ class FeatureDecoder(nn.Module):
     def __init__(self, cfg, feature_channels: List[int] = None, out_channels: int = 256):
         super().__init__()
         self.cfg = cfg
-        self.feature_channels = feature_channels or [256, 128, 64, 32]
+        self.feature_channels = feature_channels or [256, 128, 64, 32, 16]
 
+        self.level5 = DecoderBlock(
+            self.feature_channels[4], 16, kernel_size=7, deep_channels=0)
         self.level4 = DecoderBlock(
-            self.feature_channels[3], 32, kernel_size=5, deep_channels=0)
+            self.feature_channels[3], 32, kernel_size=5, deep_channels=16)
         self.level3 = DecoderBlock(
             self.feature_channels[2], 64, kernel_size=3, deep_channels=32)
         self.level2 = DecoderBlock(
-            self.feature_channels[1], 128, kernel_size=1, deep_channels=64)
+            self.feature_channels[1], 128, kernel_size=3, deep_channels=64)
         self.level1 = DecoderBlock(
             self.feature_channels[0], out_channels, kernel_size=1, deep_channels=128)
 
     def forward(self, interpolations: List[Tensor], warps0: List[Tensor], warps2: List[Tensor], skips0: List[Tensor], skips2: List[Tensor]) -> Tensor:
+        out = self.level5(
+            interpolations[4], warps0[4], warps2[4], skips0[4], skips2[4])
         out = self.level4(
-            interpolations[3], warps0[3], warps2[3], skips0[3], skips2[3])
+            interpolations[3], warps0[3], warps2[3], skips0[3], skips2[3], out)
         out = self.level3(
             interpolations[2], warps0[2], warps2[2], skips0[2], skips2[2], out)
         out = self.level2(

@@ -1,15 +1,25 @@
 device: cuda
 
 dir:
-  root: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
-  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
-  output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
-  data: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
-  image: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
+  root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
+  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
+  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
+  image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
 
 
 file:
-  dataset_dict: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/train/train_25000_128.txt
+  dataset_dict: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/train/train_25000_128.txt
+# dir:
+#   root: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
+#   model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
+#   output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
+#   data: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
+#   image: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
+
+
+# file:
+#   dataset_dict: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/train/train_25000_128.txt
   snapshot: ${dir.model_state}/${model.name}_p${data.patch}_b${data.batch_size}_snapshot.pt
   model: ${dir.model_state}/${model.name}_p${data.patch}_b${data.batch_size}.pt
   test_hic_map: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_hic_map.jpg
@@ -28,7 +38,7 @@ file:
 
 data:
   patch: 128
-  batch_size: 4
+  batch_size: 10
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy

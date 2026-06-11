@@ -69,7 +69,7 @@ class Interpolator(nn.Module):
         self.cfg = cfg
         self.input_features = 1
         self.branch_channels = 128
-        self.encoder_channels = [256, 128, 64, 32]
+        self.encoder_channels = [256, 128, 64, 32, 16]
 
         self.in_ftrs = FeatureExtractionBlock(self.input_features, self.branch_channels)
         self.feature_encoder = FeatureEncoder(
