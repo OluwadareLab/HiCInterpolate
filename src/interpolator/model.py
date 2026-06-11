@@ -47,10 +47,16 @@ class OutputProjection(nn.Module):
             nn.Conv2d(256, 128, kernel_size=1, bias=False),
             nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(128, 32, kernel_size=1, bias=False),
+            nn.Conv2d(128, 64, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 32, kernel_size=5, padding=2, bias=False),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(32, 1, kernel_size=1),
+            nn.Conv2d(32, 16, kernel_size=1, bias=False),
+            nn.BatchNorm2d(16),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(16, 1, kernel_size=1),
         )
 
     def forward(self, features: Tensor) -> Tensor:
@@ -81,7 +87,7 @@ class Interpolator(nn.Module):
         ftrs0 = self.feature_encoder(x0_ftr)
         ftrs2 = self.feature_encoder(x2_ftr)
         interpolations, warped0, warped2, _ = self.flow_predictor(ftrs0, ftrs2, x0, x2)
-        decoded = self.feature_decoder(ftrs0, ftrs2, interpolations, warped0, warped2)
+        decoded = self.feature_decoder(interpolations, warped0, warped2, ftrs0, ftrs2)
         pred = self.output_projection(decoded)
 
         return {

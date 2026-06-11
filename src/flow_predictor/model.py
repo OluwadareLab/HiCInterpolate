@@ -59,8 +59,10 @@ class FlowEstimationBlock(nn.Module):
         flow_y = flow[:, 1] * (2.0 / max(denom_h, 1))
         return base + torch.stack([flow_x, flow_y], dim=-1)
 
-    def forward(self, ftr0: Tensor, ftr2: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    def forward(self, ftr0: Tensor, ftr2: Tensor, base_flow: Tensor = None) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         flow = self.flow_estimator(self.cost_volume(ftr0, ftr2))
+        if base_flow is not None:
+            flow = flow + base_flow
         grid0 = self.flow_to_grid(0.5 * flow)
         grid2 = self.flow_to_grid(-0.5 * flow)
         warped0 = F.grid_sample(ftr0, grid0, mode="nearest", padding_mode="zeros", align_corners=True)
@@ -80,12 +82,32 @@ class FlowPredictor(nn.Module):
             for idx, channels in enumerate(self.feature_channels)
         ])
 
+    @staticmethod
+    def _upsample_flow(flow: Tensor, size: tuple[int, int]) -> Tensor:
+        _, _, h_old, w_old = flow.shape
+        h_new, w_new = size
+        flow = F.interpolate(flow, size=size, mode="nearest")
+        flow[:, 0] *= w_new / max(w_old, 1)
+        flow[:, 1] *= h_new / max(h_old, 1)
+        return flow
+
     def forward(self, ftrs0: List[Tensor], ftrs2: List[Tensor], raw_x0: Tensor = None, raw_x2: Tensor = None):
-        interpolations, warps0, warps2, flows = [], [], [], []
-        for head, ftr0, ftr2 in zip(self.flow_heads, ftrs0, ftrs2):
-            interp, warp0, warp2, flow = head(ftr0, ftr2)
-            interpolations.append(interp)
-            warps0.append(warp0)
-            warps2.append(warp2)
-            flows.append(flow)
+        num_levels = len(self.flow_heads)
+        interpolations = [None] * num_levels
+        warps0 = [None] * num_levels
+        warps2 = [None] * num_levels
+        flows = [None] * num_levels
+        coarse_flow = None
+
+        for idx in reversed(range(num_levels)):
+            ftr0, ftr2 = ftrs0[idx], ftrs2[idx]
+            base_flow = None
+            if coarse_flow is not None:
+                base_flow = self._upsample_flow(coarse_flow, ftr0.shape[-2:])
+            interp, warp0, warp2, flow = self.flow_heads[idx](ftr0, ftr2, base_flow)
+            interpolations[idx] = interp
+            warps0[idx] = warp0
+            warps2[idx] = warp2
+            flows[idx] = flow
+            coarse_flow = flow
         return interpolations, warps0, warps2, flows

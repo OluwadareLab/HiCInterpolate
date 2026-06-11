@@ -25,7 +25,7 @@ class FeatureEncoder(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.out_channels = out_channels or [256, 128, 64, 32]
-        kernels = [1, 1, 3, 3]
+        kernels = [1, 1, 3, 5]
 
         blocks = []
         prev_channels = in_channels

@@ -30,7 +30,8 @@ class DecoderBlock(nn.Module):
         self.deep_proj = None
         total_channels = skip_channels * 4
         if deep_channels > 0:
-            self.deep_proj = nn.Conv2d(deep_channels, skip_channels, kernel_size=1, bias=False)
+            self.deep_proj = nn.Conv2d(
+                deep_channels, skip_channels, kernel_size=1, bias=False)
             total_channels += skip_channels
 
         padding = kernel_size // 2
@@ -60,15 +61,22 @@ class FeatureDecoder(nn.Module):
         self.cfg = cfg
         self.feature_channels = feature_channels or [256, 128, 64, 32]
 
-        self.level4 = DecoderBlock(self.feature_channels[3], 32, kernel_size=3, deep_channels=0)
-        self.level3 = DecoderBlock(self.feature_channels[2], 64, kernel_size=3, deep_channels=32)
-        self.level2 = DecoderBlock(self.feature_channels[1], 128, kernel_size=1, deep_channels=64)
-        self.level1 = DecoderBlock(self.feature_channels[0], out_channels, kernel_size=1, deep_channels=128)
+        self.level4 = DecoderBlock(
+            self.feature_channels[3], 32, kernel_size=5, deep_channels=0)
+        self.level3 = DecoderBlock(
+            self.feature_channels[2], 64, kernel_size=3, deep_channels=32)
+        self.level2 = DecoderBlock(
+            self.feature_channels[1], 128, kernel_size=1, deep_channels=64)
+        self.level1 = DecoderBlock(
+            self.feature_channels[0], out_channels, kernel_size=1, deep_channels=128)
 
-    def forward(self, skips0: List[Tensor], skips2: List[Tensor],
-                interpolations: List[Tensor], warps0: List[Tensor], warps2: List[Tensor]) -> Tensor:
-        out = self.level4(interpolations[3], warps0[3], warps2[3], skips0[3], skips2[3])
-        out = self.level3(interpolations[2], warps0[2], warps2[2], skips0[2], skips2[2], out)
-        out = self.level2(interpolations[1], warps0[1], warps2[1], skips0[1], skips2[1], out)
-        out = self.level1(interpolations[0], warps0[0], warps2[0], skips0[0], skips2[0], out)
+    def forward(self, interpolations: List[Tensor], warps0: List[Tensor], warps2: List[Tensor], skips0: List[Tensor], skips2: List[Tensor]) -> Tensor:
+        out = self.level4(
+            interpolations[3], warps0[3], warps2[3], skips0[3], skips2[3])
+        out = self.level3(
+            interpolations[2], warps0[2], warps2[2], skips0[2], skips2[2], out)
+        out = self.level2(
+            interpolations[1], warps0[1], warps2[1], skips0[1], skips2[1], out)
+        out = self.level1(
+            interpolations[0], warps0[0], warps2[0], skips0[0], skips2[0], out)
         return out

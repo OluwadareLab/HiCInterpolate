@@ -67,3 +67,4 @@ Thumbs.db
 .cursorignore
 .cursorindexingignore
 .codegraph
+*.prompt.md
