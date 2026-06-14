@@ -16,6 +16,8 @@ import gc
 import pandas as pd
 import traceback
 from collections import OrderedDict
+from torchvision import ops
+import src.misc.utils as utils
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -53,6 +55,7 @@ class Trainer:
         self.log.info(log_txt)
 
         self.loss_fn = CombinedLoss(self.cfg)
+
         decay_params, no_decay_params = self._split_weight_decay_params(
             self.model)
         self.optimizer = optim.AdamW(
@@ -64,7 +67,8 @@ class Trainer:
             betas=(0.9, 0.99),
             eps=1e-8
         )
-        total_iterations = max(1, len(self.train_dl) * self.cfg.training.epochs)
+        total_iterations = max(1, len(self.train_dl) *
+                               self.cfg.training.epochs)
         warmup_iterations = max(
             0, len(self.train_dl) * self.cfg.training.warmup_epochs)
         if warmup_iterations > 0:
@@ -307,16 +311,10 @@ class Trainer:
 
             batch_size = y.size(0)
             outputs = self.model(x0, x1)
-            pred = outputs["pred"]
-            pred_mask = outputs.get("mask")
-            gt_mask = (y > 0).float()
+            pred = outputs
 
-            train_loss = self.loss_fn(
-                pred, y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
-
-            # if not torch.isfinite(train_loss):
-            #     self.optimizer.zero_grad(set_to_none=True)
-            #     continue
+            _, y, _, _ = utils.image_segmentation_batch(y)
+            train_loss = self.loss_fn(torch.sigmoid(pred), y, self.epochs_run)
 
             train_loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -350,19 +348,18 @@ class Trainer:
                 batch_size = y.size(0)
                 outputs = self.model(x0, x1)
 
-                pred = outputs["pred"]
-                pred_mask = outputs.get("mask")
-                gt_mask = (y > 0).float()
+                pred = torch.sigmoid(outputs)
 
                 # Compute the validation loss
-                val_loss = self.loss_fn(
-                    pred, y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
+                _, y, _, _ = utils.image_segmentation_batch(y)
+                val_loss = self.loss_fn(pred, y, self.epochs_run)
 
                 local_val_loss += val_loss.detach() * batch_size
 
                 for metric in self.active_eval_metrics:
                     metric_value = eval_metric.get_metric_gpu(metric, pred, y)
-                    local_metric_totals[metric] += metric_value.detach() * batch_size
+                    local_metric_totals[metric] += metric_value.detach() * \
+                        batch_size
                 local_val_samples += batch_size
 
                 if self.best_plot_batch is None:

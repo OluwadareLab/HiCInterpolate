@@ -12,8 +12,15 @@ from torch.utils.data.distributed import DistributedSampler
 from omegaconf import OmegaConf
 from configs.config import Config
 from torch.utils.data.dataloader import default_collate
+import cupy as cp
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+if not hasattr(cp, 'float32'):
+    cp.float32 = np.float32
+    cp.float64 = np.float64
+    cp.int32 = np.int32
+    cp.int64 = np.int64
 
 
 def base_logger(file):
@@ -33,7 +40,8 @@ def set_seed(seed_v: int = 42):
 
 def ddp_setup():
     if not torch.cuda.is_available():
-        raise RuntimeError("Distributed training requires CUDA/NCCL, but CUDA is not available.")
+        raise RuntimeError(
+            "Distributed training requires CUDA/NCCL, but CUDA is not available.")
     if "LOCAL_RANK" not in os.environ:
         raise RuntimeError(
             "Distributed training requires torchrun. Example: "
@@ -143,9 +151,9 @@ if __name__ == "__main__":
                         action='store_true', help='Test Model (default: False)')
     args = parser.parse_args()
 
-    # args.config = "config_dilated_25k_128"
-    # args.train = True
-    # args.test = False
+    args.config = "config_dilated_25k_128"
+    args.train = True
+    args.test = False
     main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
 
 

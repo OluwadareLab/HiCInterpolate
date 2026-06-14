@@ -1,0 +1,18 @@
+- Permission
+    Allow edit this session: Yes
+- Background
+    - temporal interpolation of dots from two input. used focal loss. model src/interpolator/shape.py
+- Output
+    - log: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset/config_dilated_25k_128/hicinterpolate_128_p128_b40.log Line 45-88
+    - best model plot: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset/config_dilated_25k_128/epoch_20_output.png
+- Observation
+    - No substancial improvement, loss stuck, e.g ssim onlu 0.22, scc: 0.20
+- Task
+    - check logic, find probabels that can cause these.
+    - think deep and suggest proper logical ideas that can minimize loss, maximize evaluation scores.
+    - relevent files:
+        - hicinterpolate.py
+        - src/train_lib.py
+        - src/interpolator/model.py
+        - src/interpolator/shape.py
+    - do not read unrelevent files.

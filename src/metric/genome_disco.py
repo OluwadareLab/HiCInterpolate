@@ -1,6 +1,6 @@
 import numpy as np
 import copy
-from sklearn import metrics
+import sklearn 
 import scipy.sparse as sps
 
 # Code taken from https://github.com/kundajelab/genomedisco
@@ -66,7 +66,7 @@ def compute_reproducibility(m1_csr, m2_csr, transition, tmax=3, tmin=3):
             auc = auc
 
     else:
-        auc = metrics.auc(range(len(ts)), scores) / denom
+        auc = sklearn.metrics.auc(range(len(ts)), scores) / denom
 
     reproducibility = 1 - auc
     return reproducibility

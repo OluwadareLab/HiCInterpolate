@@ -75,3 +75,6 @@ loss:
     - name: vgg
       boundaries: [100]
       values: [0.005, 0.01]
+    - name: noise
+      boundaries: [100]
+      values: [0.5, 0.5]

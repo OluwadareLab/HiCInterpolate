@@ -6,14 +6,7 @@ import torch
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['figure.dpi'] = 300
 CMAP_ = mcolors.LinearSegmentedColormap.from_list(
-    "juicebox",
-    [
-        "#fee8c8",
-        "#fdbb84",
-        "#e34a33",
-        "#b30000"
-    ],
-    N=256
+    "juicebox", ["#FFFFFF", "#FFAAAA", "#FF5555", "#FF0000", "#B30000"], N=256
 )
 
 

@@ -38,7 +38,7 @@ file:
 
 data:
   patch: 128
-  batch_size: 10
+  batch_size: 40
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
@@ -82,9 +82,6 @@ loss:
     - name: ds
       boundaries: [0]
       values: [0.5, 0.5]
-    - name: bce
-      boundaries: [0]
-      values: [0.25, 0.25]
     - name: dwpc
       boundaries: [0]
       values: [0.2, 0.2]

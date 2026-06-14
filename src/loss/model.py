@@ -3,10 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 try:
-    from torchmetrics.image import (
-        StructuralSimilarityIndexMeasure,
-        MultiScaleStructuralSimilarityIndexMeasure,
-    )
+    from torchmetrics.image import StructuralSimilarityIndexMeasure, MultiScaleStructuralSimilarityIndexMeasure
 except ModuleNotFoundError:
     StructuralSimilarityIndexMeasure = None
     MultiScaleStructuralSimilarityIndexMeasure = None
@@ -36,9 +33,12 @@ class SSIMLossMetric(nn.Module):
         pad = self.kernel_size // 2
         mu_x = F.avg_pool2d(pred, self.kernel_size, stride=1, padding=pad)
         mu_y = F.avg_pool2d(target, self.kernel_size, stride=1, padding=pad)
-        sigma_x = F.avg_pool2d(pred * pred, self.kernel_size, stride=1, padding=pad) - mu_x.square()
-        sigma_y = F.avg_pool2d(target * target, self.kernel_size, stride=1, padding=pad) - mu_y.square()
-        sigma_xy = F.avg_pool2d(pred * target, self.kernel_size, stride=1, padding=pad) - mu_x * mu_y
+        sigma_x = F.avg_pool2d(pred * pred, self.kernel_size,
+                               stride=1, padding=pad) - mu_x.square()
+        sigma_y = F.avg_pool2d(
+            target * target, self.kernel_size, stride=1, padding=pad) - mu_y.square()
+        sigma_xy = F.avg_pool2d(
+            pred * target, self.kernel_size, stride=1, padding=pad) - mu_x * mu_y
         c1 = (0.01 * self.data_range) ** 2
         c2 = (0.03 * self.data_range) ** 2
         score = ((2.0 * mu_x * mu_y + c1) * (2.0 * sigma_xy + c2))
@@ -50,8 +50,10 @@ class MSSSIMLossMetric(nn.Module):
     def __init__(self, data_range=1.0, kernel_size=3, betas=None,
                  reduction="elementwise_mean"):
         super().__init__()
-        self.ssim = SSIMLossMetric(data_range=data_range, kernel_size=kernel_size)
-        self.betas = betas if betas is not None else (0.0448, 0.2856, 0.3001, 0.3695, 0.4302)
+        self.ssim = SSIMLossMetric(
+            data_range=data_range, kernel_size=kernel_size)
+        self.betas = betas if betas is not None else (
+            0.0448, 0.2856, 0.3001, 0.3695, 0.4302)
         self.reduction = reduction
 
     def forward(self, pred: Tensor, target: Tensor):
@@ -92,8 +94,10 @@ class AdaptiveWingLoss2D(nn.Module):
         target_safe = target.clamp(min=0.0, max=self.alpha - 1e-3)
         exponent = self.alpha - target_safe
 
-        theta = torch.as_tensor(self.theta, device=pred.device, dtype=pred.dtype)
-        eps = torch.as_tensor(self.epsilon, device=pred.device, dtype=pred.dtype)
+        theta = torch.as_tensor(
+            self.theta, device=pred.device, dtype=pred.dtype)
+        eps = torch.as_tensor(
+            self.epsilon, device=pred.device, dtype=pred.dtype)
         theta_eps = theta / eps
 
         small = delta < theta
@@ -408,7 +412,8 @@ class CombinedLoss(nn.Module):
                 pred_mask: Tensor = None, gt_mask: Tensor = None,
                 diffusion_noise_pred: Tensor = None,
                 diffusion_noise_target: Tensor = None,
-                diffusion_mask: Tensor = None):
+                diffusion_mask: Tensor = None,
+                noise_pred: Tensor = None):
         loss = pred.new_zeros(())
 
         for weight_params in self.cfg.loss.weight_parameters:
@@ -419,10 +424,16 @@ class CombinedLoss(nn.Module):
                 continue
             if weight_params["name"] == "l1":
                 loss = loss + weight * self.l1_loss(pred, y)
+                if noise_pred is not None:
+                    loss = loss + weight * self.l1_loss(noise_pred, y)
             elif weight_params["name"] == "mse":
                 loss = loss + weight * self.mse_loss(pred, y)
+                if noise_pred is not None:
+                    loss = loss + weight * self.mse_loss(noise_pred, y)
             elif weight_params["name"] == "ssim":
                 loss = loss + weight * (1.0 - self.ssim(pred, y))
+                if noise_pred is not None:
+                    loss = loss + weight * (1.0 - self.ssim(noise_pred, y))
             elif weight_params["name"] == "vgg":
                 loss = loss + weight * \
                     self.vgg_loss(self._to_3ch(pred), self._to_3ch(y))
@@ -445,6 +456,12 @@ class CombinedLoss(nn.Module):
                 loss = loss + weight * self.dw_loss(pred, y)
             elif weight_params["name"] == "stratified":
                 loss = loss + weight * self.stratified_loss(pred, y)
+            elif weight_params["name"] == "noise":
+                if noise_pred is not None:
+                    # Apply MSE and SSIM for noise_pred scaled by 'noise' weight
+                    loss = loss + weight * \
+                        (self.mse_loss(noise_pred, y) +
+                         (1.0 - self.ssim(noise_pred, y)))
             elif weight_params["name"] == "bce":
                 if pred_mask is None or gt_mask is None:
                     raise ValueError(
