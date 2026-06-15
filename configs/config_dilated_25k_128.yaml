@@ -38,12 +38,12 @@ file:
 
 data:
   patch: 128
-  batch_size: 40
+  batch_size: 10
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.9, 0.1, 0.0]
+  train_val_test_ratio: [0.2, 0.0125, 0.0]
 
 training:
   epochs: 100

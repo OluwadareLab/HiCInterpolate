@@ -17,35 +17,39 @@ class FlowEstimationBlock(nn.Module):
         cost_channels = self.search_range ** 2
 
         self.flow_estimator = nn.Sequential(
-            nn.Conv2d(cost_channels, feature_channels, kernel_size=1, bias=False),
+            nn.Conv2d(cost_channels, feature_channels,
+                      kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(feature_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(feature_channels, max(16, feature_channels // 2), kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(max(16, feature_channels // 2)),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(max(16, feature_channels // 2), 2, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(feature_channels, 2, kernel_size=3,
+                      padding=1, bias=False),
+            nn.BatchNorm2d(2),
+            nn.ReLU(inplace=True)
         )
+        in_channels = feature_channels * 2
+        out_channels = feature_channels
         self.blend_mask = nn.Sequential(
-            nn.Conv2d(feature_channels * 2 + 2, feature_channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(feature_channels),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(feature_channels, feature_channels, kernel_size=1),
-            nn.Sigmoid(),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3,
+                      padding=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.Sigmoid()
         )
 
-    def cost_volume(self, ftr0: Tensor, ftr2: Tensor) -> Tensor:
-        b, c, h, w = ftr0.shape
-        ftr0 = F.normalize(ftr0, dim=1)
-        ftr2 = F.normalize(ftr2, dim=1)
-        padded = F.pad(ftr2, [self.max_disp] * 4, mode="reflect")
+    def _cost_volume(self, x0: Tensor, x2: Tensor) -> Tensor:
+        b, c, h, w = x0.shape
+        x0 = F.normalize(x0, dim=1)
+        x2 = F.normalize(x2, dim=1)
+        padded = F.pad(x2, [self.max_disp] * 4, mode="reflect")
         patches = F.unfold(padded, kernel_size=self.search_range)
         patches = patches.view(b, c, self.search_range ** 2, h * w)
-        ftr0_flat = ftr0.view(b, c, h * w).permute(0, 2, 1)
-        cost = torch.einsum("b n c, b c k n -> b k n", ftr0_flat, patches)
+        x0_flat = x0.view(b, c, h * w).permute(0, 2, 1)
+        cost = torch.einsum("b n c, b c k n -> b k n", x0_flat, patches)
         return cost.view(b, self.search_range ** 2, h, w)
 
-    @staticmethod
-    def flow_to_grid(flow: Tensor, align_corners: bool = True) -> Tensor:
+    def _flow_to_grid(self, flow: Tensor, align_corners: bool = True) -> Tensor:
         b, _, h, w = flow.shape
         y, x = torch.meshgrid(
             torch.linspace(-1.0, 1.0, h, device=flow.device),
@@ -59,55 +63,49 @@ class FlowEstimationBlock(nn.Module):
         flow_y = flow[:, 1] * (2.0 / max(denom_h, 1))
         return base + torch.stack([flow_x, flow_y], dim=-1)
 
-    def forward(self, ftr0: Tensor, ftr2: Tensor, base_flow: Tensor = None) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        flow = self.flow_estimator(self.cost_volume(ftr0, ftr2))
-        if base_flow is not None:
-            flow = flow + base_flow
-        grid0 = self.flow_to_grid(0.5 * flow)
-        grid2 = self.flow_to_grid(-0.5 * flow)
-        warped0 = F.grid_sample(ftr0, grid0, mode="bilinear", padding_mode="border", align_corners=True)
-        warped2 = F.grid_sample(ftr2, grid2, mode="bilinear", padding_mode="border", align_corners=True)
-        alpha = self.blend_mask(torch.cat([warped0, warped2, flow], dim=1))
-        midpoint = alpha * warped0 + (1.0 - alpha) * warped2
-        return midpoint, warped0, warped2, flow
+    def forward(self, x0: Tensor, x2: Tensor, coarse_flow: Tensor = None) -> tuple[Tensor, Tensor]:
+        flow = self.flow_estimator(self._cost_volume(x0, x2))
+        if coarse_flow is not None:
+            flow = flow + coarse_flow
+        grid0 = self._flow_to_grid(0.5 * flow)
+        grid2 = self._flow_to_grid(-0.5 * flow)
+        warped0 = F.grid_sample(
+            x0, grid0, mode="bilinear", padding_mode="border", align_corners=True)
+        warped2 = F.grid_sample(
+            x2, grid2, mode="bilinear", padding_mode="border", align_corners=True)
+        blended_features = torch.cat([warped0, warped2], dim=1)
+        alpha = self.blend_mask(blended_features)
+        interpolated = alpha * warped0 + (1.0 - alpha) * warped2
+        return interpolated, flow
 
 
 class FlowPredictor(nn.Module):
-    def __init__(self, cfg, feature_channels: List[int] = None, max_disp: int = 4):
+    def __init__(self, feature_channels: List[int] = None, max_disp: int = 4):
         super().__init__()
-        self.cfg = cfg
         self.feature_channels = feature_channels or [256, 128, 64, 32]
         self.flow_heads = nn.ModuleList([
-            FlowEstimationBlock(channels, max_disp=max(1, max_disp - idx))
-            for idx, channels in enumerate(self.feature_channels)
+            FlowEstimationBlock(channels, max_disp=max_disp)
+            for _, channels in enumerate(self.feature_channels)
         ])
 
-    @staticmethod
-    def _upsample_flow(flow: Tensor, size: tuple[int, int]) -> Tensor:
+    def _upsample_flow(self, flow: Tensor, size: tuple[int, int]) -> Tensor:
         _, _, h_old, w_old = flow.shape
         h_new, w_new = size
-        flow = F.interpolate(flow, size=size, mode="bilinear", align_corners=True)
+        flow = F.interpolate(
+            flow, size=size, mode="bilinear", align_corners=True)
         flow[:, 0] *= w_new / max(w_old, 1)
         flow[:, 1] *= h_new / max(h_old, 1)
         return flow
 
-    def forward(self, ftrs0: List[Tensor], ftrs2: List[Tensor], raw_x0: Tensor = None, raw_x2: Tensor = None):
+    def forward(self, x0s: List[Tensor], x2s: List[Tensor]):
         num_levels = len(self.flow_heads)
         interpolations = [None] * num_levels
-        warps0 = [None] * num_levels
-        warps2 = [None] * num_levels
-        flows = [None] * num_levels
         coarse_flow = None
-
         for idx in reversed(range(num_levels)):
-            ftr0, ftr2 = ftrs0[idx], ftrs2[idx]
-            base_flow = None
-            if coarse_flow is not None:
-                base_flow = self._upsample_flow(coarse_flow, ftr0.shape[-2:])
-            interp, warp0, warp2, flow = self.flow_heads[idx](ftr0, ftr2, base_flow)
-            interpolations[idx] = interp
-            warps0[idx] = warp0
-            warps2[idx] = warp2
-            flows[idx] = flow
-            coarse_flow = flow
-        return interpolations, warps0, warps2, flows
+            x0, x2 = x0s[idx], x2s[idx]
+            interpolated, flow = self.flow_heads[idx](x0, x2, coarse_flow)
+            if idx > 0:
+                coarse_flow = self._upsample_flow(flow, x0s[idx-1].shape[-2:])
+
+            interpolations[idx] = interpolated
+        return interpolations

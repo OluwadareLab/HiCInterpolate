@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from src.feature_encoder import FeatureEncoder
-from src.flow_predictor import FlowPredictor
+from src.flow_predictor import FlowPredictor, FlowEstimationBlock
 from src.feature_decoder import FeatureDecoder
 from src.noise_block import NoiseBlock
 import numpy as np
@@ -15,69 +15,104 @@ from src.interpolator.shape import HiCFeatureExtractorNet
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
-class ConvBNAct(nn.Module):
+class FeatureBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int):
         super().__init__()
         self.block = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,
-                      padding=kernel_size // 2, dilation=1, bias=False),
+            nn.Conv2d(in_channels, out_channels//2, kernel_size=kernel_size,
+                      padding=kernel_size // 2,  bias=False),
+            nn.BatchNorm2d(out_channels//2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels//2, out_channels, kernel_size=kernel_size,
+                      padding=kernel_size // 2, bias=False),
             nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(inplace=True)
         )
 
     def forward(self, x: Tensor) -> Tensor:
         return self.block(x)
 
 
-class FeatureExtractionBlock(nn.Module):
-    def __init__(self, in_channels: int = 1, branch_channels: int = 128):
+class FeatureExtraction(nn.Module):
+    def __init__(self, in_channels: int = 1, out_channels: int = 32):
         super().__init__()
-        self.branch_k1 = ConvBNAct(in_channels, branch_channels, kernel_size=1)
-        self.branch_k3 = ConvBNAct(in_channels, branch_channels, kernel_size=3)
-        self.branch_k5 = ConvBNAct(in_channels, branch_channels, kernel_size=5)
+        self.branch1 = FeatureBlock(
+            in_channels, out_channels, kernel_size=1)
+        self.branch2 = FeatureBlock(
+            in_channels, out_channels, kernel_size=3)
+        self.branch3 = FeatureBlock(
+            in_channels, out_channels, kernel_size=5)
 
     def forward(self, x: Tensor) -> Tensor:
-        branches = [self.branch_k1(x), self.branch_k3(x), self.branch_k5(x)]
+        branches = [self.branch1(x), self.branch2(x), self.branch3(x)]
         return torch.cat(branches, dim=1)
 
 
-class OutputProjection(nn.Module):
+# class ShapeExtraction(nn.Module):
+#     def __init__(self, in_channels: int = 1, out_channels: int = 32):
+#         super().__init__()
+#         self.dots = FeatureBlock(
+#             in_channels, out_channels, kernel_size=3, padding=3//2, bias=False)
+#         self.v_edges = FeatureBlock(
+#             in_channels, out_channels, kernel_size=3, padding=3//2, bias=False)
+#         self.h_edges = FeatureBlock(
+#             in_channels, out_channels, kernel_size=3, padding=3//2, bias=False)
+
+#     def forward(self, x: Tensor) -> Tensor:
+#         dots, v_edges, h_edges = self.dots(x), self.v_edges(x), self.h_edges(x)
+#         return dots, v_edges, h_edges
+
+
+class FeatureProjection(nn.Module):
     def __init__(self, in_channels: int = 256):
         super().__init__()
-        self.intensity = nn.Sequential(
-            nn.Conv2d(in_channels, 256, kernel_size=1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(256, 128, kernel_size=1, bias=False),
+        self.projection = nn.Sequential(
+            nn.Conv2d(in_channels, 128, kernel_size=3,
+                      padding=3//2, bias=False),
             nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(128, 64, kernel_size=3, padding=1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 64, kernel_size=3, padding=3//2, bias=False),
             nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(64, 32, kernel_size=5, padding=2, bias=False),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(32, 16, kernel_size=1, bias=False),
-            nn.BatchNorm2d(16),
-            nn.LeakyReLU(0.2, inplace=True),
-            nn.Conv2d(16, 2, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 1, kernel_size=1, padding=1//2, bias=False),
         )
 
-    def forward(self, features: Tensor) -> tuple[Tensor, Tensor]:
-        intensity_logits, mask_logits = self.intensity(
-            features).chunk(2, dim=1)
-        intensity = torch.sigmoid(intensity_logits)
-        mask = torch.sigmoid(mask_logits)
-        return intensity * mask, mask
+    def forward(self, x: Tensor) -> Tensor:
+        projection = self.projection(x)
+        return projection
 
 
-class UnpackableTensor(torch.Tensor):
-    def set_extra(self, mask, pred_logits):
-        self.mask = mask
-        self.pred_logits = pred_logits
+class OutputProjection(nn.Module):
+    def __init__(self, in_channels: int = 2):
+        super().__init__()
+        # self.gate = nn.Sequential(
+        #     nn.Conv2d(in_channels, in_channels,
+        #               kernel_size=3, padding=3//2, bias=False),
+        #     nn.Sigmoid()
+        # )
+        # self.projection = nn.Sequential(
+        #     nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=1//2, bias=False),
+        #     nn.ReLU(inplace=True),
+        #     nn.Conv2d(32, 1, kernel_size=1, padding=1//2, bias=False),
+        # )
 
-    def __iter__(self):
-        return iter((self, self.mask, self.pred_logits))
+        self.projection = nn.Conv2d(
+            in_channels, in_channels, kernel_size=1, padding=1//2, bias=False)
+
+    def forward(self, x: Tensor, x_fine) -> tuple[Tensor, Tensor]:
+        # shapes = dots + h_edges + v_edges
+        features = torch.cat([x, x_fine], dim=1)
+        # alpha = self.gate(features)
+        # output = self.projection(
+        #     torch.cat([alpha * x,  (1.0 - alpha) * shapes], dim=1))
+
+        projection = self.projection(features)
+        logits, mask = projection.chunk(2, dim=1)
+        pred = torch.sigmoid(logits)
+        pred_mask = torch.sigmoid(mask)
+        combined_prob = (pred * pred_mask).clamp(min=1e-8, max=1.0 - 1e-8)
+        pred_logits = torch.log(combined_prob / (1.0 - combined_prob))
+        return pred_logits, pred_mask
 
 
 class Interpolator(nn.Module):
@@ -85,58 +120,61 @@ class Interpolator(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.input_features = 1
-        self.branch_channels = 128
-        self.encoder_channels = [256, 128, 64, 32, 16]
+        self.features_channels = 32
+        self.encoder_channels = [256, 128, 64, 32]
+        self.flow_channels = [256, 128, 64, 32]
 
-        # self.in_ftrs = FeatureExtractionBlock(
-        #     self.input_features, self.branch_channels)
-        # self.feature_encoder = FeatureEncoder(
-        #     self.cfg, in_channels=self.branch_channels * 3, out_channels=self.encoder_channels)
-        # self.flow_predictor = FlowPredictor(
-        #     self.cfg, feature_channels=self.encoder_channels, max_disp=4)
-        # self.feature_decoder = FeatureDecoder(
-        #     self.cfg, feature_channels=self.encoder_channels, out_channels=256)
-        # self.output_projection = OutputProjection(in_channels=256)
-        # self.noise_block = NoiseBlock(kernel_size=3, max_disp=4)
-        self.shape_extractor = HiCFeatureExtractorNet(in_channels=1, base_channels=64)
+        self.feature_extraction = FeatureExtraction(
+            self.input_features, self.features_channels)
+        self.feature_encoder = FeatureEncoder(
+            in_channels=self.features_channels * 3, out_channels=self.encoder_channels)
+        self.flow_predictor = FlowPredictor(
+            feature_channels=self.flow_channels, max_disp=4)
+        self.feature_decoder = FeatureDecoder(
+            feature_channels=self.flow_channels)
+        self.feature_projection = FeatureProjection(in_channels=256)
 
-    def forward(self, x0: Tensor, x2: Tensor, *args, **kwargs):
+        # self.shape_extractor = ShapeExtraction(in_channels=1, out_channels=32)
+        self.fine_interpolate = FlowEstimationBlock(
+            feature_channels=1, max_disp=4)
+        self.output_projection = OutputProjection(in_channels=2)
 
+        # self.shape_extractor = HiCFeatureExtractorNet(in_channels=1, base_channels=64)
+
+    def forward(self, x0: Tensor, x2: Tensor):
         # square0, dots0, h_edges0, v_edges0 = utils.image_segmentation_batch(x0)
         # square2, dots2, h_edges2, v_edges2 = utils.image_segmentation_batch(x2)
 
-        # square0_cuda, dots0_cuda, h_edges0_cuda, v_edges0_cuda = utils.image_segmentation_cuda_approx(x0, 'cuda_batch_x0.png')
-        # square2_cuda, dots2_cuda, h_edges2_cuda, v_edges2_cuda = utils.image_segmentation_cuda_approx(x2, 'cuda_batch_x2.png')
+        # pred_logits, pred_mask = self.shape_extractor(x0, x2)
+        # final_pred = torch.sigmoid(pred_logits)
 
-        pred_logits, pred_mask = self.shape_extractor(x0, x2)
-        final_pred = torch.sigmoid(pred_logits)
+        # out = final_pred.as_subclass(UnpackableTensor)
+        # out.set_extra(pred_mask, pred_logits)
+        # return out
 
-        out = final_pred.as_subclass(UnpackableTensor)
-        out.set_extra(pred_mask, pred_logits)
-        return out
-        # t = 0.5
-        # if len(args) > 0:
-        #     t = args[0]
-        # elif "time_frame" in kwargs:
-        #     t = kwargs["time_frame"]
+        ext0 = self.feature_extraction(x0)
+        ext2 = self.feature_extraction(x2)
 
-        # x0_ftr = self.in_ftrs(x0)
-        # x2_ftr = self.in_ftrs(x2)
+        enc0 = self.feature_encoder(ext0)
+        enc2 = self.feature_encoder(ext2)
 
-        # ftrs0 = self.feature_encoder(x0_ftr)
-        # ftrs2 = self.feature_encoder(x2_ftr)
-        # interpolations, warped0, warped2, _ = self.flow_predictor(ftrs0, ftrs2, x0, x2)
-        # decoded = self.feature_decoder(interpolations, warped0, warped2, ftrs0, ftrs2)
-        # pred, mask = self.output_projection(decoded)
+        interpolations = self.flow_predictor(enc0, enc2)
+        decoded = self.feature_decoder(interpolations)
+        projection = self.feature_projection(decoded)
+
+        # dots0, h_edges0, v_edges0 = self.shape_extractor(x0)
+        # dots2, h_edges2, v_edges2 = self.shape_extractor(x2)
+        # dots_interp, _ = self.interpolate(dots0, dots2)
+        # h_edges_interp, _ = self.interpolate(h_edges0, h_edges2)
+        # v_edges_interp, _ = self.interpolate(v_edges0, v_edges2)
+
+        # pred = self.output_projection(
+        #     projection, dots_interp, h_edges_interp, v_edges_interp)
+
+        fine_interpolate, _ = self.fine_interpolate(x0, x2)
+        pred, mask = self.output_projection(projection, fine_interpolate)
 
         # noise_pred = self.noise_block(x0, x2, t)
-
-        # # Combine base prediction and noise block output
-        # # uniquely learn and work on top of current architecture
         # final_pred = pred + noise_pred
 
-        # return {
-        #     "pred": noise_pred,
-        #     "mask": mask,
-        #     "noise_pred": noise_pred,
-        # }
+        return pred, mask

@@ -1,3 +1,3 @@
-from .model import FlowPredictor
+from .model import FlowPredictor, FlowEstimationBlock
 
-__all__ = ["FlowPredictor"]
+__all__ = ["FlowPredictor", "FlowEstimationBlock"]

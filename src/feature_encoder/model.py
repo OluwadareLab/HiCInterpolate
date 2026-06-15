@@ -7,25 +7,29 @@ class EncoderBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, kernel_size: int, downsample: bool):
         super().__init__()
         padding = kernel_size // 2
-        self.proj = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,
-                      padding=padding, dilation=1, bias=False),
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels,
+                      kernel_size=kernel_size, padding=padding, bias=False),
             nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(0.2, inplace=True),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels,
+                      kernel_size=kernel_size, padding=padding, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
         )
-        self.downsample = nn.MaxPool2d(kernel_size=2, stride=2) if downsample else nn.Identity()
+        self.downsample = nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        skip = self.proj(x)
-        return self.downsample(skip), skip
+        skip = self.encoder(x)
+        latent = self.downsample(skip)
+        return latent, skip
 
 
 class FeatureEncoder(nn.Module):
-    def __init__(self, cfg, in_channels: int = 384, out_channels: List[int] = None):
+    def __init__(self, in_channels: int = 96, out_channels: List[int] = None):
         super().__init__()
-        self.cfg = cfg
-        self.out_channels = out_channels or [256, 128, 64, 32, 16]
-        kernels = [1, 3, 3, 5, 7]
+        self.out_channels = out_channels or [256, 128, 64, 32]
+        kernels = [3, 3, 3, 3]
 
         blocks = []
         prev_channels = in_channels
@@ -37,10 +41,10 @@ class FeatureEncoder(nn.Module):
             prev_channels = channels
         self.blocks = nn.ModuleList(blocks)
 
-    def forward(self, ftr: Tensor) -> List[Tensor]:
-        outputs = []
-        x = ftr
+    def forward(self, x: Tensor) -> List[Tensor]:
+        skips = []
+        latent = x
         for block in self.blocks:
-            x, skip = block(x)
-            outputs.append(skip)
-        return outputs
+            latent, skip = block(latent)
+            skips.append(skip)
+        return skips

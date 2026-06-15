@@ -1,24 +1,50 @@
+- Use
+    - caveman ultra
+    - rtk
+    - codegraph
 - Permission
     Allow this session: Yes
+- Position
+    - Senior Research Scientist expert in machine learning, computer vision, temporal image generation, sparse genomic data e.g. Hi-C, single-cell Hi-C analysis.
+- Stack: 
+    - Python, PyTorch, ML, Genomic Data Analysis, Temporal Image Analysis
+- Problem statement
+    - temporal image interpolation
+    - maintain structure and sparsity
+    - predict crips, sharpe and texture image
 - Background
-    - temporal interpolation of dots from two input. used focal loss. model src/interpolator/shape.py
-- Output
-    - log: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset/config_dilated_25k_128/hicinterpolate_128_p128_b40.log Line 136-173
-    - best model plot: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset/config_dilated_25k_128/epoch_14_output.png
-- Observation
-    - No substancial improvement, loss stuck, e.g ssim 0.22, scc: 0.20
-    - Hi-C a special genomics data contains sparsity but model treating them as noise and smoothing it.
+    - Genomic Hi-C contact matrix.
+    - Hi-C contact matrix generally sparse
+    - Sparsity appears noise but they are real interactions
+    - Predict intermediate Hi-C contact matric, say x_1 (y_0.5) from two input Hi-C contact matrix, say x_0, x_2
 - Target
-    - increase ssim, scc, HiCRep score greater than 0.95
-    - maintain sparsity like in the ground truth.
+    - increase ssim, scc, HiCRep score 
+    - expected score > 0.95
     - prevent oversmooting
-    - keep ground truth like texture
-- Task
-    - check logic, find probabels logic or code that can cause these poor results.
-    - think deep and suggest proper logical ideas that can minimize loss, maximize evaluation scores.
-    - relevent files:
-        - hicinterpolate.py
-        - src/train_lib.py
-        - src/interpolator/model.py
-        - src/interpolator/shape.py
-    - do not read unrelevent files.
+    - keep ground truth like sparsity, crisp, texture and sharpness
+- Architecture
+    - Main caller: hicinterpolate.py
+    - Training setup: src/train_lib.py
+    - Configuration: configs/config_dilated_25k_128.yaml; Note: many parameters are unused
+    - Feature Extractor: src/interpolator/model.py; classes: FeatureBlock, FeatureExtraction
+    - U-Net Encoder: src/feature_encoder/model.py
+    - Flow Predictor: src/flow_predictor/model.py
+    - U-Net Decoder: src/feature_decoder/model.py
+    - Feature Projection: src/interpolator/model.py; classes: FeatureProjection
+    - Output Projection: src/interpolator/model.py; classes: OutputProjection with logits and mask
+    - Learning rate: 2e-4 to 1e-5
+    - Optimizer: src/train_lib.py AdamW LINE: 61-69
+    - Scheduler: src/train_lib.py LambdaLR/CosineAnnealingLR with warmup LINE:70-91
+    - Loss Function: src/loss/model.py Combined Loss defined in configuration file
+- Test run (if required)
+    - use conda environment: hicinterpolate
+    - check syntex
+    - check flow with very minimal data
+    - do not test unnecessary
+- Rule
+    - think deeply
+    - do not look on unnecessary files
+    - think first, provide outcome, ask for implementation if required (at leaset one time), update codebase
+    - save updated architectur in a md file: look.md
+    - do not show what you thinking or doing, think or do yourself internally if required
+    - do not update codebase
