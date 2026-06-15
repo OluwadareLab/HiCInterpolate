@@ -1,14 +1,20 @@
 - Permission
-    Allow edit this session: Yes
+    Allow this session: Yes
 - Background
     - temporal interpolation of dots from two input. used focal loss. model src/interpolator/shape.py
 - Output
-    - log: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset/config_dilated_25k_128/hicinterpolate_128_p128_b40.log Line 45-88
-    - best model plot: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset/config_dilated_25k_128/epoch_20_output.png
+    - log: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset/config_dilated_25k_128/hicinterpolate_128_p128_b40.log Line 136-173
+    - best model plot: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset/config_dilated_25k_128/epoch_14_output.png
 - Observation
-    - No substancial improvement, loss stuck, e.g ssim onlu 0.22, scc: 0.20
+    - No substancial improvement, loss stuck, e.g ssim 0.22, scc: 0.20
+    - Hi-C a special genomics data contains sparsity but model treating them as noise and smoothing it.
+- Target
+    - increase ssim, scc, HiCRep score greater than 0.95
+    - maintain sparsity like in the ground truth.
+    - prevent oversmooting
+    - keep ground truth like texture
 - Task
-    - check logic, find probabels that can cause these.
+    - check logic, find probabels logic or code that can cause these poor results.
     - think deep and suggest proper logical ideas that can minimize loss, maximize evaluation scores.
     - relevent files:
         - hicinterpolate.py

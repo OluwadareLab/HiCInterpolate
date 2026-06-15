@@ -311,10 +311,24 @@ class Trainer:
 
             batch_size = y.size(0)
             outputs = self.model(x0, x1)
-            pred = outputs
+            if hasattr(outputs, "pred_logits"):
+                pred = outputs.pred_logits
+                pred_mask = outputs.mask
+            else:
+                pred = outputs
+                pred_mask = None
 
-            _, y, _, _ = utils.image_segmentation_batch(y)
-            train_loss = self.loss_fn(torch.sigmoid(pred), y, self.epochs_run)
+            if pred_mask is not None:
+                # Direct threshold: any non-trivially-zero bin is a contact.
+                # The previous opening-based derivation (erode→dilate residual)
+                # was corrupting the mask signal for the same reason it failed
+                # in shape.py: it erased peaks from the target.
+                gt_mask = (y > 1e-3).float()
+            else:
+                gt_mask = None
+
+            # _, y, _, _ = utils.image_segmentation_batch(y)
+            train_loss = self.loss_fn(torch.sigmoid(pred), y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
 
             train_loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -347,12 +361,24 @@ class Trainer:
 
                 batch_size = y.size(0)
                 outputs = self.model(x0, x1)
+                if hasattr(outputs, "pred_logits"):
+                    pred_logits = outputs.pred_logits
+                    pred_mask = outputs.mask
+                else:
+                    pred_logits = outputs
+                    pred_mask = None
 
-                pred = torch.sigmoid(outputs)
+                pred = torch.sigmoid(pred_logits)
+
+                if pred_mask is not None:
+                    # Direct threshold — same reasoning as training loop.
+                    gt_mask = (y > 1e-3).float()
+                else:
+                    gt_mask = None
 
                 # Compute the validation loss
-                _, y, _, _ = utils.image_segmentation_batch(y)
-                val_loss = self.loss_fn(pred, y, self.epochs_run)
+                # _, y, _, _ = utils.image_segmentation_batch(y)
+                val_loss = self.loss_fn(pred, y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
 
                 local_val_loss += val_loss.detach() * batch_size
 

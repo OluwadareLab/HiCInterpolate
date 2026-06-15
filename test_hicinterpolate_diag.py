@@ -41,11 +41,11 @@ matplotlib.use("Agg")
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-ROOT_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate"
-MODEL_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/mm_triplets_dataset"
-DICT_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset/test"
-IMAGE_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset"
-OUTPUT_DIR = "/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/test_result"
+ROOT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate"
+MODEL_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/mm_triplets_dataset"
+DICT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset/test"
+IMAGE_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/mm_triplets_dataset"
+OUTPUT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/test_result"
 OUTPUT_FILE = os.path.join(OUTPUT_DIR, "comparison_hicinterpolate_diag.csv")
 SUMMARY_FILE = os.path.join(OUTPUT_DIR, "comparison_summary_diag.csv")
 OUTPUT_HEATMAP_DIR = os.path.join(OUTPUT_DIR, "pred_heatmaps")

@@ -43,7 +43,7 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.2, 0.0125, 0.0125]
+  train_val_test_ratio: [0.9, 0.1, 0.0]
 
 training:
   epochs: 100
@@ -76,25 +76,40 @@ model:
 
 loss:
   weight_parameters:
+    # Reduced from 1.0 — L1 dominance causes over-smoothing on sparse Hi-C
     - name: l1
       boundaries: [0]
-      values: [1.0, 1.0]
+      values: [0.5, 0.5]
+    # Focal on pred_mask vs gt_mask — now reliable with fixed gt_mask derivation
+    - name: focal
+      boundaries: [0]
+      values: [3.0, 3.0]
+    # dense_sparse_loss: penalises non-zero predictions on zero-target pixels
+    # (2x internal weight) — critical for sparsity preservation
     - name: ds
       boundaries: [0]
-      values: [0.5, 0.5]
+      values: [2.0, 2.0]
+    # Distance-weighted Pearson correlation — raised for stronger SCC signal
     - name: dwpc
       boundaries: [0]
-      values: [0.2, 0.2]
+      values: [1.5, 1.5]
+    # MS-SSIM raised from 0.2 to 1.0 — must compete with reconstruction losses
     - name: ms_ssim
       boundaries: [0]
-      values: [0.1, 0.1]
+      values: [1.0, 1.0]
     - name: symmetry
       boundaries: [0]
       values: [0.1, 0.1]
+    # BCE on mask head — supervises contact/non-contact gating directly
+    - name: bce
+      boundaries: [0]
+      values: [1.0, 1.0]
 
 
 evaluation:
-  monitor: scc
+  # hicrep is a stricter biological reproducibility metric than scc;
+  # it is insensitive to diagonal inflation and matches target > 0.95 goal.
+  monitor: hicrep
   metrics:
     psnr: true
     ssim: true

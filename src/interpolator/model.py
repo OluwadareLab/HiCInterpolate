@@ -71,6 +71,15 @@ class OutputProjection(nn.Module):
         return intensity * mask, mask
 
 
+class UnpackableTensor(torch.Tensor):
+    def set_extra(self, mask, pred_logits):
+        self.mask = mask
+        self.pred_logits = pred_logits
+
+    def __iter__(self):
+        return iter((self, self.mask, self.pred_logits))
+
+
 class Interpolator(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -91,19 +100,20 @@ class Interpolator(nn.Module):
         # self.noise_block = NoiseBlock(kernel_size=3, max_disp=4)
         self.shape_extractor = HiCFeatureExtractorNet(in_channels=1, base_channels=64)
 
-    def forward(self, x0: Tensor, x2: Tensor, *args, **kwargs) -> dict[str, Tensor]:
+    def forward(self, x0: Tensor, x2: Tensor, *args, **kwargs):
 
         # square0, dots0, h_edges0, v_edges0 = utils.image_segmentation_batch(x0)
         # square2, dots2, h_edges2, v_edges2 = utils.image_segmentation_batch(x2)
 
-        square0_cuda, dots0_cuda, h_edges0_cuda, v_edges0_cuda = utils.image_segmentation_cuda_approx(x0)
-        square2_cuda, dots2_cuda, h_edges2_cuda, v_edges2_cuda = utils.image_segmentation_cuda_approx(x2)
+        # square0_cuda, dots0_cuda, h_edges0_cuda, v_edges0_cuda = utils.image_segmentation_cuda_approx(x0, 'cuda_batch_x0.png')
+        # square2_cuda, dots2_cuda, h_edges2_cuda, v_edges2_cuda = utils.image_segmentation_cuda_approx(x2, 'cuda_batch_x2.png')
 
-        pred_dots  = self.shape_extractor(dots0_cuda, dots2_cuda)
+        pred_logits, pred_mask = self.shape_extractor(x0, x2)
+        final_pred = torch.sigmoid(pred_logits)
 
-        # call noise block
-
-        return pred_dots
+        out = final_pred.as_subclass(UnpackableTensor)
+        out.set_extra(pred_mask, pred_logits)
+        return out
         # t = 0.5
         # if len(args) > 0:
         #     t = args[0]

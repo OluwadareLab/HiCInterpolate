@@ -321,6 +321,26 @@ class VGGPerceptualLoss(nn.Module):
         return loss
 
 
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=0.25, gamma=2.0, reduction="mean"):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, pred: Tensor, target: Tensor):
+        pred = pred.clamp(1e-6, 1.0 - 1e-6)
+        bce = F.binary_cross_entropy(pred, target, reduction="none")
+        pt = torch.exp(-bce)
+        loss = self.alpha * (1 - pt) ** self.gamma * bce
+
+        if self.reduction == "mean":
+            return loss.mean()
+        if self.reduction == "sum":
+            return loss.sum()
+        return loss
+
+
 class CombinedLoss(nn.Module):
     _triu_cache: dict[tuple[int, torch.device], tuple[Tensor, Tensor]] = {}
 
@@ -349,6 +369,7 @@ class CombinedLoss(nn.Module):
         self.dw_loss = DistanceWeightedLoss(self.aw_loss).to(cfg.device)
         self.stratified_loss = StratifiedGenomicLossWrapper(
             self.aw_loss).to(cfg.device)
+        self.focal_loss = FocalLoss().to(cfg.device)
 
     @staticmethod
     def _to_3ch(x: Tensor) -> Tensor:
@@ -456,6 +477,11 @@ class CombinedLoss(nn.Module):
                 loss = loss + weight * self.dw_loss(pred, y)
             elif weight_params["name"] == "stratified":
                 loss = loss + weight * self.stratified_loss(pred, y)
+            elif weight_params["name"] == "focal":
+                if pred_mask is not None and gt_mask is not None:
+                    loss = loss + weight * self.focal_loss(pred_mask, gt_mask)
+                else:
+                    loss = loss + weight * self.focal_loss(pred, y)
             elif weight_params["name"] == "noise":
                 if noise_pred is not None:
                     # Apply MSE and SSIM for noise_pred scaled by 'noise' weight
