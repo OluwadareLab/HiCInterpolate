@@ -48,3 +48,21 @@
     - save updated architectur in a md file: look.md
     - do not show what you thinking or doing, think or do yourself internally if required
     - do not update codebase
+
+Issues
+    - Decoder loop does not chain outputs —  FeatureDecoder.forward()  re-reads from  xs  each iteration instead of threading the previous output; only the single finest-level block effectively runs; coarser decoder blocks are dead.
+    - Symmetry not enforced at inference — Hi-C matrices are symmetric by definition;  SymmetryLoss  weight is only 0.1 during training and no hard  0.5*(pred + pred.T)  is applied at output.
+    - OutputProjection  logit re-derivation is unsound —  pred  and  pred_mask  are each already  sigmoid(...)  outputs; multiplying them and re-deriving logits via  log(p/(1-p)) creates a heuristic that is not a proper probability, producing noisy and disconnected gradients for both heads.
+    - Final encoder bottleneck discarded —  EncoderBlock  returns  (latent, skip) ; the encoder loop collects only  skip s and discards the final  latent  (the most spatially compressed representation at  H/16 ), losing the deepest global context.
+    - Cost volume uses  reflect  padding —  FlowEstimationBlock._cost_volume  pads  x2  with  mode="reflect" ; for Hi-C, the diagonal and boundary regions have specific sparsity structure; reflect-padding invents artificial contacts that bias cost volume computation.
+    - No attention for long-range TAD structure — all convolution kernels are at most 5×5; TAD boundaries are full-matrix diagonal features that pure local convolution cannot capture, which directly limits HiCRep/SCC ceiling.
+    - VGG perceptual / style loss domain mismatch — VGG19 is trained on natural images; Hi-C matrices are log-normalized sparse genomic matrices; the resulting gradients carry ImageNet texture semantics, not genomic contact semantics.
+    - max_disp=4  is fixed across all pyramid levels — at the coarsest level the search window covers a large relative fraction (appropriate); at the finest level (128×128 input) it covers only ~3% of the image, which may be too small for TAD-level displacements.
+    - No input normalization contract — model assumes input range  [0,1]  (sigmoid output, SSIM  data_range=1.0 , focal clamp); no internal assertion or normalization layer enforces this; a mismatch silently degrades all losses.
+    - Loss curriculum not staged — all losses run from epoch 0;  bce / focal  on the mask head require the head to stabilize first before they provide useful signal; premature mask supervision may destabilize early training.
+
+Task
+    - fix the issues carefully
+    - think about adding dice loss if there is a probability to improve the resuts
+
+

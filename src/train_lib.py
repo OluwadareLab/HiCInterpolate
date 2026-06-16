@@ -35,7 +35,7 @@ class Trainer:
         self.val_steps = len(self.val_dl)
         self.save_every = self.cfg.training.save_every
 
-        self.model = Interpolator(self.cfg)
+        self.model = Interpolator()
 
         self.isDistributed = isDistributed and dist.is_available() and dist.is_initialized()
         if self.isDistributed:

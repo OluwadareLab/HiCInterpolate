@@ -2,16 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
-try:
-    from torchmetrics.image import StructuralSimilarityIndexMeasure, MultiScaleStructuralSimilarityIndexMeasure
-except ModuleNotFoundError:
-    StructuralSimilarityIndexMeasure = None
-    MultiScaleStructuralSimilarityIndexMeasure = None
-try:
-    from torchvision.models import vgg19, VGG19_Weights
-except ImportError:
-    from torchvision.models import vgg19
-    VGG19_Weights = None
+from torchmetrics.image import StructuralSimilarityIndexMeasure, MultiScaleStructuralSimilarityIndexMeasure
+from torchvision.models import vgg19, VGG19_Weights
 
 
 def vgg19_features():
@@ -21,51 +13,6 @@ def vgg19_features():
         return vgg19(weights=VGG19_Weights.IMAGENET1K_V1).features
     except TypeError:
         return vgg19(pretrained=True).features
-
-
-class SSIMLossMetric(nn.Module):
-    def __init__(self, data_range=1.0, kernel_size=7):
-        super().__init__()
-        self.data_range = data_range
-        self.kernel_size = kernel_size
-
-    def forward(self, pred: Tensor, target: Tensor):
-        pad = self.kernel_size // 2
-        mu_x = F.avg_pool2d(pred, self.kernel_size, stride=1, padding=pad)
-        mu_y = F.avg_pool2d(target, self.kernel_size, stride=1, padding=pad)
-        sigma_x = F.avg_pool2d(pred * pred, self.kernel_size,
-                               stride=1, padding=pad) - mu_x.square()
-        sigma_y = F.avg_pool2d(
-            target * target, self.kernel_size, stride=1, padding=pad) - mu_y.square()
-        sigma_xy = F.avg_pool2d(
-            pred * target, self.kernel_size, stride=1, padding=pad) - mu_x * mu_y
-        c1 = (0.01 * self.data_range) ** 2
-        c2 = (0.03 * self.data_range) ** 2
-        score = ((2.0 * mu_x * mu_y + c1) * (2.0 * sigma_xy + c2))
-        denom = (mu_x.square() + mu_y.square() + c1) * (sigma_x + sigma_y + c2)
-        return (score / denom.clamp_min(1e-8)).mean().clamp(0.0, 1.0)
-
-
-class MSSSIMLossMetric(nn.Module):
-    def __init__(self, data_range=1.0, kernel_size=3, betas=None,
-                 reduction="elementwise_mean"):
-        super().__init__()
-        self.ssim = SSIMLossMetric(
-            data_range=data_range, kernel_size=kernel_size)
-        self.betas = betas if betas is not None else (
-            0.0448, 0.2856, 0.3001, 0.3695, 0.4302)
-        self.reduction = reduction
-
-    def forward(self, pred: Tensor, target: Tensor):
-        score = pred.new_tensor(1.0)
-        x, y = pred, target
-        for beta in self.betas:
-            score = score * self.ssim(x, y).clamp_min(1e-6).pow(beta)
-            if min(x.shape[-2:]) < 2:
-                break
-            x = F.avg_pool2d(x, kernel_size=2, stride=2)
-            y = F.avg_pool2d(y, kernel_size=2, stride=2)
-        return score.clamp(0.0, 1.0)
 
 
 class CharbonnierLoss(nn.Module):
@@ -321,6 +268,36 @@ class VGGPerceptualLoss(nn.Module):
         return loss
 
 
+class DiceLoss(nn.Module):
+    """Dice loss for class-imbalanced segmentation (e.g., Hi-C sparsity).
+
+    Better than BCE for sparse targets as it directly optimizes IoU
+    and handles class imbalance without requiring sample weighting.
+    Aligns with SCC/HiCRep metrics which reward structure overlap.
+    """
+
+    def __init__(self, smooth: float = 1e-6):
+        super().__init__()
+        self.smooth = smooth
+
+    def forward(self, pred: Tensor, target: Tensor) -> Tensor:
+        # Ensure pred is in [0, 1]
+        if pred.min() < 0:
+            pred = torch.sigmoid(pred)
+        pred = pred.clamp(min=1e-6, max=1.0 - 1e-6)
+
+        # Ensure target is in [0, 1]
+        target = target.clamp(0.0, 1.0)
+
+        # Compute Dice coefficient
+        intersection = (pred * target).sum()
+        union = pred.sum() + target.sum()
+        dice_coeff = (2.0 * intersection + self.smooth) / (union + self.smooth)
+
+        # Loss = 1 - Dice (higher dice is better, lower loss is better)
+        return 1.0 - dice_coeff
+
+
 class FocalLoss(nn.Module):
     def __init__(self, alpha=0.25, gamma=2.0, reduction="mean"):
         super().__init__()
@@ -356,8 +333,8 @@ class CombinedLoss(nn.Module):
         self.mse_loss = nn.MSELoss().to(cfg.device)
         self.tv_loss = TVLoss().to(cfg.device)
         self.symmetry_loss = SymmetryLoss().to(cfg.device)
-        ssim_cls = StructuralSimilarityIndexMeasure or SSIMLossMetric
-        ms_ssim_cls = MultiScaleStructuralSimilarityIndexMeasure or MSSSIMLossMetric
+        ssim_cls = StructuralSimilarityIndexMeasure
+        ms_ssim_cls = MultiScaleStructuralSimilarityIndexMeasure
         self.ssim = ssim_cls(data_range=1.0).to(cfg.device)
         self.ms_ssim = ms_ssim_cls(
             data_range=1.0,
@@ -370,6 +347,7 @@ class CombinedLoss(nn.Module):
         self.stratified_loss = StratifiedGenomicLossWrapper(
             self.aw_loss).to(cfg.device)
         self.focal_loss = FocalLoss().to(cfg.device)
+        self.dice_loss = DiceLoss().to(cfg.device)
 
     @staticmethod
     def _to_3ch(x: Tensor) -> Tensor:
@@ -425,16 +403,12 @@ class CombinedLoss(nn.Module):
         if pred_mask.shape != gt_mask.shape:
             gt_mask = gt_mask.expand_as(pred_mask)
         if pred_mask.detach().amin() >= 0.0 and pred_mask.detach().amax() <= 1.0:
-            return F.binary_cross_entropy(pred_mask.clamp(1e-6, 1.0 - 1e-6),
+            return F.binary_cross_entropy(pred_mask.clamp(1e-8, 1.0 - 1e-8),
                                           gt_mask)
         return F.binary_cross_entropy_with_logits(pred_mask, gt_mask)
 
     def forward(self, pred: Tensor, y: Tensor, epoch: int,
-                pred_mask: Tensor = None, gt_mask: Tensor = None,
-                diffusion_noise_pred: Tensor = None,
-                diffusion_noise_target: Tensor = None,
-                diffusion_mask: Tensor = None,
-                noise_pred: Tensor = None):
+                pred_mask: Tensor = None, gt_mask: Tensor = None):
         loss = pred.new_zeros(())
 
         for weight_params in self.cfg.loss.weight_parameters:
@@ -445,16 +419,13 @@ class CombinedLoss(nn.Module):
                 continue
             if weight_params["name"] == "l1":
                 loss = loss + weight * self.l1_loss(pred, y)
-                if noise_pred is not None:
-                    loss = loss + weight * self.l1_loss(noise_pred, y)
+            elif weight_params["name"] == "l1_reg":
+                loss = loss + weight * torch.mean(torch.abs(pred))
             elif weight_params["name"] == "mse":
-                loss = loss + weight * self.mse_loss(pred, y)
-                if noise_pred is not None:
-                    loss = loss + weight * self.mse_loss(noise_pred, y)
+                loss = loss + weight * \
+                    self.mse_loss(torch.log1p(pred), torch.log1p(y))
             elif weight_params["name"] == "ssim":
                 loss = loss + weight * (1.0 - self.ssim(pred, y))
-                if noise_pred is not None:
-                    loss = loss + weight * (1.0 - self.ssim(noise_pred, y))
             elif weight_params["name"] == "vgg":
                 loss = loss + weight * \
                     self.vgg_loss(self._to_3ch(pred), self._to_3ch(y))
@@ -477,33 +448,21 @@ class CombinedLoss(nn.Module):
                 loss = loss + weight * self.dw_loss(pred, y)
             elif weight_params["name"] == "stratified":
                 loss = loss + weight * self.stratified_loss(pred, y)
-            elif weight_params["name"] == "focal":
-                if pred_mask is not None and gt_mask is not None:
-                    loss = loss + weight * self.focal_loss(pred_mask, gt_mask)
-                else:
-                    loss = loss + weight * self.focal_loss(pred, y)
-            elif weight_params["name"] == "noise":
-                if noise_pred is not None:
-                    # Apply MSE and SSIM for noise_pred scaled by 'noise' weight
-                    loss = loss + weight * \
-                        (self.mse_loss(noise_pred, y) +
-                         (1.0 - self.ssim(noise_pred, y)))
             elif weight_params["name"] == "bce":
                 if pred_mask is None or gt_mask is None:
                     raise ValueError(
                         "bce loss requires pred_mask and gt_mask arguments")
                 loss = loss + weight * self.bce_loss(pred_mask, gt_mask)
-            elif weight_params["name"] == "diffusion":
-                if diffusion_noise_pred is None or diffusion_noise_target is None:
-                    continue
-                if diffusion_mask is None:
-                    diffusion_mask = torch.ones_like(diffusion_noise_target)
-                denom = diffusion_mask.sum().clamp_min(1.0)
-                diffusion_loss = (
-                    (diffusion_noise_pred - diffusion_noise_target).square()
-                    * diffusion_mask
-                ).sum() / denom
-                loss = loss + weight * diffusion_loss
+            elif weight_params["name"] == "focal":
+                if pred_mask is not None and gt_mask is not None:
+                    loss = loss + weight * self.focal_loss(pred_mask, gt_mask)
+                else:
+                    loss = loss + weight * self.focal_loss(pred, y)
+            elif weight_params["name"] == "dice":
+                if pred_mask is None or gt_mask is None:
+                    raise ValueError(
+                        "dice loss requires pred_mask and gt_mask arguments")
+                loss = loss + weight * self.dice_loss(pred_mask, gt_mask)
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 

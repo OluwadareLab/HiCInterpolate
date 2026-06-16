@@ -1,3 +1,3 @@
-from .model import FeatureDecoder, SkipFusion
+from .model import FeatureDecoder
 
 __all__ = ["FeatureDecoder"]

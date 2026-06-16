@@ -32,7 +32,9 @@ class TripletDataset(Dataset):
         img = self._load_valid_matrix(image_file)
         if img is None:
             return None
-        img = self.normalize_counts(img)
+        # img = self.normalize_counts(img)
+        img = np.log1p(img)
+        img = (img - img.mean()) / (img.std() + _EPSILON)
         return torch.from_numpy(img).float().unsqueeze(0)
 
     def log1p(self, matrix):

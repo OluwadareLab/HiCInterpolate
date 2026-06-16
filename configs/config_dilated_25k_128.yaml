@@ -2,14 +2,14 @@ device: cuda
 
 dir:
   root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
-  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset
-  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/log_mm_triplets_dataset
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset
-  image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset
+  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
+  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
+  image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
 
 
 file:
-  dataset_dict: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset/train/train_25000_128.txt
+  dataset_dict: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/train/train_25000_128.txt
 # dir:
 #   root: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
 #   model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
@@ -38,18 +38,18 @@ file:
 
 data:
   patch: 128
-  batch_size: 10
+  batch_size: 6
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.2, 0.0125, 0.0]
+  train_val_test_ratio: [0.2, 0.025, 0.025]
 
 training:
   epochs: 100
   save_every: 10
-  lr: 2e-4
-  min_lr: 1e-5
+  lr: 1e-4
+  min_lr: 1e-6
   weight_decay: 5e-5
   warmup_epochs: 3
   grad_clip: 1.0
@@ -76,34 +76,22 @@ model:
 
 loss:
   weight_parameters:
-    # Reduced from 1.0 — L1 dominance causes over-smoothing on sparse Hi-C
-    - name: l1
+    # Primary reconstruction loss (starts high, decreases)
+    - name: mse
       boundaries: [0]
-      values: [0.5, 0.5]
-    # Focal on pred_mask vs gt_mask — now reliable with fixed gt_mask derivation
-    - name: focal
+      values: [1.0]
+    - name: ssim
       boundaries: [0]
-      values: [3.0, 3.0]
-    # dense_sparse_loss: penalises non-zero predictions on zero-target pixels
-    # (2x internal weight) — critical for sparsity preservation
-    - name: ds
+      values: [0.8]
+    - name: l1_reg
       boundaries: [0]
-      values: [2.0, 2.0]
-    # Distance-weighted Pearson correlation — raised for stronger SCC signal
-    - name: dwpc
-      boundaries: [0]
-      values: [1.5, 1.5]
-    # MS-SSIM raised from 0.2 to 1.0 — must compete with reconstruction losses
-    - name: ms_ssim
-      boundaries: [0]
-      values: [1.0, 1.0]
-    - name: symmetry
-      boundaries: [0]
-      values: [0.1, 0.1]
-    # BCE on mask head — supervises contact/non-contact gating directly
+      values: [0.8]
     - name: bce
       boundaries: [0]
-      values: [1.0, 1.0]
+      values: [0.8]
+
+
+
 
 
 evaluation:

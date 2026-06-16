@@ -3,6 +3,7 @@ import sys
 import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch import Tensor
 from src.feature_encoder import FeatureEncoder
 from src.flow_predictor import FlowPredictor, FlowEstimationBlock
@@ -48,21 +49,6 @@ class FeatureExtraction(nn.Module):
         return torch.cat(branches, dim=1)
 
 
-# class ShapeExtraction(nn.Module):
-#     def __init__(self, in_channels: int = 1, out_channels: int = 32):
-#         super().__init__()
-#         self.dots = FeatureBlock(
-#             in_channels, out_channels, kernel_size=3, padding=3//2, bias=False)
-#         self.v_edges = FeatureBlock(
-#             in_channels, out_channels, kernel_size=3, padding=3//2, bias=False)
-#         self.h_edges = FeatureBlock(
-#             in_channels, out_channels, kernel_size=3, padding=3//2, bias=False)
-
-#     def forward(self, x: Tensor) -> Tensor:
-#         dots, v_edges, h_edges = self.dots(x), self.v_edges(x), self.h_edges(x)
-#         return dots, v_edges, h_edges
-
-
 class FeatureProjection(nn.Module):
     def __init__(self, in_channels: int = 256):
         super().__init__()
@@ -85,78 +71,66 @@ class FeatureProjection(nn.Module):
 class OutputProjection(nn.Module):
     def __init__(self, in_channels: int = 2):
         super().__init__()
-        # self.gate = nn.Sequential(
-        #     nn.Conv2d(in_channels, in_channels,
-        #               kernel_size=3, padding=3//2, bias=False),
-        #     nn.Sigmoid()
-        # )
-        # self.projection = nn.Sequential(
-        #     nn.Conv2d(in_channels, in_channels, kernel_size=1, padding=1//2, bias=False),
-        #     nn.ReLU(inplace=True),
-        #     nn.Conv2d(32, 1, kernel_size=1, padding=1//2, bias=False),
-        # )
-
         self.projection = nn.Conv2d(
             in_channels, in_channels, kernel_size=1, padding=1//2, bias=False)
 
-    def forward(self, x: Tensor, x_fine) -> tuple[Tensor, Tensor]:
-        # shapes = dots + h_edges + v_edges
+    def forward(self, x: Tensor, x_fine, enforce_symmetry: bool = True) -> tuple[Tensor, Tensor]:
         features = torch.cat([x, x_fine], dim=1)
-        # alpha = self.gate(features)
-        # output = self.projection(
-        #     torch.cat([alpha * x,  (1.0 - alpha) * shapes], dim=1))
-
         projection = self.projection(features)
         logits, mask = projection.chunk(2, dim=1)
         pred = torch.sigmoid(logits)
         pred_mask = torch.sigmoid(mask)
-        combined_prob = (pred * pred_mask).clamp(min=1e-8, max=1.0 - 1e-8)
-        pred_logits = torch.log(combined_prob / (1.0 - combined_prob))
-        return pred_logits, pred_mask
+
+        if enforce_symmetry:
+            pred = 0.5 * (pred + pred.transpose(-2, -1))
+
+        return pred, pred_mask
 
 
 class Interpolator(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self):
         super().__init__()
-        self.cfg = cfg
         self.input_features = 1
-        self.features_channels = 32
-        self.encoder_channels = [256, 128, 64, 32]
-        self.flow_channels = [256, 128, 64, 32]
+        self.features_channels = 16
+        self.encoder_channels = [16, 32, 64, 128]
+        self.flow_channels = [16, 32, 64, 128]
 
-        self.feature_extraction = FeatureExtraction(
-            self.input_features, self.features_channels)
+        # self.feature_extraction = FeatureExtraction(
+        #     self.input_features, self.features_channels)
         self.feature_encoder = FeatureEncoder(
-            in_channels=self.features_channels * 3, out_channels=self.encoder_channels)
+            in_channels=1, out_channels=self.encoder_channels)
         self.flow_predictor = FlowPredictor(
             feature_channels=self.flow_channels, max_disp=4)
         self.feature_decoder = FeatureDecoder(
             feature_channels=self.flow_channels)
-        self.feature_projection = FeatureProjection(in_channels=256)
+        self.feature_projection = FeatureProjection(in_channels=16)
 
-        # self.shape_extractor = ShapeExtraction(in_channels=1, out_channels=32)
         self.fine_interpolate = FlowEstimationBlock(
             feature_channels=1, max_disp=4)
         self.output_projection = OutputProjection(in_channels=2)
 
-        # self.shape_extractor = HiCFeatureExtractorNet(in_channels=1, base_channels=64)
+    def forward(self, x0: Tensor, x2: Tensor, enforce_input_range: bool = True, enforce_symmetry: bool = True):
+        # Validate and clamp inputs to [0, 1] range for model stability
+        if enforce_input_range:
+            x0_min, x0_max = x0.min().item(), x0.max().item()
+            x2_min, x2_max = x2.min().item(), x2.max().item()
 
-    def forward(self, x0: Tensor, x2: Tensor):
-        # square0, dots0, h_edges0, v_edges0 = utils.image_segmentation_batch(x0)
-        # square2, dots2, h_edges2, v_edges2 = utils.image_segmentation_batch(x2)
+            if x0_min < -0.01 or x0_max > 1.01 or x2_min < -0.01 or x2_max > 1.01:
+                import warnings
+                warnings.warn(
+                    f"Input range mismatch: x0=[{x0_min:.4f}, {x0_max:.4f}], "
+                    f"x2=[{x2_min:.4f}, {x2_max:.4f}]. "
+                    f"Clamping to [0, 1]. Set enforce_input_range=False to skip.",
+                    UserWarning
+                )
+                x0 = x0.clamp(0.0, 1.0)
+                x2 = x2.clamp(0.0, 1.0)
 
-        # pred_logits, pred_mask = self.shape_extractor(x0, x2)
-        # final_pred = torch.sigmoid(pred_logits)
+        # ext0 = self.feature_extraction(x0)
+        # ext2 = self.feature_extraction(x2)
 
-        # out = final_pred.as_subclass(UnpackableTensor)
-        # out.set_extra(pred_mask, pred_logits)
-        # return out
-
-        ext0 = self.feature_extraction(x0)
-        ext2 = self.feature_extraction(x2)
-
-        enc0 = self.feature_encoder(ext0)
-        enc2 = self.feature_encoder(ext2)
+        enc0 = self.feature_encoder(x0)
+        enc2 = self.feature_encoder(x2)
 
         interpolations = self.flow_predictor(enc0, enc2)
         decoded = self.feature_decoder(interpolations)
@@ -172,7 +146,8 @@ class Interpolator(nn.Module):
         #     projection, dots_interp, h_edges_interp, v_edges_interp)
 
         fine_interpolate, _ = self.fine_interpolate(x0, x2)
-        pred, mask = self.output_projection(projection, fine_interpolate)
+        pred, mask = self.output_projection(
+            projection, fine_interpolate, enforce_symmetry=enforce_symmetry)
 
         # noise_pred = self.noise_block(x0, x2, t)
         # final_pred = pred + noise_pred
