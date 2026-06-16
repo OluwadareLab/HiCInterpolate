@@ -331,3 +331,15 @@ def image_segmentaion(hic_matrix, filename=None):
         plt.close()
 
     return diagonal_dots, dots, horizontal_edges, vertical_edges
+
+
+
+def make_distance_map(N, device):
+    """Genomic distance map: d[i,j] = |i-j| / N  →  shape (1,1,N,N)"""
+    idx = torch.arange(N, device=device).float()
+    d = (idx.unsqueeze(0) - idx.unsqueeze(1)).abs() / N
+    return d.unsqueeze(0).unsqueeze(0)          # (1,1,N,N)
+
+
+def symmetrize(x):
+    return (x + x.transpose(-1, -2)) / 2

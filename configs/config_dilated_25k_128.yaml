@@ -80,19 +80,9 @@ loss:
     - name: mse
       boundaries: [0]
       values: [1.0]
-    - name: ssim
-      boundaries: [0]
-      values: [0.8]
     - name: l1_reg
       boundaries: [0]
-      values: [0.8]
-    - name: bce
-      boundaries: [0]
-      values: [0.8]
-
-
-
-
+      values: [0.5]
 
 evaluation:
   # hicrep is a stricter biological reproducibility metric than scc;

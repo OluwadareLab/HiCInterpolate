@@ -269,32 +269,21 @@ class VGGPerceptualLoss(nn.Module):
 
 
 class DiceLoss(nn.Module):
-    """Dice loss for class-imbalanced segmentation (e.g., Hi-C sparsity).
-
-    Better than BCE for sparse targets as it directly optimizes IoU
-    and handles class imbalance without requiring sample weighting.
-    Aligns with SCC/HiCRep metrics which reward structure overlap.
-    """
-
     def __init__(self, smooth: float = 1e-6):
         super().__init__()
         self.smooth = smooth
 
     def forward(self, pred: Tensor, target: Tensor) -> Tensor:
-        # Ensure pred is in [0, 1]
         if pred.min() < 0:
             pred = torch.sigmoid(pred)
         pred = pred.clamp(min=1e-6, max=1.0 - 1e-6)
 
-        # Ensure target is in [0, 1]
         target = target.clamp(0.0, 1.0)
 
-        # Compute Dice coefficient
         intersection = (pred * target).sum()
         union = pred.sum() + target.sum()
         dice_coeff = (2.0 * intersection + self.smooth) / (union + self.smooth)
 
-        # Loss = 1 - Dice (higher dice is better, lower loss is better)
         return 1.0 - dice_coeff
 
 
@@ -422,8 +411,11 @@ class CombinedLoss(nn.Module):
             elif weight_params["name"] == "l1_reg":
                 loss = loss + weight * torch.mean(torch.abs(pred))
             elif weight_params["name"] == "mse":
-                loss = loss + weight * \
-                    self.mse_loss(torch.log1p(pred), torch.log1p(y))
+                log_pred = torch.log1p(pred)
+                log_tgt = torch.log1p(y)
+                w = (y > 0).float() * 9 + 1
+                mse_loss = (w * (log_pred - log_tgt) ** 2).mean()
+                loss = loss + weight * mse_loss
             elif weight_params["name"] == "ssim":
                 loss = loss + weight * (1.0 - self.ssim(pred, y))
             elif weight_params["name"] == "vgg":
