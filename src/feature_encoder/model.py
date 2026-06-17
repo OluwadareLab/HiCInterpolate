@@ -42,19 +42,9 @@ class FeatureEncoder(nn.Module):
         self.blocks = nn.ModuleList(blocks)
 
     def forward(self, x: Tensor) -> tuple[List[Tensor], Tensor]:
-        """Encode input and return skip connections plus the bottleneck latent.
-
-        Returns:
-            skips:     List of pre-pool feature maps at each encoder level.
-                       skips[0] is finest [B, 256, H, W],
-                       skips[-1] is coarsest skip [B, 32, H/8, W/8].
-            bottleneck: Final post-pool latent [B, 32, H/16, W/16],
-                       capturing the most compressed global representation.
-        """
         skips = []
         latent = x
         for block in self.blocks:
             skip, latent = block(latent)
             skips.append(skip)
-        # latent here is the final MaxPool output — the true bottleneck
         return skips

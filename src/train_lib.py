@@ -314,8 +314,8 @@ class Trainer:
             gt_mask = (y > 1e-3).float()
 
             # _, y, _, _ = utils.image_segmentation_batch(y)
-            train_loss = self.loss_fn(torch.sigmoid(
-                pred), y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
+            train_loss = self.loss_fn(
+                pred, y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
 
             train_loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(

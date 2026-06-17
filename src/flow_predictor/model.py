@@ -23,8 +23,6 @@ class FlowEstimationBlock(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(feature_channels, 2, kernel_size=3,
                       padding=1, bias=False),
-            nn.BatchNorm2d(2),
-            nn.ReLU(inplace=True)
         )
         in_channels = feature_channels*2
         out_channels = feature_channels
@@ -86,14 +84,11 @@ class FlowPredictor(nn.Module):
     def __init__(self, feature_channels: List[int] = None, max_disp: int = 4):
         super().__init__()
         self.feature_channels = feature_channels or [16, 32, 64, 128]
-        # Scale max_disp adaptively: at coarser levels (coarse indices), use smaller
-        # displacements; at finer levels (fine indices), use larger to cover larger
-        # absolute distances. Level 0 is finest, level -1 is coarsest.
         num_levels = len(self.feature_channels)
         self.flow_heads = nn.ModuleList([
             FlowEstimationBlock(
                 channels,
-                max_disp=max(2, max_disp * (2 ** (num_levels - 1 - idx)))
+                max_disp=max(2, min(max_disp, max_disp - idx + 1))
             )
             for idx, channels in enumerate(self.feature_channels)
         ])
