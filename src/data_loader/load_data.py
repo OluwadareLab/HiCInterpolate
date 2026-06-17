@@ -34,7 +34,7 @@ class TripletDataset(Dataset):
             return None
         # img = self.normalize_counts(img)
         img = np.log1p(img)
-        img = (img - img.mean()) / (img.std() + _EPSILON)
+        # img = (img - img.mean()) / (img.std() + _EPSILON)
         return torch.from_numpy(img).float().unsqueeze(0)
 
     def log1p(self, matrix):

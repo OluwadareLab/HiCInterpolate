@@ -38,7 +38,7 @@ file:
 
 data:
   patch: 128
-  batch_size: 6
+  batch_size: 20
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
@@ -87,7 +87,7 @@ loss:
 evaluation:
   # hicrep is a stricter biological reproducibility metric than scc;
   # it is insensitive to diagonal inflation and matches target > 0.95 goal.
-  monitor: hicrep
+  monitor: ssim
   metrics:
     psnr: true
     ssim: true

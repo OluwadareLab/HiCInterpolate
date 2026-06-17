@@ -310,12 +310,8 @@ class Trainer:
             self.optimizer.zero_grad()
 
             batch_size = y.size(0)
-            pred, pred_mask = self.model(x0, x1)
-            gt_mask = (y > 1e-3).float()
-
-            # _, y, _, _ = utils.image_segmentation_batch(y)
-            train_loss = self.loss_fn(
-                pred, y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
+            pred = self.model(x0, x1)
+            train_loss = self.loss_fn(pred, y, self.epochs_run)
 
             train_loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(
@@ -347,13 +343,8 @@ class Trainer:
                 x1 = x1.to(self.device)
 
                 batch_size = y.size(0)
-                pred, pred_mask = self.model(x0, x1)
-                gt_mask = (y > 1e-3).float()
-
-                # Compute the validation loss
-                # _, y, _, _ = utils.image_segmentation_batch(y)
-                val_loss = self.loss_fn(
-                    pred, y, self.epochs_run, pred_mask=pred_mask, gt_mask=gt_mask)
+                pred = self.model(x0, x1)
+                val_loss = self.loss_fn(pred, y, self.epochs_run)
 
                 local_val_loss += val_loss.detach() * batch_size
 

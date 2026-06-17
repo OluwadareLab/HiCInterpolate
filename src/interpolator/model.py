@@ -43,7 +43,7 @@ class FeatureProjection(nn.Module):
 
 
 class OutputProjection(nn.Module):
-    def __init__(self, in_channels: int = 7, hidden_channels: int = 32):
+    def __init__(self, in_channels: int = 4, hidden_channels: int = 32):
         super().__init__()
         self.stem = nn.Sequential(
             nn.Conv2d(in_channels, hidden_channels,
@@ -64,13 +64,12 @@ class OutputProjection(nn.Module):
             nn.Conv2d(hidden_channels, 1, kernel_size=1),
         )
 
-    def forward(self, x: Tensor, x_fine: Tensor, x0: Tensor, x2: Tensor,
+    def forward(self, x: Tensor, x0: Tensor, x2: Tensor,
                 enforce_symmetry: bool = True) -> tuple[Tensor, Tensor]:
         support_prior = torch.maximum(x0, x2).clamp(0.0, 1.0)
         diag_dist = diagonal_distance_channel(x0)
         features = torch.cat([
             x,
-            x_fine,
             x0,
             x2,
             (x2 - x0).abs(),
@@ -81,10 +80,11 @@ class OutputProjection(nn.Module):
         learned_support = torch.sigmoid(self.support_head(hidden))
         local_support = F.max_pool2d(
             support_prior, kernel_size=3, stride=1, padding=1)
-        pred_mask = torch.maximum(support_prior, learned_support * local_support)
+        pred_mask = torch.maximum(
+            support_prior, learned_support * local_support)
         intensity = torch.sigmoid(self.intensity_head(hidden))
         residual = torch.tanh(self.residual_head(hidden))
-        pred = pred_mask * (0.5 * x_fine + 0.5 * intensity + 0.25 * residual)
+        pred = pred_mask * (0.5 * intensity + 0.25 * residual)
         pred = pred.clamp(0.0, 1.0)
 
         if enforce_symmetry:
@@ -94,40 +94,86 @@ class OutputProjection(nn.Module):
         return pred, pred_mask
 
 
+class MultiScaleBlockAttention(nn.Module):
+    def __init__(self, channels, block_size=16):
+        super().__init__()
+        self.block_size = block_size
+        self.coarse_attn = nn.Conv2d(channels, 1, kernel_size=block_size,
+                                     stride=block_size, padding=0)
+        self.fine_attn = nn.Conv2d(channels, 1, 1)
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+
+        # Coarse block-level attention (TAD scale)
+        coarse = torch.sigmoid(self.coarse_attn(x))
+        coarse_up = F.interpolate(coarse, size=(H, W), mode='nearest')
+
+        # Fine pixel-level attention
+        fine = torch.sigmoid(self.fine_attn(x))
+
+        # Combine: coarse gates which TAD blocks are active
+        combined = coarse_up * fine
+        return x * combined
+
+
+class SparseAttentionMask(nn.Module):
+    def __init__(self, channels, threshold=1e-4):
+        super().__init__()
+        self.attn = nn.Conv2d(channels, 1, 1)
+        self.threshold = threshold
+
+    def forward(self, x, x0, x2):
+        # Nonzero mask from input boundary frames
+        nz_mask = ((x0 > self.threshold) | (x2 > self.threshold)).float()
+
+        # Soft learned attention
+        soft_attn = torch.sigmoid(self.attn(x))
+
+        # Hard-gate: zero out attention in regions both inputs agree are empty
+        masked_attn = soft_attn * nz_mask
+
+        return x * masked_attn
+
+
 class Interpolator(nn.Module):
     def __init__(self):
         super().__init__()
         self.input_features = 1
-        self.features_channels = 16
-        self.encoder_channels = [16, 32, 64, 128]
-        self.flow_channels = [16, 32, 64, 128]
-
-
+        self.base_channels = 32
+        self.depth = 4
         self.feature_encoder = FeatureEncoder(
-            in_channels=1, out_channels=self.encoder_channels)
+            input_channels=self.input_features, base_channels=self.base_channels, depth=self.depth)
         self.flow_predictor = FlowPredictor(
-            feature_channels=self.flow_channels, max_disp=4)
+            base_channels=self.base_channels, depth=self.depth+1, max_disp=4)
         self.feature_decoder = FeatureDecoder(
-            feature_channels=self.flow_channels)
-        self.feature_projection = FeatureProjection(in_channels=16)
+            base_channels=self.base_channels, depth=self.depth)
+        self.residual_head = nn.Conv2d(self.base_channels, 1,
+                                       kernel_size=1, padding=0, bias=False)
+        self.output_projection = OutputProjection(
+            in_channels=6, hidden_channels=32)
+        self.multiscale_attention = MultiScaleBlockAttention(
+            channels=self.base_channels)
+        self.sparse_attention = SparseAttentionMask(
+            channels=self.base_channels)
 
-        self.fine_interpolate = FlowEstimationBlock(
-            feature_channels=1, max_disp=4)
-        self.output_projection = OutputProjection(in_channels=7)
-
-    def forward(self, x0: Tensor, x2: Tensor, enforce_input_range: bool = True, enforce_symmetry: bool = True):
-
-
+    def forward(self, x0: Tensor, x2: Tensor):
         enc0 = self.feature_encoder(x0)
         enc2 = self.feature_encoder(x2)
 
         interpolations = self.flow_predictor(enc0, enc2)
         decoded = self.feature_decoder(interpolations)
-        projection = self.feature_projection(decoded)
 
-        fine_interpolate, _ = self.fine_interpolate(x0, x2)
-        pred, mask = self.output_projection(
-            projection, fine_interpolate, x0, x2,
-            enforce_symmetry=enforce_symmetry)
+        multiscale_attended = self.multiscale_attention(decoded)
+        sparse_attended = self.sparse_attention(multiscale_attended, x0, x2)
+        projection = self.residual_head(sparse_attended)
 
-        return pred, mask
+        # squares0, dots0, h_edges0, v_edges0 = utils.image_segmentation_batch(
+        #     x0)
+        # squares2, dots2, h_edges2, v_edges2 = utils.image_segmentation_batch(
+        #     x2)
+
+        # pred, mask = self.output_projection(
+        #     projection, dots0, dots2)
+
+        return projection

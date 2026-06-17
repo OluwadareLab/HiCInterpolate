@@ -21,9 +21,7 @@ def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, 
         for j in range(4):
             ax = axes[i, j]
             matrix = data_groups[j][i].squeeze().cpu()
-            min_ = torch.min(matrix)
-            max_ = torch.max(matrix)
-            im = ax.imshow(matrix, cmap=CMAP_, vmin=min_, vmax=max_)
+            im = ax.imshow(matrix, cmap=CMAP_)
             ax.set_title(titles[j])
             ax.axis("off")
             fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)

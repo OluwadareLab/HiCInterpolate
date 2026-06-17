@@ -23,9 +23,12 @@ class FlowEstimationBlock(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(feature_channels, 2, kernel_size=3,
                       padding=1, bias=False),
+            nn.BatchNorm2d(2),
+            nn.ReLU(inplace=True)
         )
-        in_channels = feature_channels*2
-        out_channels = feature_channels
+
+        in_channels = feature_channels
+        out_channels = feature_channels//2
         self.blend_mask = nn.Sequential(
             nn.Conv2d(in_channels, out_channels,
                       kernel_size=3, padding=1, bias=False),
@@ -41,8 +44,6 @@ class FlowEstimationBlock(nn.Module):
         b, c, h, w = x0.shape
         x0 = F.normalize(x0, dim=1)
         x2 = F.normalize(x2, dim=1)
-        # Use zero-padding instead of reflect to avoid artificial boundary contacts
-        # for genomic Hi-C data where boundaries have specific sparsity structure
         padded = F.pad(x2, [self.max_disp] * 4, mode="constant", value=0.0)
         patches = F.unfold(padded, kernel_size=self.search_range)
         patches = patches.view(b, c, self.search_range ** 2, h * w)
@@ -65,7 +66,8 @@ class FlowEstimationBlock(nn.Module):
         return base + torch.stack([flow_x, flow_y], dim=-1)
 
     def forward(self, x0: Tensor, x2: Tensor, coarse_flow: Tensor = None) -> tuple[Tensor, Tensor]:
-        flow = self.flow_estimator(self._cost_volume(x0, x2))
+        cost = self._cost_volume(x0, x2)
+        flow = self.flow_estimator(cost)
         if coarse_flow is not None:
             flow = flow + coarse_flow
         grid0 = self._flow_to_grid(0.5 * flow)
@@ -81,10 +83,10 @@ class FlowEstimationBlock(nn.Module):
 
 
 class FlowPredictor(nn.Module):
-    def __init__(self, feature_channels: List[int] = None, max_disp: int = 4):
+    def __init__(self, base_channels: int = 32, depth: int = 4, max_disp: int = 4):
         super().__init__()
-        self.feature_channels = feature_channels or [16, 32, 64, 128]
-        num_levels = len(self.feature_channels)
+        self.feature_channels = [base_channels *
+                                 (2 ** (idx + 1)) for idx in range(depth)]
         self.flow_heads = nn.ModuleList([
             FlowEstimationBlock(
                 channels,
@@ -110,8 +112,7 @@ class FlowPredictor(nn.Module):
             x0, x2 = x0s[idx], x2s[idx]
             interpolated, flow = self.flow_heads[idx](
                 x0, x2, coarse_flow)
-            if idx > 0:
-                coarse_flow = self._upsample_flow(flow, x0s[idx-1].shape[-2:])
+            coarse_flow = self._upsample_flow(flow, x0s[idx-1].shape[-2:])
             interpolations[idx] = interpolated
 
         return interpolations

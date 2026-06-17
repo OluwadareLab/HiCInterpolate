@@ -30,8 +30,6 @@
     - U-Net Encoder: src/feature_encoder/model.py
     - Flow Predictor: src/flow_predictor/model.py
     - U-Net Decoder: src/feature_decoder/model.py
-    - Feature Projection: src/interpolator/model.py; classes: FeatureProjection
-    - Output Projection: src/interpolator/model.py; classes: OutputProjection with logits and mask
     - Learning rate: 2e-4 to 1e-5
     - Optimizer: src/train_lib.py AdamW LINE: 61-69
     - Scheduler: src/train_lib.py LambdaLR/CosineAnnealingLR with warmup LINE:70-91
@@ -50,14 +48,18 @@
     - do not update codebase
 
 Issues
-    - Model training is so slow, e.g. for 11652 sample, it takes 10 minutes 
+    - model performance inprovement is so slow.
     - Model performance is very very poor, e.g. ssim only 0.26 at the end
+    - output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset/config_dilated_25k_128/epoch_26_output.png
+    - log: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset/config_dilated_25k_128/hicinterpolate_128_p128_b20.log (Read Line 328-364)
 
 Task
     - Read architecture.
     - Do not focus on unused codeblocks or which are not used
-    - find root causes for training time delay
+    - why ssim, scc score is not improving? How to achieve > 0.9
+    - why HiCRep is nan?
+    - there are some improvements, but very little
     - find root causes for not improving scores
-    - As my data is sparse and i want to maintain them reather than washout or oversmoothing, suggest me architectural change only. no code update. give a plan.
+    - As my data is sparse and i want to maintain them reather than washout or oversmoothing, suggest me architectural change only. no code update. give causes of this bleeding and a plan.
 
 

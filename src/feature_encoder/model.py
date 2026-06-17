@@ -3,48 +3,56 @@ import torch.nn as nn
 from torch import Tensor
 
 
-class EncoderBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, kernel_size: int, downsample: bool):
+class ConvBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
         super().__init__()
-        padding = kernel_size // 2
         self.encoder = nn.Sequential(
             nn.Conv2d(in_channels, out_channels,
-                      kernel_size=kernel_size, padding=padding, bias=False),
+                      kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels,
-                      kernel_size=kernel_size, padding=padding, bias=False),
+                      kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
-        self.downsample = nn.MaxPool2d(kernel_size=2, stride=2)
 
-    def forward(self, x: Tensor) -> tuple[Tensor, Tensor]:
-        skip = self.encoder(x)
-        latent = self.downsample(skip)
-        return skip, latent
+    def forward(self, x: Tensor) -> Tensor:
+        return self.encoder(x)
+
+
+class EncoderBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.downsample = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.enc = ConvBlock(in_channels, out_channels)
+
+    def forward(self, x: Tensor) -> Tensor:
+        down = self.downsample(x)
+        return self.enc(down)
 
 
 class FeatureEncoder(nn.Module):
-    def __init__(self, in_channels: int = 1, out_channels: List[int] = None):
+    def __init__(self, input_channels: int = 1, base_channels: int = 32, depth: int = 4):
         super().__init__()
-        self.out_channels = out_channels or [16, 32, 64, 128]
-        kernels = [3, 3, 3, 3]
-
-        blocks = []
-        prev_channels = in_channels
-        for idx, (channels, kernel) in enumerate(zip(self.out_channels, kernels)):
-            blocks.append(EncoderBlock(
-                prev_channels, channels, kernel_size=kernel,
-                downsample=idx < len(self.out_channels) - 1,
+        kernel = 3
+        self.input_enc = ConvBlock(
+            input_channels, base_channels)
+        enc_blocks = []
+        prev_channels = base_channels
+        for idx in range(depth):
+            enc_blocks.append(EncoderBlock(
+                prev_channels, base_channels * (2 ** (idx + 1))
             ))
-            prev_channels = channels
-        self.blocks = nn.ModuleList(blocks)
+            prev_channels = base_channels * (2 ** (idx + 1))
 
-    def forward(self, x: Tensor) -> tuple[List[Tensor], Tensor]:
-        skips = []
-        latent = x
-        for block in self.blocks:
-            skip, latent = block(latent)
-            skips.append(skip)
-        return skips
+        self.enc_blocks = nn.ModuleList(enc_blocks)
+        self.bottleneck = EncoderBlock(
+            prev_channels, prev_channels * 2)
+
+    def forward(self, x: Tensor) -> tuple[Tensor, List[Tensor]]:
+        enc_ftrs = [None] * (len(self.enc_blocks) + 1)
+        enc_ftrs[0] = self.input_enc(x)
+        for idx, block in enumerate(self.enc_blocks):
+            enc_ftrs[idx+1] = block(enc_ftrs[idx])
+        return enc_ftrs
