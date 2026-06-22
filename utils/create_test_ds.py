@@ -5,13 +5,13 @@ ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets"
 DATASET_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset"
 OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset/test"
 
-RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [64, 128]
+RESOLUTIONS = [25000]
+PATCHES = [128]
 CHROMOSOMES = {
-    "human": ["11", "12", "13", "14", "15", "16",
-              "17", "18", "19", "20", "21", "22", "X", "Y"],
-    "mouse": ["11", "12", "13", "14", "15", "16",
-              "17", "18", "19", "X", "Y"]
+    "human": ["11", "21"],
+    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+              "11", "12", "13", "14", "15", "16",
+              "17", "18", "19"],
 }
 
 DATASET = {
@@ -20,9 +20,36 @@ DATASET = {
             "control": {
                 "triplets":
                 [
+                    ["4DNFIP9EJSOM_dmso_control_0m",
+                     "4DNFI7T93SHL_dmso_control_30m",
+                     "4DNFICF2Z2TG_dmso_control_60m"],
+
                     ["4DNFI7T93SHL_dmso_control_30m",
                      "4DNFICF2Z2TG_dmso_control_60m",
-                     "4DNFILL624WG_dmso_control_90m"]
+                     "4DNFILL624WG_dmso_control_90m"],
+
+                    ["4DNFICF2Z2TG_dmso_control_60m",
+                     "4DNFILL624WG_dmso_control_90m",
+                     "4DNFIC4GB8UM_dmso_control_120m"]
+                ]
+            }
+        },
+
+        "dtag": {
+            "v1": {
+                "triplets":
+                [
+                    ["4DNFI5EAPQTI_dtag_v1_0m",
+                     "4DNFIY1TCVLX_dtag_v1_30m",
+                     "4DNFIXWT5U42_dtag_v1_60m"],
+
+                    ["4DNFIY1TCVLX_dtag_v1_30m",
+                     "4DNFIXWT5U42_dtag_v1_60m",
+                     "4DNFIHTFIMGG_dtag_v1_90m"],
+
+                    ["4DNFIXWT5U42_dtag_v1_60m",
+                     "4DNFIHTFIMGG_dtag_v1_90m",
+                     "4DNFIPZCCTV6_dtag_v1_120m"]
                 ]
             }
         },
@@ -93,7 +120,7 @@ def prepare_triplates():
                             for chromosome in CHROMOSOMES[organism]:
                                 record = f"{str(resolution)}/{str(patch)}/{organism}/{sample}/{subsample}/{str(uuid)}/{chromosome}"
 
-                                output_file = f"{OUTPUT_ROOT_PATH}/test_{resolution}_{patch}_{organism}_{uuid}_{chromosome}.txt"
+                                output_file = f"{OUTPUT_ROOT_PATH}/test_{resolution}_{patch}_{organism}_{triplet[1]}_{chromosome}.txt"
                                 os.makedirs(os.path.dirname(
                                     output_file), exist_ok=True)
 

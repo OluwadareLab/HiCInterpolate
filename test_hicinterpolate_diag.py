@@ -10,7 +10,6 @@ from src.metric.metrics import (
 from src.inference import InfConfig, InfCustomDataset
 from src import InferenceLib
 from src.feature_encoder import FeatureEncoder
-from src.flow_predictor import BackwardFlow, ForwardFlow
 from flow_based_interpolation import of_interpolation
 from tqdm import tqdm
 from torch.utils.data.distributed import DistributedSampler
@@ -26,7 +25,6 @@ import pandas as pd
 import numpy as np
 import argparse
 import csv
-import glob
 import logging
 import os
 import random
@@ -47,8 +45,9 @@ MODEL_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/outpu
 DICT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset/test"
 IMAGE_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset"
 OUTPUT_DIR = "/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/test/log_test"
-OUTPUT_FILE = os.path.join(OUTPUT_DIR, "comparison_hicinterpolate_diag.csv")
-SUMMARY_FILE = os.path.join(OUTPUT_DIR, "comparison_summary_diag.csv")
+OUTPUT_FILE = os.path.join(
+    OUTPUT_DIR, "log_comparison_hicinterpolate_diag.csv")
+SUMMARY_FILE = os.path.join(OUTPUT_DIR, "log_comparison_summary_diag.csv")
 OUTPUT_HEATMAP_DIR = os.path.join(OUTPUT_DIR, "pred_heatmaps")
 MANIFEST_FILE = os.path.join(OUTPUT_HEATMAP_DIR, "manifest.csv")
 CONFIG_PATH = f"{ROOT_DIR}/HiCInterpolate/src/inference/config.yml"
@@ -65,149 +64,56 @@ RESULT_ID_COLS = [
 ]
 METHODS = ("hicinterpolate", "linear", "optical_flow")
 METRICS = ("psnr", "ssim", "genome_disco", "hicrep", "lpips")
+VARIANCE_METRICS = ("variance_ratio",)
+ERROR_METRICS = ("absolute_error",)
 METRIC_PRECISION = 4
 NUM_VIZ_SAMPLES = 2
 
 RESOLUTIONS = [25000]
-BATCHES = [30]
+BATCHES = [20]
 PATCHES = [128]
 
 CHROMOSOMES = {
-    "human": [
-        "11", "12", "13", "14", "15", "16",
+    "human": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+              "11", "12", "13", "14", "15", "16",
               "17", "18", "19", "20", "21", "22"],
-    "mouse": [
-        "11", "12", "13", "14", "15", "16",
+    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+              "11", "12", "13", "14", "15", "16",
               "17", "18", "19"],
 }
 
 TEST_DATASET = {
     "human": {
-        "dmso": {"control": {"triplets": [[
-            "4DNFI7T93SHL_dmso_control_30m",
-            "4DNFICF2Z2TG_dmso_control_60m",
-            "4DNFILL624WG_dmso_control_90m",
-        ]]}},
-        "dtag": {"v1": {"triplets": [[
-            "4DNFIY1TCVLX_dtag_v1_30m",
-            "4DNFIXWT5U42_dtag_v1_60m",
-            "4DNFIHTFIMGG_dtag_v1_90m",
-        ]]}},
         "hct116": {
-            "1": {"triplets": [[
-                "4DNFIDBFENL7_hct116_1_20m",
-                "4DNFI9ZUXG61_hct116_1_40m",
-                "4DNFIAUMRM2S_hct116_1_60m",
-            ]]},
-            "2": {"triplets": [[
-                "4DNFIAAH19VM_hct116_2_20m",
-                "4DNFI7QUSU5J_hct116_2_40m",
-                "4DNFIXEB4UZO_hct116_2_60m",
-            ]]},
+            "2": {
+                "triplets":
+                [
+                    ["4DNFIAAH19VM_hct116_2_20m",
+                     "4DNFI7QUSU5J_hct116_2_40m",
+                     "4DNFIXEB4UZO_hct116_2_60m"]
+                ]
+            },
         },
         "hela_s3": {
-            "r2": {"triplets": [[
-                "4DNFIX6ZXCA8_hela_s3_r2_30m",
-                "4DNFIEVR81FS_hela_s3_r2_60m",
-                "4DNFIAUI6BBI_hela_s3_r2_90m",
-            ]]},
-            "r3": {"triplets": [[
-                "4DNFICFZGFAV_hela_s3_r3_30m",
-                "4DNFIQXCZVVA_hela_s3_r3_60m",
-                "4DNFIB6PJFJ3_hela_s3_r3_90m",
-            ]]},
-        },
+            "r2": {
+                "triplets":
+                [
+                    ["4DNFIPZBEXCP_hela_s3_r2_150m",
+                     "4DNFIWPKRZGU_hela_s3_r2_180m",
+                     "4DNFIMD9QNDX_hela_s3_r2_210m"]
+                ]
+            }
+        }
     }
 }
 
 CMAP_JUICEBOX = mcolors.LinearSegmentedColormap.from_list(
-    "juicebox", ["#fee8c8", "#fdbb84", "#e34a33", "#b30000"], N=256
+    "juicebox", ["#FFFFFF", "#FFAAAA", "#FF5555", "#FF0000", "#B30000"], N=256
 )
 MANIFEST_FIELDS = RESULT_ID_COLS + ["patch_index", "output_path"]
 _MODEL_CACHE: Dict[str, tuple] = {}
 _BASE_CFG = None
 _LOG = None
-
-
-class LegacyDecoderBlock(nn.Module):
-    def __init__(self, in_channels=16, skip_channels=32, out_channels=32):
-        super().__init__()
-        self.upsample = nn.ConvTranspose2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=2,
-            stride=2,
-            padding=0,
-        )
-        self.comb = nn.Sequential(
-            nn.Conv2d(out_channels + skip_channels, out_channels, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(),
-        )
-
-    def forward(self, deep_ftr, skip_connection):
-        x = self.upsample(deep_ftr)
-        x = torch.cat([x, skip_connection], dim=1)
-        return self.comb(x)
-
-
-class LegacyFeatureDecoder(nn.Module):
-    def __init__(self, cfg, feature_channels=None, out_channels=1):
-        super().__init__()
-        self.cfg = cfg
-        self.feature_channels = list(feature_channels or [32, 64, 128, 256, 512])
-        self.level1 = LegacyDecoderBlock(self.feature_channels[1], self.feature_channels[0], self.feature_channels[0])
-        self.level2 = LegacyDecoderBlock(self.feature_channels[2], self.feature_channels[1], self.feature_channels[1])
-        self.level3 = LegacyDecoderBlock(self.feature_channels[3], self.feature_channels[2], self.feature_channels[2])
-        self.level4 = LegacyDecoderBlock(self.feature_channels[4], self.feature_channels[3], self.feature_channels[3])
-
-    def forward(self, ftr_stk: List[torch.Tensor]) -> torch.Tensor:
-        out = self.level4(ftr_stk[4], ftr_stk[3])
-        out = self.level3(out, ftr_stk[2])
-        out = self.level2(out, ftr_stk[1])
-        return self.level1(out, ftr_stk[0])
-
-
-class LegacyInterpolator(nn.Module):
-    def __init__(self, cfg):
-        super().__init__()
-        self.cfg = cfg
-        self.in_channels = 1
-        self.feature_channels = [32, 64, 128, 256, 512]
-        self.out_channels = 1
-        self.feature_encoder = FeatureEncoder(cfg, in_channels=self.in_channels, out_channels=self.feature_channels)
-        self.forward_flow = ForwardFlow(cfg, feature_channels=self.feature_channels)
-        self.backward_flow = BackwardFlow(cfg, feature_channels=self.feature_channels)
-        self.feature_decoder = LegacyFeatureDecoder(cfg, feature_channels=self.feature_channels)
-        self.in_proj = nn.Sequential(
-            nn.Conv2d(self.in_channels, self.feature_channels[0], kernel_size=7, stride=1, padding=6, dilation=2),
-            nn.BatchNorm2d(self.feature_channels[0]),
-            nn.Conv2d(self.feature_channels[0], self.feature_channels[0], kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(self.feature_channels[0]),
-        )
-        self.out_proj = nn.Sequential(
-            nn.Conv2d(self.feature_channels[0], self.feature_channels[0] // 2, kernel_size=7, stride=1, padding=6, dilation=2),
-            nn.BatchNorm2d(self.feature_channels[0] // 2),
-            nn.Conv2d(self.feature_channels[0] // 2, self.out_channels, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(self.out_channels),
-            nn.ReLU(),
-        )
-
-    @staticmethod
-    def concatenate_flow_ftr(ftr_0: List[torch.Tensor], ftr_2: List[torch.Tensor]) -> List[torch.Tensor]:
-        return [0.5 * (feature1 + feature2) for feature1, feature2 in zip(ftr_0, ftr_2)]
-
-    def forward(self, x0: torch.Tensor, x2: torch.Tensor, time: torch.Tensor) -> torch.Tensor:
-        x0 = self.in_proj(x0)
-        x2 = self.in_proj(x2)
-        ftrs0 = self.feature_encoder(x0)
-        ftrs2 = self.feature_encoder(x2)
-        forward_mid_ftrs = self.forward_flow(ftrs0, ftrs2, time[:, 0])
-        backward_mid_ftrs = self.backward_flow(ftrs2, ftrs0, time[:, 0])
-        mid_ftrs = self.concatenate_flow_ftr(forward_mid_ftrs, backward_mid_ftrs)
-        residual = self.feature_decoder(mid_ftrs)
-        return self.out_proj(residual + mid_ftrs[0])
 
 
 def load_runner_model(cfg, log, model_path: str, dl: DataLoader, isDistributed: bool = False):
@@ -219,17 +125,7 @@ def load_runner_model(cfg, log, model_path: str, dl: DataLoader, isDistributed: 
     except RuntimeError as exc:
         if "size mismatch" not in str(exc):
             raise
-        print("[WARN] Current Interpolator shape mismatches checkpoint; retrying legacy decoder path.")
-        original_interpolator = InferenceLib.Interpolator
-        try:
-            InferenceLib.Interpolator = LegacyInterpolator
-            runner = InferenceLib.HiCInterpolate(
-                cfg=cfg, log=log, model=model_path, dl=dl, isDistributed=isDistributed
-            )
-            return runner._get_model()
-        finally:
-            InferenceLib.Interpolator = original_interpolator
-
+        print("[WARN] Current Interpolator shape mismatches checkpoint.")
 
 
 def base_logger(file):
@@ -301,7 +197,8 @@ def build_job_cfg(config_filename: str, dataset_filename: str, model_path: str, 
     OmegaConf.update(cfg, "dir.image", IMAGE_DIR)
     OmegaConf.update(cfg, "data.patch", PATCHES[0])
     OmegaConf.update(cfg, "data.batch_size", batch_size)
-    OmegaConf.update(cfg, "device", "cuda" if torch.cuda.is_available() else "cpu")
+    OmegaConf.update(
+        cfg, "device", "cuda" if torch.cuda.is_available() else "cpu")
     output_dir = f"{cfg.dir.output}/{config_filename}"
     model_state_dir = f"{cfg.dir.model_state}/{config_filename}"
     os.makedirs(output_dir, exist_ok=True)
@@ -314,7 +211,8 @@ def build_job_cfg(config_filename: str, dataset_filename: str, model_path: str, 
 def get_or_load_model(cfg, log, model_path: str, dl: DataLoader, isDistributed: bool = False):
     cache_key = f"{model_path}|{cfg.device}|{isDistributed}"
     if cache_key not in _MODEL_CACHE:
-        model, device = load_runner_model(cfg, log, model_path, dl, isDistributed=isDistributed)
+        model, device = load_runner_model(
+            cfg, log, model_path, dl, isDistributed=isDistributed)
         model.eval()
         _MODEL_CACHE[cache_key] = (model, device)
     return _MODEL_CACHE[cache_key]
@@ -355,6 +253,21 @@ def log_norm_range(*matrices: np.ndarray) -> LogNorm:
     return LogNorm(vmin=max(vmin, 1e-8), vmax=max(vmax, vmin + 1e-8))
 
 
+def linear_norm_range(*matrices: np.ndarray) -> mcolors.Normalize:
+    finite_parts = [m[np.isfinite(m)] for m in matrices if m.size > 0]
+    if not finite_parts:
+        return mcolors.Normalize(vmin=0.0, vmax=1.0)
+    combined = np.concatenate(finite_parts)
+    if combined.size == 0:
+        return mcolors.Normalize(vmin=0.0, vmax=1.0)
+    vmax = np.nanpercentile(combined, 99)
+    if vmax <= 0 or not np.isfinite(vmax):
+        vmax = np.nanmax(combined)
+    if vmax <= 0 or not np.isfinite(vmax):
+        vmax = 1.0
+    return mcolors.Normalize(vmin=0.0, vmax=vmax)
+
+
 def heatmap_path(job_meta: dict, patch_index: int) -> str:
     res_dir = f"res_{job_meta['resolution']}_patch_{job_meta['patch_size']}"
     chr_dir = f"chr{job_meta['chromosome']}"
@@ -372,17 +285,38 @@ def heatmap_path(job_meta: dict, patch_index: int) -> str:
 
 
 def save_methods_heatmaps(y, pred_hic, pred_linear, pred_of, out_path: str) -> None:
-    mats = [prepare_matrix(m) for m in (y, pred_hic, pred_linear, pred_of)]
+    raw = [np.asarray(m, dtype=np.float64).squeeze()
+           for m in (y, pred_hic, pred_linear, pred_of)]
+    mats = [prepare_matrix(m) for m in raw]
     norm = log_norm_range(*mats)
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4), dpi=300)
+    errors = [np.abs(mat - raw[0]) for mat in raw[1:]]
+    error_norm = linear_norm_range(*errors)
+    fig, axes = plt.subplots(2, 4, figsize=(16, 8), dpi=300)
     panels = zip(
-        axes,
+        axes[0],
         mats,
         ("Ground truth", "HiCInterpolate", "Linear", "Optical flow"),
     )
     for ax, matrix, title in panels:
         im = ax.imshow(matrix, cmap=CMAP_JUICEBOX,
                        norm=norm, interpolation="nearest")
+        ax.set_title(title)
+        ax.axis("off")
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="3%", pad=0.05)
+        cbar = fig.colorbar(im, cax=cax)
+        cbar.ax.tick_params(labelsize=6, length=2)
+
+    axes[1, 0].axis("off")
+    error_panels = zip(
+        axes[1, 1:],
+        errors,
+        ("HiCInterpolate abs error", "Linear abs error",
+         "Optical flow abs error"),
+    )
+    for ax, matrix, title in error_panels:
+        im = ax.imshow(matrix, cmap="magma", norm=error_norm,
+                       interpolation="nearest")
         ax.set_title(title)
         ax.axis("off")
         divider = make_axes_locatable(ax)
@@ -412,7 +346,7 @@ def update_summary() -> None:
         return
     df = pd.read_csv(OUTPUT_FILE)
     metric_cols = [col for col in df.columns if any(
-        col.endswith(f"_{m}") for m in METRICS)]
+        col.endswith(f"_{m}") for m in METRICS + VARIANCE_METRICS + ERROR_METRICS)]
     if not metric_cols:
         return
     summary = df.groupby(["resolution", "patch_size", "batch_size",
@@ -430,6 +364,21 @@ def scalar(value) -> float:
     return float(value)
 
 
+def absolute_error(pred: torch.Tensor, target: torch.Tensor) -> float:
+    return scalar(
+        torch.mean(torch.abs(pred.detach().float() - target.detach().float()))
+    )
+
+
+def variance_ratio(pred: torch.Tensor, target: torch.Tensor) -> float:
+    pred_var = scalar(torch.var(pred.detach().float(), unbiased=False))
+    target_var = scalar(torch.var(target.detach().float(), unbiased=False))
+    if target_var <= 0:
+        return np.nan
+ 
+    return pred_var / target_var
+
+
 def eval_all_metrics(pred: torch.Tensor, target: torch.Tensor) -> Dict[str, float]:
     return {
         "psnr": scalar(get_psnr_gpu(pred, target)),
@@ -443,7 +392,7 @@ def eval_all_metrics(pred: torch.Tensor, target: torch.Tensor) -> Dict[str, floa
 @torch.no_grad()
 def process_chromosome(cfg, model, device, ds, batch_size: int, job_meta: dict, save_plots: bool) -> dict:
     dl = get_dataloader(ds=ds, batch_size=batch_size, isDistributed=False)
-    metrics = {method: {metric: [] for metric in METRICS}
+    metrics = {method: {metric: [] for metric in METRICS + VARIANCE_METRICS + ERROR_METRICS}
                for method in METHODS}
     plot_indices = set(middle_indices(
         len(ds), NUM_VIZ_SAMPLES)) if save_plots else set()
@@ -468,6 +417,15 @@ def process_chromosome(cfg, model, device, ds, batch_size: int, job_meta: dict, 
             pred_linear = linear_interpolation(x0, x1, t=t_val)
             pred_of = of_interpolation(x0, x1)
 
+            x_mean = pred_hic.mean(dim=(2, 3), keepdim=True)
+            x_std = pred_hic.std(dim=(2, 3), keepdim=True)
+            y_std = pred_linear.std(dim=(2, 3), keepdim=True)
+            y_mean = pred_linear.mean(dim=(2, 3), keepdim=True)
+
+            pred_hic = (((pred_hic - x_mean) / x_std) * y_std) + y_mean
+
+            # pred_hic = torch.matmul(pred_hic, pred_linear)
+
             preds = {
                 "hicinterpolate": pred_hic,
                 "linear": pred_linear,
@@ -475,6 +433,8 @@ def process_chromosome(cfg, model, device, ds, batch_size: int, job_meta: dict, 
             }
             for method, pred in preds.items():
                 batch_metrics = eval_all_metrics(pred, y)
+                batch_metrics["variance_ratio"] = variance_ratio(pred, y)
+                batch_metrics["absolute_error"] = absolute_error(pred, y)
                 for metric_name, metric_value in batch_metrics.items():
                     if np.isfinite(metric_value):
                         metrics[method][metric_name].append(metric_value)
@@ -508,7 +468,7 @@ def process_chromosome(cfg, model, device, ds, batch_size: int, job_meta: dict, 
     row["num_patches"] = seen
     row["num_heatmaps"] = saved_plots
     for method in METHODS:
-        for metric_name in METRICS:
+        for metric_name in METRICS + VARIANCE_METRICS + ERROR_METRICS:
             values = metrics[method][metric_name]
             col = f"{method}_{metric_name}"
             row[col] = round(
@@ -530,7 +490,8 @@ def iter_known_jobs(organism_filter: Optional[str], chromosome_filter: Optional[
                     for sample, subsamples in samples.items():
                         for subsample, content in subsamples.items():
                             for triplet in content["triplets"]:
-                                frame_uuid = '_'.join(triplet)
+                                frame_uuid = triplet[1] if len(
+                                    triplet) > 1 else triplet[0]
                                 chromosomes = CHROMOSOMES[organism]
                                 if chromosome_filter:
                                     chromosomes = [
@@ -549,9 +510,9 @@ def iter_known_jobs(organism_filter: Optional[str], chromosome_filter: Optional[
                                     }
 
 
-
 def split_triplet_uuid(frame_uuid: str) -> List[str]:
-    starts = [0] + [match.start() + 1 for match in re.finditer(r"_4DNFI", frame_uuid)]
+    starts = [0] + \
+        [match.start() + 1 for match in re.finditer(r"_4DNFI", frame_uuid)]
     if len(starts) != 3:
         return [frame_uuid]
     starts.append(len(frame_uuid) + 1)
@@ -593,52 +554,11 @@ def record_path(job: dict) -> str:
 
 
 def iter_record_jobs(organism_filter: Optional[str], chromosome_filter: Optional[str]):
-    seen = set()
     for job in iter_known_jobs(organism_filter, chromosome_filter):
         path = record_path(job)
         if not os.path.exists(path):
             continue
-        key = (job["resolution"], job["patch_size"], job["organism"], job["frame"], job["chromosome"])
-        seen.add(key)
         yield {**job, "record_file": path}
-
-    pattern = os.path.join(DICT_DIR, "test_*_*.txt")
-    for path in sorted(glob.glob(pattern)):
-        name = os.path.basename(path)
-        match = re.match(r"^test_(\d+)_(\d+)_(human|mouse)_(.+)_([^_]+)\.txt$", name)
-        if not match:
-            continue
-        resolution = int(match.group(1))
-        patch = int(match.group(2))
-        organism = match.group(3)
-        frame_uuid = match.group(4)
-        chromosome = match.group(5)
-        if resolution not in RESOLUTIONS or patch not in PATCHES:
-            continue
-        if organism_filter and organism != organism_filter:
-            continue
-        if chromosome_filter and chromosome != chromosome_filter:
-            continue
-        res_tag = resolution_tag(resolution)
-        if res_tag is None:
-            continue
-        key = (resolution, patch, organism, frame_uuid, chromosome)
-        if key in seen:
-            continue
-        triplet = split_triplet_uuid(frame_uuid)
-        sample, subsample = infer_sample_meta(organism, triplet)
-        yield {
-            "resolution": resolution,
-            "patch_size": patch,
-            "batch_size": BATCHES[0],
-            "organism": organism,
-            "sample": sample,
-            "subsample": subsample,
-            "frame": frame_uuid,
-            "chromosome": chromosome,
-            "res_tag": res_tag,
-            "record_file": path,
-        }
 
 
 def run_inference(
@@ -658,8 +578,9 @@ def run_inference(
         _LOG = base_logger(os.path.join(
             OUTPUT_DIR, "test_hicinterpolate_diag.log"))
 
+    score_metrics = METRICS + VARIANCE_METRICS + ERROR_METRICS
     metric_fields = RESULT_ID_COLS + ["num_patches", "num_heatmaps"] + [
-        f"{method}_{metric}" for method in METHODS for metric in METRICS
+        f"{method}_{metric}" for metric in score_metrics for method in METHODS
     ]
     processed = 0
     skipped = 0
@@ -674,7 +595,7 @@ def run_inference(
         # )
         discovered += 1
         model_subdir = "config_dilated_25k_128"
-        model_name = "hicinterpolate_128_p128_b30.pt"
+        model_name = "hicinterpolate_128_p128_b20.pt"
         model_path = os.path.join(MODEL_DIR, model_subdir, model_name)
         print(f"Processing {ds_dict_filename}")
         if not os.path.exists(ds_dict_filename):
@@ -723,7 +644,8 @@ def run_inference(
                 torch.cuda.empty_cache()
 
     if discovered == 0:
-        print(f"[WARN] No matching records in {DICT_DIR} for organism={organism_filter} chromosome={chromosome_filter}")
+        print(
+            f"[WARN] No matching records in {DICT_DIR} for organism={organism_filter} chromosome={chromosome_filter}")
     print(
         f"Finished. processed={processed}, skipped={skipped}, "
         f"metrics={OUTPUT_FILE}, summary={SUMMARY_FILE}, manifest={MANIFEST_FILE}"

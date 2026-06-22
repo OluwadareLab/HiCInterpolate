@@ -1,4 +1,3 @@
-from torch import Tensor
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
@@ -7,14 +6,7 @@ import torch
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['figure.dpi'] = 300
 CMAP_ = mcolors.LinearSegmentedColormap.from_list(
-    "juicebox",
-    [
-        "#fee8c8",
-        "#fdbb84",
-        "#e34a33",
-        "#b30000"
-    ],
-    N=256
+    "juicebox", ["#FFFFFF", "#FFAAAA", "#FF5555", "#FF0000", "#B30000"], N=256
 )
 
 
@@ -29,9 +21,9 @@ def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, 
         for j in range(4):
             ax = axes[i, j]
             matrix = data_groups[j][i].squeeze().cpu()
-            min_ = torch.min(matrix)
-            max_ = torch.max(matrix)
-            im = ax.imshow(matrix, cmap=CMAP_, vmin=min_, vmax=max_)
+            _min = torch.min(matrix)
+            _max = torch.max(matrix)
+            im = ax.imshow(matrix, cmap=CMAP_, vmin=_min, vmax=_max)
             ax.set_title(titles[j])
             ax.axis("off")
             fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
@@ -52,10 +44,10 @@ def draw_inf_hic_map(y: np.ndarray, pred: np.ndarray, file):
         ax = axes[0, i]
         matrix = data_groups[i]
 
-        min_ = np.min(matrix)
-        max_ = np.max(matrix)
+        _min = np.min(matrix)
+        _max = np.max(matrix)
 
-        im = ax.imshow(matrix, cmap=CMAP_, vmin=min_, vmax=max_)
+        im = ax.imshow(matrix, cmap=CMAP_, vmin=_min, vmax=_max)
         ax.set_title(titles[i])
         ax.axis("off")
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
@@ -84,25 +76,13 @@ def draw_metric(cfg, state):
     plt.savefig(cfg.file.train_val_loss_plot, dpi=300, format='png')
     plt.close()
 
-    plt.style.use("ggplot")
     plt.figure()
-    plt.plot(state["val_ssim"], label="SSIM")
-    plt.plot(state["val_genome_disco"], label="GenomeDISCO")
-    plt.plot(state["val_hicrep"], label="HiCRep")
-    plt.title("loss trend")
+    plt.plot(state["val_psnr"])
+    plt.title("PSNR on validation set")
     plt.xlabel("epoch")
-    plt.ylabel("loss")
-    plt.legend(loc="upper left")
-    plt.savefig(cfg.file.val_metrics_plot, dpi=300, format='png')
+    plt.ylabel("PSNR")
+    plt.savefig(cfg.file.psnr_val_plot, dpi=300, format='png')
     plt.close()
-
-    # plt.figure()
-    # plt.plot(state["val_psnr"])
-    # plt.title("PSNR on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("PSNR")
-    # plt.savefig(cfg.file.psnr_val_plot, dpi=300, format='png')
-    # plt.close()
 
     plt.figure()
     plt.plot(state["val_ssim"])
@@ -128,10 +108,10 @@ def draw_metric(cfg, state):
     plt.savefig(cfg.file.hicrep_val_plot, dpi=300, format='png')
     plt.close()
 
-    # plt.figure()
-    # plt.plot(state["val_lpips"])
-    # plt.title("LPIPS on validation set")
-    # plt.xlabel("epoch")
-    # plt.ylabel("LPIPS")
-    # plt.savefig(cfg.file.lpips_val_plot, dpi=300, format='png')
-    # plt.close()
+    plt.figure()
+    plt.plot(state["val_lpips"])
+    plt.title("LPIPS on validation set")
+    plt.xlabel("epoch")
+    plt.ylabel("LPIPS")
+    plt.savefig(cfg.file.lpips_val_plot, dpi=300, format='png')
+    plt.close()

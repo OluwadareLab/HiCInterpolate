@@ -22,7 +22,7 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  batch_size: 64
+  batch_size: 20
 
 model:
   name: hicinterpolate_${data.patch}

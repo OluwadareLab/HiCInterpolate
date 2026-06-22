@@ -30,10 +30,10 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.2, 0.025, 0.025]
+  train_val_test_ratio: [0.9, 0.1, 0.0]
 
 training:
-  epochs: 100
+  epochs: 150
   restart_every: 100
   save_every: 10
   lr: 2e-4
