@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from torchmetrics.image import StructuralSimilarityIndexMeasure, MultiScaleStructuralSimilarityIndexMeasure
 from torchvision.models import vgg19, VGG19_Weights
-
+from src.metric import metrics
 
 def vgg19_features():
     if VGG19_Weights is None:
@@ -305,6 +305,8 @@ class FocalLoss(nn.Module):
         if self.reduction == "sum":
             return loss.sum()
         return loss
+    
+
 
 
 class CombinedLoss(nn.Module):
@@ -395,6 +397,7 @@ class CombinedLoss(nn.Module):
             return F.binary_cross_entropy(pred_mask.clamp(1e-8, 1.0 - 1e-8),
                                           gt_mask)
         return F.binary_cross_entropy_with_logits(pred_mask, gt_mask)
+    
 
     def forward(self, pred: Tensor, y: Tensor, epoch: int,
                 pred_mask: Tensor = None, gt_mask: Tensor = None):
@@ -455,6 +458,8 @@ class CombinedLoss(nn.Module):
                     raise ValueError(
                         "dice loss requires pred_mask and gt_mask arguments")
                 loss = loss + weight * self.dice_loss(pred_mask, gt_mask)
+            elif weight_params["name"] == "lpips":
+                loss = loss + weight * metrics.get_lpips_gpu(pred, y)
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 
