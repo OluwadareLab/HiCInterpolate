@@ -66,4 +66,9 @@ Thumbs.db
 
 .cursorignore
 .cursorindexingignore
+.codegraph
+.cursor
+*.md
+!readme.md
+!README.md
 
