@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=hicinterpolate_training
+#SBATCH --job-name=hicinterpolate_training_2
 #SBATCH --output=res_%j.txt
 #SBATCH --error=err_%j.txt
 #SBATCH --partition=compute
@@ -13,9 +13,9 @@ source /opt/miniconda3/etc/profile.d/conda.sh  # Adjust path to your conda insta
 conda activate hicinterpolate
 cd /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
 
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_5k_64
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_5k_128
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_10k_64
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_10k_128
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_25k_64
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_25k_128
+torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_5k_256
+torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_5k_512
+torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_10k_256
+torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_10k_512
+torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_25k_256
+torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --config config_25k_512
