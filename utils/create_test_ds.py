@@ -6,72 +6,46 @@ DATASET_DICT_PATH = f"{ROOT_PATH}/triplets_dataset"
 OUTPUT_PATH = f"{ROOT_PATH}/triplets_dataset/test"
 
 RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [64, 128]
+PATCHES = [64, 128, 256, 512]
 CHROMOSOMES = {
-    "human": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-              "11", "12", "13", "14", "15", "16",
-              "17", "18", "19", "20", "21", "22"],
-    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-              "11", "12", "13", "14", "15", "16",
-              "17", "18", "19"]
+    "human": ["10", "11", "15", "16", "20", "21"]
 }
 
 DATASET = {
     "human": {
-        # unseen
         "dmso": {
             "control": {
                 "triplets":
                 [
+                    ["4DNFIP9EJSOM_dmso_control_0m",
+                     "4DNFI7T93SHL_dmso_control_30m",
+                     "4DNFICF2Z2TG_dmso_control_60m"],
+
                     ["4DNFI7T93SHL_dmso_control_30m",
                      "4DNFICF2Z2TG_dmso_control_60m",
-                     "4DNFILL624WG_dmso_control_90m"]
+                     "4DNFILL624WG_dmso_control_90m"],
+
+                    ["4DNFICF2Z2TG_dmso_control_60m",
+                     "4DNFILL624WG_dmso_control_90m",
+                     "4DNFIC4GB8UM_dmso_control_120m"]
                 ]
             }
         },
-
-        # seen
         "dtag": {
             "v1": {
                 "triplets":
                 [
+                    ["4DNFI5EAPQTI_dtag_v1_0m",
+                     "4DNFIY1TCVLX_dtag_v1_30m",
+                     "4DNFIXWT5U42_dtag_v1_60m"],
+
                     ["4DNFIY1TCVLX_dtag_v1_30m",
                      "4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m"]
-                ]
-            }
-        },
+                     "4DNFIHTFIMGG_dtag_v1_90m"],
 
-        "hct116": {
-            # unseen replicate
-            "1": {
-                "triplets":
-                [
-                    ["4DNFIDBFENL7_hct116_1_20m",
-                     "4DNFI9ZUXG61_hct116_1_40m",
-                     "4DNFIAUMRM2S_hct116_1_60m"]
-                ]
-            },
-
-            # seen
-            "2": {
-                "triplets":
-                [
-                    ["4DNFIAAH19VM_hct116_2_20m",
-                     "4DNFI7QUSU5J_hct116_2_40m",
-                     "4DNFIXEB4UZO_hct116_2_60m"]
-                ]
-            },
-        }
-    },
-    # unseen organism
-    "mouse": {
-        "embryo": {
-            "development": {
-                "triplets": [
-                    ["4DNFICXCFGEI_late2_cell",
-                     "4DNFIFA89L5B_8cell",
-                     "4DNFIK5HY1GP_icm"]
+                    ["4DNFIXWT5U42_dtag_v1_60m",
+                     "4DNFIHTFIMGG_dtag_v1_90m",
+                     "4DNFIPZCCTV6_dtag_v1_120m"]
                 ]
             }
         }

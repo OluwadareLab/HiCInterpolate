@@ -38,7 +38,7 @@ file:
 
 data:
   patch: 512
-  batch_size: 20
+  batch_size: 10
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy

@@ -1,426 +1,155 @@
 import os
 import numpy as np
-import cooler as cool
+import cooler
+import matplotlib.pyplot as plt
+from random import seed
+from dataset import PATCH_SIZES, STEP_SIZES, RESOLUTIONS, DATASET, INPUT_DIR, CMAP
 
+seed(42)
 
-ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets"
-OUTPUT_ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/log_mm_triplets_dataset"
 
-RESOLUTIONS = [25000, 10000, 5000]
-BALANCE_COOL = False
-PATCHES = [64, 128]
-CLIPPING_PERCENTILE = 99.99
-PATCH_OVERLAP_RATIO = 0.2
+def normalize(mat, is_log=False, is_min_max=False):
+    if is_log:
+        mat = np.log1p(mat)
 
-COUNTER = {
-    5000: {64: 0, 128: 0},
-    10000: {64: 0, 128: 0},
-    25000: {64: 0, 128: 0}
-}
+    if is_min_max:
+        min_val = np.min(mat)
+        max_val = np.max(mat)
+        denom = max_val - min_val
+        if denom == 0:
+            fill_value = 1.0 if min_val > 0 else 0.0
+            mat = np.full_like(mat, fill_value, dtype=np.float32)
+        else:
+            mat = (mat - min_val) / denom
 
-# DATASET = {
-#     "human": {
-#         "dmso": {
-#             "control": {
-#                 "triplets":
-#                 [
-#                     ["4DNFIP9EJSOM_dmso_control_0m",
-#                      "4DNFI7T93SHL_dmso_control_30m",
-#                      "4DNFICF2Z2TG_dmso_control_60m"],
+    return mat
 
-#                     ["4DNFI7T93SHL_dmso_control_30m",
-#                      "4DNFICF2Z2TG_dmso_control_60m",
-#                      "4DNFILL624WG_dmso_control_90m"],
 
-#                     ["4DNFICF2Z2TG_dmso_control_60m",
-#                      "4DNFILL624WG_dmso_control_90m",
-#                      "4DNFIC4GB8UM_dmso_control_120m"]
-#                 ]
-#             }
-#         },
+def plot_patch(img1, img2, img3, filename):
+    data_groups = [img1, img2, img3]
 
-#         "dtag": {
-#             "v1": {
-#                 "triplets":
-#                 [
-#                     ["4DNFI5EAPQTI_dtag_v1_0m",
-#                      "4DNFIY1TCVLX_dtag_v1_30m",
-#                      "4DNFIXWT5U42_dtag_v1_60m"],
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    axes = np.atleast_2d(axes)
 
-#                     ["4DNFIY1TCVLX_dtag_v1_30m",
-#                      "4DNFIXWT5U42_dtag_v1_60m",
-#                      "4DNFIHTFIMGG_dtag_v1_90m"],
+    for idx in range(len(data_groups)):
+        ax = axes[0, idx]
+        matrix = data_groups[idx]
+        _min = np.min(matrix)
+        _max = np.max(matrix)
+        im = ax.imshow(matrix, cmap=CMAP, vmin=_min, vmax=_max)
+        ax.axis("off")
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
-#                     ["4DNFIXWT5U42_dtag_v1_60m",
-#                      "4DNFIHTFIMGG_dtag_v1_90m",
-#                      "4DNFIPZCCTV6_dtag_v1_120m"]
-#                 ]
-#             }
-#         },
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300, format='png')
+    plt.close()
 
-#         "hct116": {
-#             "1": {
-#                 "triplets":
-#                 [
-#                     ["4DNFIDBFENL7_hct116_1_20m",
-#                      "4DNFI9ZUXG61_hct116_1_40m",
-#                      "4DNFIAUMRM2S_hct116_1_60m"],
 
-#                     ["4DNFIV56OFE3_hct116_1_auxin_20m",
-#                      "4DNFIBCIA62Q_hct116_1_auxin_40m",
-#                      "4DNFIQRTP7NM_hct116_1_auxin_60m"]
-#                 ]
-#             },
-
-#             "2": {
-#                 "triplets":
-#                 [
-#                     ["4DNFIAAH19VM_hct116_2_20m",
-#                      "4DNFI7QUSU5J_hct116_2_40m",
-#                      "4DNFIXEB4UZO_hct116_2_60m"],
-
-#                     ["4DNFI5IZNXIO_hct116_2_no_transcription_360m_20m",
-#                      "4DNFIZK7W8GZ_hct116_2_no_transcription_360m_40m",
-#                      "4DNFISRP84FE_hct116_2_no_transcription_360m_60m"],
-
-#                     ["4DNFII16KXA7_hct116_2_no_transcription_60m_20m",
-#                      "4DNFIMIMLMD3_hct116_2_no_transcription_60m_40m",
-#                      "4DNFI2LY7B73_hct116_2_no_transcription_60m_60m"],
-
-#                     ["4DNFITUPI4HA_hct116_2_no_atp_120m_20m",
-#                      "4DNFIM7Q2FQQ_hct116_2_no_atp_120m_40m",
-#                      "4DNFISATK9PF_hct116_2_no_atp_120m_60m"],
-
-#                     ["4DNFIVC8OQPG_hct116_2_no_atp_30m_20m",
-#                      "4DNFI44JLUSL_hct116_2_no_atp_30m_40m",
-#                      "4DNFIBED48O1_hct116_2_no_atp_30m_60m"],
-
-#                     ["4DNFIDD9IF9T_hct116_2_no_replication_20m",
-#                      "4DNFIQWWATGK_hct116_2_no_replication_40m",
-#                      "4DNFI3NTD7B3_hct116_2_no_replication_60m"]
-#                 ]
-#             },
-#         },
-
-#         "hela_s3": {
-#             "r1": {
-#                 "triplets":
-#                 [
-#                     ["4DNFIZZ77KD2_hela_s3_r1_30m",
-#                      "4DNFIOLO226X_hela_s3_r1_60m",
-#                      "4DNFIJMS2ODT_hela_s3_r1_90m"],
-
-#                     ["4DNFIJMS2ODT_hela_s3_r1_90m",
-#                      "4DNFI49F3LJ4_hela_s3_r1_105m",
-#                      "4DNFI65MQOIJ_hela_s3_r1_120m"],
-
-#                     ["4DNFI49F3LJ4_hela_s3_r1_105m",
-#                      "4DNFI65MQOIJ_hela_s3_r1_120m",
-#                      "4DNFIM4KEPRD_hela_s3_r1_135m"],
-
-#                     ["4DNFI65MQOIJ_hela_s3_r1_120m",
-#                      "4DNFIM4KEPRD_hela_s3_r1_135m",
-#                      "4DNFIIXBIZFC_hela_s3_r1_150m"],
-
-#                     ["4DNFIM4KEPRD_hela_s3_r1_135m",
-#                      "4DNFIIXBIZFC_hela_s3_r1_150m",
-#                      "4DNFIWDOOBVE_hela_s3_r1_165m"],
-
-#                     ["4DNFIIXBIZFC_hela_s3_r1_150m",
-#                      "4DNFIWDOOBVE_hela_s3_r1_165m",
-#                      "4DNFIDT9EB5M_hela_s3_r1_180m"],
-
-#                     ["4DNFIWDOOBVE_hela_s3_r1_165m",
-#                      "4DNFIDT9EB5M_hela_s3_r1_180m",
-#                      "4DNFIX2VUNV8_hela_s3_r1_195m"],
-
-#                     ["4DNFIDT9EB5M_hela_s3_r1_180m",
-#                      "4DNFIX2VUNV8_hela_s3_r1_195m",
-#                      "4DNFIEQHTV1R_hela_s3_r1_210m"],
-
-#                     ["4DNFIEQHTV1R_hela_s3_r1_210m",
-#                      "4DNFIFW7GA64_hela_s3_r1_240m",
-#                      "4DNFIXGXD67I_hela_s3_r1_270m"],
-
-#                     ["4DNFIFW7GA64_hela_s3_r1_240m",
-#                      "4DNFIXGXD67I_hela_s3_r1_270m",
-#                      "4DNFIA7GB1NB_hela_s3_r1_300m"]
-#                 ]
-#             },
-
-#             "r2": {
-#                 "triplets":
-#                 [
-#                     ["4DNFIX6ZXCA8_hela_s3_r2_30m",
-#                      "4DNFIEVR81FS_hela_s3_r2_60m",
-#                      "4DNFIAUI6BBI_hela_s3_r2_90m"],
-
-#                     ["4DNFIEVR81FS_hela_s3_r2_60m",
-#                      "4DNFIAUI6BBI_hela_s3_r2_90m",
-#                      "4DNFIAFEE9G2_hela_s3_r2_120m"],
-
-#                     ["4DNFIAUI6BBI_hela_s3_r2_90m",
-#                      "4DNFIAFEE9G2_hela_s3_r2_120m",
-#                      "4DNFIPZBEXCP_hela_s3_r2_150m"],
-
-#                     ["4DNFIAFEE9G2_hela_s3_r2_120m",
-#                      "4DNFIPZBEXCP_hela_s3_r2_150m",
-#                      "4DNFIWPKRZGU_hela_s3_r2_180m"],
-
-#                     ["4DNFIPZBEXCP_hela_s3_r2_150m",
-#                      "4DNFIWPKRZGU_hela_s3_r2_180m",
-#                      "4DNFIMD9QNDX_hela_s3_r2_210m"],
-
-#                     ["4DNFIWPKRZGU_hela_s3_r2_180m",
-#                      "4DNFIMD9QNDX_hela_s3_r2_210m",
-#                      "4DNFIATA1HD5_hela_s3_r2_240m"],
-
-#                     ["4DNFIMD9QNDX_hela_s3_r2_210m",
-#                      "4DNFIATA1HD5_hela_s3_r2_240m",
-#                      "4DNFIH9U4I7I_hela_s3_r2_270m"],
-
-#                     ["4DNFIATA1HD5_hela_s3_r2_240m",
-#                      "4DNFIH9U4I7I_hela_s3_r2_270m",
-#                      "4DNFIZ95S6TR_hela_s3_r2_300m"]
-#                 ]
-#             },
-
-#             "r3": {
-#                 "triplets":
-#                 [
-#                     ["4DNFICFZGFAV_hela_s3_r3_30m",
-#                      "4DNFIQXCZVVA_hela_s3_r3_60m",
-#                      "4DNFIB6PJFJ3_hela_s3_r3_90m"],
-
-#                     ["4DNFIB6PJFJ3_hela_s3_r3_90m",
-#                      "4DNFIX97731O_hela_s3_r3_105m",
-#                      "4DNFIYQYZOTO_hela_s3_r3_120m"],
-
-#                     ["4DNFIX97731O_hela_s3_r3_105m",
-#                      "4DNFIYQYZOTO_hela_s3_r3_120m",
-#                      "4DNFIPXU7V25_hela_s3_r3_135m"],
-
-#                     ["4DNFIYQYZOTO_hela_s3_r3_120m",
-#                      "4DNFIPXU7V25_hela_s3_r3_135m",
-#                      "4DNFIL39PR76_hela_s3_r3_150m"],
-
-#                     ["4DNFIPXU7V25_hela_s3_r3_135m",
-#                      "4DNFIL39PR76_hela_s3_r3_150m",
-#                      "4DNFIYLJ3R3B_hela_s3_r3_165m"],
-
-#                     ["4DNFIL39PR76_hela_s3_r3_150m",
-#                      "4DNFIYLJ3R3B_hela_s3_r3_165m",
-#                      "4DNFIL51WBN6_hela_s3_r3_180m"],
-
-#                     ["4DNFIYLJ3R3B_hela_s3_r3_165m",
-#                      "4DNFIL51WBN6_hela_s3_r3_180m",
-#                      "4DNFI6SFPUDA_hela_s3_r3_195m"],
-
-#                     ["4DNFIL51WBN6_hela_s3_r3_180m",
-#                      "4DNFI6SFPUDA_hela_s3_r3_195m",
-#                      "4DNFI2KM22QR_hela_s3_r3_210m"],
-
-#                     ["4DNFI2KM22QR_hela_s3_r3_210m",
-#                      "4DNFIVF8Q45U_hela_s3_r3_240m",
-#                      "4DNFI2RN3WFP_hela_s3_r3_270m"],
-
-#                     ["4DNFIVF8Q45U_hela_s3_r3_240m",
-#                      "4DNFI2RN3WFP_hela_s3_r3_270m",
-#                      "4DNFI4TJTL7A_hela_s3_r3_300m"]
-#                 ]
-#             }
-#         }
-#     },
-
-#     "mouse": {
-#         "embryo": {
-#             "development": {
-#                 "triplets": [
-#                     ["4DNFIN8F14CS_sperm",
-#                      "4DNFIVCJKHMN_mii_oocyte",
-#                      "4DNFI1EYIGOC_zygote"],
-
-#                     ["4DNFIVCJKHMN_mii_oocyte",
-#                      "4DNFI1EYIGOC_zygote",
-#                      "4DNFIK4CECUH_early2_cell"],
-
-#                     ["4DNFI1EYIGOC_zygote",
-#                      "4DNFIK4CECUH_early2_cell",
-#                      "4DNFICXCFGEI_late2_cell"],
-
-#                     ["4DNFIK4CECUH_early2_cell",
-#                      "4DNFICXCFGEI_late2_cell",
-#                      "4DNFIFA89L5B_8cell"],
-
-#                     ["4DNFICXCFGEI_late2_cell",
-#                      "4DNFIFA89L5B_8cell",
-#                      "4DNFIK5HY1GP_icm"],
-
-#                     ["4DNFIFA89L5B_8cell",
-#                      "4DNFIK5HY1GP_icm",
-#                      "4DNFI5IAH9H1_mes_cell"]
-#                 ]
-#             }
-#         }
-#     }
-# }
-
-CHROMOSOMES = {
-    "human": ["11", "12", "13", "14", "15", "16",
-              "17", "18", "19", "20", "21", "22", "X", "Y"],
-    "mouse": ["11", "12", "13", "14", "15", "16",
-              "17", "18", "19", "X", "Y"]
-}
-
-DATASET = {
-    "human": {
-        "dmso": {
-            "control": {
-                "triplets":
-                [
-                    ["4DNFI7T93SHL_dmso_control_30m",
-                     "4DNFICF2Z2TG_dmso_control_60m",
-                     "4DNFILL624WG_dmso_control_90m"]
-                ]
-            }
-        },
-        "hct116": {
-            "2": {
-                "triplets":
-                [
-                    ["4DNFIAAH19VM_hct116_2_20m",
-                     "4DNFI7QUSU5J_hct116_2_40m",
-                     "4DNFIXEB4UZO_hct116_2_60m"]
-                ]
-            },
-        },
-
-        "hela_s3": {
-            "r2": {
-                "triplets":
-                [
-                    ["4DNFIPZBEXCP_hela_s3_r2_150m",
-                     "4DNFIWPKRZGU_hela_s3_r2_180m",
-                     "4DNFIMD9QNDX_hela_s3_r2_210m"]
-                ]
-            }
-        }
-    },
-    "mouse": {
-        "embryo": {
-            "development": {
-                "triplets": [
-                    ["4DNFIN8F14CS_sperm",
-                     "4DNFIVCJKHMN_mii_oocyte",
-                     "4DNFI1EYIGOC_zygote"],
-
-                    ["4DNFIVCJKHMN_mii_oocyte",
-                     "4DNFI1EYIGOC_zygote",
-                     "4DNFIK4CECUH_early2_cell"],
-
-                    ["4DNFI1EYIGOC_zygote",
-                     "4DNFIK4CECUH_early2_cell",
-                     "4DNFICXCFGEI_late2_cell"],
-
-                    ["4DNFIK4CECUH_early2_cell",
-                     "4DNFICXCFGEI_late2_cell",
-                     "4DNFIFA89L5B_8cell"],
-
-                    ["4DNFICXCFGEI_late2_cell",
-                     "4DNFIFA89L5B_8cell",
-                     "4DNFIK5HY1GP_icm"],
-
-                    ["4DNFIFA89L5B_8cell",
-                     "4DNFIK5HY1GP_icm",
-                     "4DNFI5IAH9H1_mes_cell"]
-                ]
-            }
-        }
-    }
-}
-
-
-def save_img(chr_mat, r, c, patch, path, img_name):
-    submatrix = chr_mat[r:r+patch, c:c+patch]
-    submatrix = submatrix.astype(np.float32)
-    np.save(f"{path}/{img_name}.npy", submatrix)
-
-
-def log_min_max_normalize(mat):
-    # mat = np.log1p(mat)
-    min_val = np.min(mat)
-    max_val = np.max(mat)
-    return (mat - min_val) / (max_val - min_val)
-
-
-def generate_patch(mat_0, mat_y, mat_1, organism, sample, subsample, resolution, chromosome, output_root_path, uuid, ds_dict_file):
-    with open(ds_dict_file, "a") as dict_file:
-        for patch in PATCHES:
+def save_patch(matrix1, matrix2, matrix3, chrom_size, output_dir, out_sub_dir, ds_dict_filename):
+    with open(ds_dict_filename, "a") as dict_file:
+        for patch_size, step_size in zip(PATCH_SIZES, STEP_SIZES):
             print(
-                f"[INFO] generating patches({patch}X{patch}) for {resolution} > {organism} > {sample} > {subsample} > {uuid} > chr{chromosome}")
+                f"[INFO] Saving patches for {out_sub_dir} with patch size {patch_size} and step size {step_size}")
+            count = 0
+            for start_bp in range(0, chrom_size - patch_size, step_size):
+                end_bp = start_bp + patch_size
 
-            t_row, t_col = mat_y.shape
-            bin_inc = int(patch*(1-PATCH_OVERLAP_RATIO))
-            window = [0]
-            for win in window:
-                r = win
-                c = 0
-                while (r+patch <= t_row and c+patch <= t_col):
-                    if r < 0 or c < 0:
-                        c += bin_inc
-                        r += bin_inc
-                        continue
+                patch1 = matrix1[start_bp:end_bp, start_bp:end_bp]
+                patch2 = matrix2[start_bp:end_bp, start_bp:end_bp]
+                patch3 = matrix3[start_bp:end_bp, start_bp:end_bp]
 
-                    folder = f"{COUNTER[resolution][patch]:09d}"
-                    record = f"{str(resolution)}/{str(patch)}/{organism}/{sample}/{subsample}/{str(uuid)}/{chromosome}/{folder}"
-                    dict_file.write(record + "\n")
-                    image_path = f"{OUTPUT_ROOT_PATH}/{record}"
-                    os.makedirs(image_path, exist_ok=True)
-                    save_img(mat_0, r, c, patch, image_path, "img1")
-                    save_img(mat_y, r, c, patch, image_path, "img2")
-                    save_img(mat_1, r, c, patch, image_path, "img3")
-                    c += bin_inc
-                    r += bin_inc
-                    COUNTER[resolution][patch] += 1
+                if patch1.shape == (patch_size, patch_size) and patch2.shape == (patch_size, patch_size) and patch3.shape == (patch_size, patch_size):
+                    sub_dir = f"{out_sub_dir}/{patch_size}/{start_bp}_{end_bp}"
+                    dict_file.write(f"{sub_dir}\n")
+                    os.makedirs(os.path.join(
+                        output_dir, sub_dir), exist_ok=True)
 
-        dict_file.flush()
-        dict_file.close()
+                    np.save(os.path.join(
+                        output_dir, sub_dir, 'img1.npy'), patch1)
+                    np.save(os.path.join(
+                        output_dir, sub_dir, 'img2.npy'), patch2)
+                    np.save(os.path.join(
+                        output_dir, sub_dir, 'img3.npy'), patch3)
+
+                    if count == 4:
+                        plot_out_dir = os.path.join(
+                            output_dir, 'plots', out_sub_dir, str(patch_size))
+                        os.makedirs(plot_out_dir, exist_ok=True)
+
+                        plot_filename = os.path.join(
+                            plot_out_dir, f'{start_bp}_{end_bp}.png')
+                        plot_patch(patch1, patch2, patch3, plot_filename)
+                    count += 1
 
 
-def prepare_triplates():
+def generate_triplets(output_dir, is_log=False, is_min_max=False):
     for resolution in RESOLUTIONS:
-        ds_dict_file = f"{OUTPUT_ROOT_PATH}/dataset_dict_{resolution}.txt"
-        os.makedirs(os.path.dirname(ds_dict_file), exist_ok=True)
-
         for organism, samples in DATASET.items():
-            for sample, subsamples in samples.items():
-                for subsample, content in subsamples.items():
-                    for triplet in content["triplets"]:
-                        filepath0 = f"{ROOT_PATH}/{organism}/{sample}/{subsample}/{triplet[0]}_{resolution}_KR.cool"
-                        filepath1 = f"{ROOT_PATH}/{organism}/{sample}/{subsample}/{triplet[1]}_{resolution}_KR.cool"
-                        filepath2 = f"{ROOT_PATH}/{organism}/{sample}/{subsample}/{triplet[2]}_{resolution}_KR.cool"
+            for sample, conditions in samples.items():
+                for condition, dataset in conditions.items():
+                    for triplet in dataset["triplets"]:
+                        uuid = triplet[0].split(
+                            "_")[-1] + "_" + triplet[1].split("_")[-1] + "_" + triplet[2].split("_")[-1]
 
-                        cool_0 = cool.Cooler(filepath0)
-                        cool_y = cool.Cooler(filepath1)
-                        cool_1 = cool.Cooler(filepath2)
-                        uuid = triplet[0] + "_" + triplet[1] + "_" + triplet[2]
-                        for chromosome, chr_size in zip(cool_y.chromnames, cool_y.chromsizes):
-                            fetch = f"{chromosome}:{0}-{chr_size}"
-                            mat_0 = cool_0.matrix(
-                                balance=BALANCE_COOL).fetch(fetch)
-                            mat_y = cool_y.matrix(
-                                balance=BALANCE_COOL).fetch(fetch)
-                            mat_1 = cool_1.matrix(
-                                balance=BALANCE_COOL).fetch(fetch)
-                            mat_0 = log_min_max_normalize(mat_0)
-                            mat_y = log_min_max_normalize(mat_y)
-                            mat_1 = log_min_max_normalize(mat_1)
-                            generate_patch(mat_0=mat_0, mat_y=mat_y, mat_1=mat_1, resolution=resolution,
-                                           organism=organism, sample=sample, subsample=subsample, uuid=uuid, chromosome=chromosome, output_root_path=OUTPUT_ROOT_PATH, ds_dict_file=ds_dict_file)
+                        filename1 = f"{INPUT_DIR}/{triplet[0]}_{resolution}_KR.cool"
+                        filename2 = f"{INPUT_DIR}/{triplet[1]}_{resolution}_KR.cool"
+                        filename3 = f"{INPUT_DIR}/{triplet[2]}_{resolution}_KR.cool"
+
+                        if not (os.path.exists(filename1) and os.path.exists(filename2) and os.path.exists(filename3)):
+                            print(
+                                f"[WARNING] Missing files for {organism} > {sample} > {condition} > {uuid} > {resolution}")
+                            continue
+
+                        cool1 = cooler.Cooler(
+                            f"{INPUT_DIR}/{triplet[0]}_{resolution}_KR.cool")
+                        cool2 = cooler.Cooler(
+                            f"{INPUT_DIR}/{triplet[1]}_{resolution}_KR.cool")
+                        cool3 = cooler.Cooler(
+                            f"{INPUT_DIR}/{triplet[2]}_{resolution}_KR.cool")
+
+                        ds_dict_filename = f"{output_dir}/dataset_dict_{resolution}.txt"
+                        os.makedirs(os.path.dirname(
+                            ds_dict_filename), exist_ok=True)
+
+                        for chrom in cool2.chromnames:
+                            print(
+                                f"[INFO] Processing {organism} > {sample} > {condition} > {uuid} > {resolution} > chr{chrom}")
+
+                            out_sub_dir = f'{resolution}/{organism}/{sample}/{condition}/{triplet[1]}/chr{chrom}'
+
+                            matrix1 = normalize(cool1.matrix(balance=False).fetch(
+                                chrom), is_log=is_log, is_min_max=is_min_max)
+                            matrix2 = normalize(cool2.matrix(balance=False).fetch(
+                                chrom), is_log=is_log, is_min_max=is_min_max)
+                            matrix3 = normalize(cool3.matrix(balance=False).fetch(
+                                chrom), is_log=is_log, is_min_max=is_min_max)
+
+                            save_patch(
+                                matrix1, matrix2, matrix3, cool2.chromsizes[chrom], output_dir, out_sub_dir, ds_dict_filename)
 
 
 if __name__ == "__main__":
     try:
-        prepare_triplates()
+        # log -> min-max
+        # output_dir = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/log_min_max_triplets'
+        # os.makedirs(output_dir, exist_ok=True)
+        # generate_triplets(output_dir=output_dir, is_log=True, is_min_max=True)
+
+        # # min-max
+        # output_dir = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/min_max_triplets'
+        # os.makedirs(output_dir, exist_ok=True)
+        # generate_triplets(output_dir=output_dir, is_log=False, is_min_max=True)
+
+        # none
+        output_dir = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/triplets'
+        os.makedirs(output_dir, exist_ok=True)
+        generate_triplets(output_dir=output_dir,
+                          is_log=False, is_min_max=False)
+
+        # # log
+        # output_dir = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/log_triplets'
+        # os.makedirs(output_dir, exist_ok=True)
+        # generate_triplets(output_dir=output_dir, is_log=True, is_min_max=False)
+
     except Exception as e:
         print(f"[FATAL ERROR] {e}")
