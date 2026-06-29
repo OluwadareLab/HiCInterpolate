@@ -1,9 +1,8 @@
 import os
 import re
 
-ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets"
-DATASET_DICT_PATH = f"{ROOT_PATH}/triplets_dataset"
-OUTPUT_PATH = f"{ROOT_PATH}/triplets_dataset/test"
+DATASET_DICT_PATH = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset'
+OUTPUT_PATH = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test'
 
 RESOLUTIONS = [25000, 10000, 5000]
 PATCHES = [64, 128, 256, 512]

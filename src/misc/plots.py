@@ -31,6 +31,27 @@ def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, 
     plt.close()
 
 
+def draw_hic_comparison(num_examples, target: torch.Tensor, pred: torch.Tensor, linear: torch.Tensor, of: torch.Tensor, file):
+    data_groups = [target, pred, linear, of]
+    titles = ["Ground Truth", "Ours", "Linear", "Optical Flow"]
+
+    fig, axes = plt.subplots(num_examples, 4, figsize=(20, num_examples * 5))
+    axes = np.atleast_2d(axes)
+
+    for i in range(num_examples):
+        for j in range(4):
+            ax = axes[i, j]
+            matrix = data_groups[j][i].squeeze().detach().cpu().numpy()
+            im = ax.imshow(matrix, cmap=CMAP_)
+            ax.set_title(titles[j])
+            ax.axis("off")
+            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    plt.savefig(f"{file}", dpi=300, format='png')
+    plt.close()
+
+
 def draw_inf_hic_map(y: np.ndarray, pred: np.ndarray, file):
     data_groups = [y, pred]
     titles = ["$y_{t=0.5}$", r"$\hat{y}_{t=0.5}$"]

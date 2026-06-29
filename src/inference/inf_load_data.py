@@ -18,19 +18,29 @@ class PairDataset(Dataset):
     def __len__(self):
         return len(self.pair_dicts)
 
-    def get_image(self, image_file: str) -> Tensor:
-        np_img = np.load(image_file)
-        img = torch.from_numpy(np_img).float().unsqueeze(0)
+    def _load_valid_matrix(self, image_file: str):
+        img = np.load(image_file)
+        if np.isnan(img).any() or np.isinf(img).any() or img.min() == img.max():
+            return None
         return img
+
+    def log1p(self, matrix):
+        return np.log1p(matrix)
+
+    def get_image(self, image_file: str) -> Tensor:
+        img = self._load_valid_matrix(image_file)
+        if img is None:
+            return None
+        img = np.log1p(img)
+        return torch.from_numpy(img).float().unsqueeze(0)
 
     def __getitem__(self, idx):
         key = self.pair_dicts[idx]
         x0 = self.get_image(image_file=key["frame_0"])
         x1 = self.get_image(image_file=key["frame_1"])
         x2 = self.get_image(image_file=key["frame_2"])
-        time = torch.tensor([key["time"]], dtype=torch.float32)
 
-        return x0, x1, x2, time
+        return x0, x1, x2
 
 
 class CustomDataset:

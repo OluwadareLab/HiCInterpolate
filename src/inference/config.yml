@@ -1,28 +1,28 @@
 device: cuda
 
 dir:
-  root: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate
-  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
-  output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/test
-  data: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
-  image: ${dir.data}/${data.patch}
+  root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
+  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/triplets_dataset
+  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/test_dir
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
+  image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
 
 file:
-  inference: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test/test.txt
-  inference_raw: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test/info.txt
-  vgg_model: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/imagenet-vgg-verydeep-19.mat
-  model: ${dir.model_state}/${model.name}.pt
+  inference: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test/test_25000_256.txt
+  inference_raw: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test/info.txt
+  vgg_model: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/imagenet-vgg-verydeep-19.mat
+  model: ${dir.model_state}/${model.name}_p${data.patch}_b${data.batch_size}.pt
   hic_map: ${dir.output}/${model.name}_inference_hic_map.jpg
   metrics: ${dir.output}/${model.name}_inference_metrics.txt
   log: ${dir.output}/${model.name}_inference.log
 
 data:
-  patch: 64
+  patch: 256
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  batch_size: 64
+  batch_size: 20
 
 model:
   name: hicinterpolate_${data.patch}

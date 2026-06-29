@@ -19,14 +19,14 @@ class HiCInterpolate:
         self.isDistributed = dist.is_available() and dist.is_initialized()
         if isDistributed:
             self.device = int(os.environ["LOCAL_RANK"])
-            self.model = Interpolator(self.cfg).to(self.device)
+            self.model = Interpolator().to(self.device)
             self.model = DDP(self.model, device_ids=[self.device])
             loc = f"cuda:{self.device}"
             snapshot = torch.load(model, map_location=loc)
             self.model.load_state_dict(snapshot['model'])
         else:
             self.device = self.cfg.device
-            self.model = Interpolator(self.cfg).to(self.device)
+            self.model = Interpolator().to(self.device)
             snapshot = torch.load(model, map_location=self.device)
             state_dict = self._remove_module_prefix(snapshot['model'])
             self.model.load_state_dict(state_dict)

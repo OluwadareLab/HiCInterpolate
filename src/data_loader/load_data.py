@@ -7,7 +7,6 @@ from typing import List, Tuple
 from torch import Tensor
 import sys
 import os
-from scipy.stats import norm
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 _EPSILON = 1e-8
@@ -33,7 +32,7 @@ class TripletDataset(Dataset):
         if img is None:
             return None
         # img = self.normalize_counts(img)
-        img = np.log1p(img)
+        # img = np.log1p(img)
         # img = (img - img.mean()) / (img.std() + _EPSILON)
         return torch.from_numpy(img).float().unsqueeze(0)
 
@@ -51,13 +50,15 @@ class TripletDataset(Dataset):
 
     def normalize_triplet(self, x0, y, x1):
         logged = [self.log1p(matrix) for matrix in (x0, y, x1)]
-        upper = max(np.percentile(matrix, CLIPPING_PERCENTILE) for matrix in logged)
+        upper = max(np.percentile(matrix, CLIPPING_PERCENTILE)
+                    for matrix in logged)
         if upper <= _EPSILON:
             return None
         tensors = []
         for matrix in logged:
             matrix = np.clip(matrix, 0.0, upper) / upper
-            tensors.append(torch.from_numpy(matrix.astype(np.float32)).unsqueeze(0))
+            tensors.append(torch.from_numpy(
+                matrix.astype(np.float32)).unsqueeze(0))
         return tensors
 
     def min_max_norm(self, matrix):
@@ -85,7 +86,7 @@ class TripletDataset(Dataset):
         if normalized is None:
             return None
         x0, y, x1 = normalized
-        return x0, y, x1, time
+        return x0, y, x1
 
 
 class CustomDataset:

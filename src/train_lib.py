@@ -1,5 +1,7 @@
 from src.loss import CombinedLoss
 from src.metric import metrics as eval_metric
+from src.metric.hicrep import compute_hicrep
+from src.metric.genomedisco import compute_genomedisco
 from src.misc import plots as plot
 from src.interpolator import Interpolator
 from tqdm import tqdm

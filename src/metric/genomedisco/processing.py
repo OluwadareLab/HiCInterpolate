@@ -80,7 +80,6 @@ def filter_nodes(m, to_remove):
 
 
 def construct_csr_matrix_from_data_and_nodes(matrix, blacklisted_nodes=[], remove_diag=True):
-
     csr_m = csr_matrix(matrix, dtype=float)
     if remove_diag:
         csr_m.setdiag(0)
@@ -88,7 +87,6 @@ def construct_csr_matrix_from_data_and_nodes(matrix, blacklisted_nodes=[], remov
 
 
 def write_matrix_from_csr_and_nodes(csr_m, nodes_idx, outname):
-
     coo_m = coo_matrix(csr_m)
     i = coo_m.row
     j = coo_m.col
@@ -103,7 +101,6 @@ def write_matrix_from_csr_and_nodes(csr_m, nodes_idx, outname):
 
 
 def old_construct_csr_matrix_from_data_and_nodes(f, nodes, blacklisted_nodes, remove_diag=True):
-
     total_nodes = len(nodes.keys())
     mdata = np.loadtxt(f)
 

@@ -5,6 +5,8 @@ from torch import Tensor
 from torchmetrics.image import StructuralSimilarityIndexMeasure, MultiScaleStructuralSimilarityIndexMeasure
 from torchvision.models import vgg19, VGG19_Weights
 from src.metric import metrics
+from src.metric.hicrep import compute_hicrep
+from src.metric.genomedisco import compute_genomedisco
 
 def vgg19_features():
     if VGG19_Weights is None:
@@ -459,7 +461,7 @@ class CombinedLoss(nn.Module):
                         "dice loss requires pred_mask and gt_mask arguments")
                 loss = loss + weight * self.dice_loss(pred_mask, gt_mask)
             elif weight_params["name"] == "lpips":
-                loss = loss + weight * metrics.get_lpips_gpu(pred, y)
+                loss = loss + weight * metrics.get_lpips_from_tensor(pred, y)
             else:
                 raise ValueError(f"Invalid loss name: {weight_params['name']}")
 

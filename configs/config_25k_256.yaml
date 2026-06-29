@@ -3,8 +3,8 @@ device: cuda
 dir:
   root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
   model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/triplets_dataset
-  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/triplets_dataset
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/triplets_dataset
+  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/test_dir
+  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
   image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset
 
 
@@ -43,7 +43,7 @@ data:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0.9, 0.1, 0.0]
+  train_val_test_ratio: [0.8, 0.1, 0.1]
 
 training:
   epochs: 100

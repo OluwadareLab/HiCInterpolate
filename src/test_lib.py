@@ -5,6 +5,8 @@ from tqdm import tqdm
 from src.interpolator import Interpolator
 from src.misc import plots as plot
 from src.metric import metrics as eval_metric
+from src.metric.hicrep import compute_hicrep
+from src.metric.genomedisco import compute_genomedisco
 import torch.distributed as dist
 import torch
 import traceback
@@ -13,6 +15,7 @@ import time
 import sys
 import os
 
+
 class Tester:
     def __init__(self, cfg, log, model: str, test_dl: DataLoader, isDistributed: bool = False) -> None:
         self.cfg = cfg
@@ -20,7 +23,7 @@ class Tester:
         self.isDistributed = dist.is_available() and dist.is_initialized()
         if isDistributed:
             self.device = int(os.environ["LOCAL_RANK"])
-            self.model = Interpolator(self.cfg).to(self.device)
+            self.model = Interpolator().to(self.device)
             self.model = DDP(self.model, device_ids=[self.device])
             loc = f"cuda:{self.device}"
             snapshot = torch.load(model, map_location=loc)
@@ -28,7 +31,7 @@ class Tester:
 
         else:
             self.device = self.cfg.device
-            self.model = Interpolator(self.cfg).to(self.device)
+            self.model = Interpolator().to(self.device)
             snapshot = torch.load(model, map_location=self.device)
             state_dict = self._remove_module_prefix(snapshot['model'])
             self.model.load_state_dict(state_dict)
@@ -68,19 +71,21 @@ class Tester:
         with torch.no_grad():
             self.model.eval()
             drawn = 0
-            for _, (x0, y, x1, time_frame) in enumerate(tqdm(self.test_dl)):
+            for _, (x0, y, x1) in enumerate(tqdm(self.test_dl)):
                 x0 = x0.to(self.device)
                 y = y.to(self.device)
                 x1 = x1.to(self.device)
-                time_frame = time_frame.to(self.device)
-                outputs = self.model(x0, x1, time_frame)
-                pred = outputs["final"] if isinstance(outputs, dict) else outputs
+                outputs = self.model(x0, x1)
+                pred = outputs["final"] if isinstance(
+                    outputs, dict) else outputs
 
-                psnr_val = eval_metric.get_psnr_gpu(pred, y)
-                ssim_val = eval_metric.get_ssim_gpu(pred, y)
-                genome_disco_val = eval_metric.get_genome_disco_gpu(pred, y)
-                hicrep_val = eval_metric.get_hicrep_gpu(pred, y)
-                lpips_val = eval_metric.get_lpips_gpu(pred, y)
+                psnr_val = eval_metric.get_psnr_from_tensor(pred, y)
+                ssim_val = eval_metric.get_ssim_from_tensor(pred, y)
+                genome_disco_val = compute_genomedisco.compute_reproducibility_from_tensor(
+                    pred, y)
+                hicrep_val = compute_hicrep.get_hicrep_scc_from_tensor(
+                    pred, y, resol=25000, h=1, lbr=0, ubr=25000*253)
+                lpips_val = eval_metric.get_lpips_from_tensor(pred, y)
 
                 local_psnr += psnr_val.item()
                 local_ssim += ssim_val.item()
@@ -88,7 +93,7 @@ class Tester:
                 local_hicrep += hicrep_val.item()
                 local_lpips += lpips_val.item()
 
-                if drawn == 20:
+                if drawn == 0:
                     num_examples = min(
                         self.cfg.file.num_visualization_samples, len(y))
                     x0_cpu = x0[:num_examples]

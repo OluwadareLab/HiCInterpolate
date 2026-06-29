@@ -34,7 +34,7 @@ def vstran(d):
     return new_d
 
 
-def get_hicrep_scc(mat1, mat2, resol, h, lbr=0, ubr=5000000):
+def compute_hicrep_scc(mat1, mat2, resol=25000, h=1, lbr=0, ubr=25000 * 253):
     if h == 0:
         smt_R1 = np.asarray(mat1)
         smt_R2 = np.asarray(mat2)
@@ -98,3 +98,29 @@ def get_hicrep_scc(mat1, mat2, resol, h, lbr=0, ubr=5000000):
     scc = np.dot(corr, wei) / np.sum(wei)
 
     return scc
+
+
+def get_hicrep_scc(mat1, mat2, resol=25000, h=1, lbr=0, ubr=25000 * 253):
+    try:
+        scc = compute_hicrep_scc(mat1, mat2, resol, h, lbr, ubr)
+        return scc
+    except Exception as e:
+        print(f"Error computing HiCRep SCC: {e}")
+        return np.nan
+
+
+def get_hicrep_scc_from_tensor(mat1, mat2, resol=25000, h=1, lbr=0, ubr=25000 * 253):
+    c = 0
+    hicrep_scc_list = []
+    for b in range(mat1.shape[0]):
+        m1 = mat1[b, c, :, :].detach().cpu().numpy()
+        m2 = mat2[b, c, :, :].detach().cpu().numpy()
+        try:
+            hicrep_scc = compute_hicrep_scc(m1, m2, resol, h, lbr, ubr)
+            hicrep_scc_list.append(hicrep_scc)
+        except Exception as e:
+            print(f"Error computing HiCRep SCC: {e}")
+            hicrep_scc_list.append(np.nan)
+
+    avg_hicrep_scc = np.nanmean(hicrep_scc_list)
+    return avg_hicrep_scc

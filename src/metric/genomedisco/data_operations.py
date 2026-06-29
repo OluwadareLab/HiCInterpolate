@@ -15,7 +15,6 @@ def get_distance_dep_using_nodes_capturec(m, nodes, nodes_idx, approximation=100
     dcounts = {}
     pcounts = {}
     total_reads = 0.0
-    marray = copy.deepcopy(m).toarray()
     entries_per_key = {}
 
     include = set()
@@ -70,7 +69,7 @@ def sqrtvc(m):
     mdown.setdiag(0)
     mtogether = mup+mdown
     sums_sq = np.sqrt(mtogether.sum(axis=1))
-    # make the ones that are 0, so that we don't divide by 0
+
     sums_sq[sums_sq == 0.0] = 1.0
     D_sq = sps.spdiags(1.0/sums_sq.flatten(),
                        [0], mtogether.get_shape()[0], mtogether.get_shape()[1], format='csr')
@@ -103,8 +102,6 @@ def coverage_norm(m):
     D = sps.spdiags(1.0/sums.flatten(),
                     [0], mtogether.get_shape()[0], mtogether.get_shape()[1], format='csr')
     return sps.triu(D.dot(mtogether.dot(D)))
-
-# assumes matrix is upper triangular
 
 
 def matrix_2_coverageVector(m):
@@ -164,14 +161,13 @@ def subsample_to_depth_csr_upperTri(m, seq_depth):
     depthm = m.sum()
     assert seq_depth <= depthm
     subsampling_prob = seq_depth/depthm
-
     m.eliminate_zeros()
     vals = m.data
     num_elts = len(vals)
     m_subsampled_data = []
     elt = 0
     while elt < num_elts:
-        m_subsampled_data.append(np.random.binomial(
-            vals[elt], subsampling_prob, 1)[0])
+        bio = np.random.binomial(vals[elt], subsampling_prob, 1)
+        m_subsampled_data.append(bio[0])
         elt += 1
     return csr_matrix((m_subsampled_data, m.indices, m.indptr), dtype=float, shape=m.shape)
