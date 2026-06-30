@@ -1,17 +1,10 @@
 
 import torch
 from torch import Tensor
-from torchmetrics.image import (
-    PeakSignalNoiseRatio,
-    StructuralSimilarityIndexMeasure,
-    MultiScaleStructuralSimilarityIndexMeasure,
-    LearnedPerceptualImagePatchSimilarity,
-)
+from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure, MultiScaleStructuralSimilarityIndexMeasure, LearnedPerceptualImagePatchSimilarity, SpatialCorrelationCoefficient
 from src.metric.hicrep import compute_hicrep
-from src.metric.genomedisco import compute_genomedisco
-# from src.metric.genome_disco_gpu import compute_reproducibility_gpu
-# from src.metric.dep_hicrep import hicrepSCC as hicrep_scc
-# from src.metric.hicrep_gpu import hicrepSCCGPU as hicrep_scc_gpu
+from src.metric import genome_disco
+
 from scipy import stats
 import numpy as np
 
@@ -28,6 +21,16 @@ def get_psnr(preds: Tensor, target: Tensor, data_range: float = 1.0):
 
 def get_psnr_from_tensor(preds: Tensor, target: Tensor, data_range: float = 1.0):
     return get_psnr(preds, target, data_range=data_range)
+
+
+def get_scc(preds: Tensor, target: Tensor):
+    scc = SpatialCorrelationCoefficient().to(preds.device)
+    scc_score = scc(preds, target)
+    return scc_score
+
+
+def get_scc_from_tensor(preds: Tensor, target: Tensor):
+    return get_scc(preds, target)
 
 
 def get_ssim(preds: Tensor, target: Tensor, data_range: float = 1.0):
@@ -56,11 +59,11 @@ def get_ms_ssim_from_tensor(preds: Tensor, target: Tensor, data_range: float = 1
 
 
 def get_genome_disco(preds: np.ndarray, target: np.ndarray):
-    return compute_genomedisco.compute_reproducibility(preds, target)
+    return genome_disco.compute_genomedisco(preds, target)
 
 
 def get_genome_disco_from_tensor(preds: Tensor, target: Tensor):
-    return compute_genomedisco.compute_reproducibility_from_tensor(preds, target)
+    return genome_disco.compute_genomedisco_from_tensor(preds, target)
 
 
 def get_hicrep(preds: Tensor, target: Tensor):
@@ -95,31 +98,31 @@ def get_lpips(preds: Tensor, target: Tensor):
     return lpips_score
 
 
-def get_scc(pred: np.ndarray, target: np.ndarray):
+def get_spearman(pred: np.ndarray, target: np.ndarray):
     rho, p_val = stats.spearmanr(pred.flatten(), target.flatten())
     return rho
 
 
-def get_scc_from_tensor(pred: Tensor, target: Tensor):
+def get_spearman_from_tensor(pred: Tensor, target: Tensor):
     c = 0
-    scc_list = []
+    spearman_list = []
     for b in range(pred.shape[0]):
         pred_mat = pred[b, c, :, :].detach().cpu().numpy().flatten()
         target_mat = target[b, c, :, :].detach().cpu().numpy().flatten()
         rho, p_val = stats.spearmanr(pred_mat, target_mat)
-        scc_list.append(rho)
+        spearman_list.append(rho)
 
-    return np.nanmean(scc_list)
+    return np.nanmean(spearman_list)
 
 
 GPU_METRIC_FUNCS = {
     "psnr": get_psnr_from_tensor,
     "ssim": get_ssim_from_tensor,
     "ms_ssim": get_ms_ssim_from_tensor,
-    "msssim": get_ms_ssim_from_tensor,
+    "scc": get_scc_from_tensor,
     "genome_disco": get_genome_disco_from_tensor,
     "hicrep": get_hicrep_from_tensor,
-    "scc": get_scc_from_tensor,
+    "spearman": get_spearman_from_tensor,
     "lpips": get_lpips,
 }
 
@@ -141,7 +144,9 @@ def get_eval_metrics_gpu(preds: Tensor, target: Tensor, include_lpips: bool = Tr
         "ms_ssim": get_ms_ssim_from_tensor(preds, target),
         "genome_disco": get_genome_disco_from_tensor(preds, target),
         "hicrep": get_hicrep_from_tensor(preds, target),
+        "spearman": get_spearman_from_tensor(preds, target),
         "scc": get_scc_from_tensor(preds, target),
+        "lpips": get_lpips(preds, target) if include_lpips else None
     }
     if include_lpips:
         metrics["lpips"] = get_lpips(preds, target)

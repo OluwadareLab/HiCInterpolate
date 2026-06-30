@@ -98,13 +98,29 @@ def compute_reproducibility(m1_csr, m2_csr, transition, tmax=3, tmin=3):
     return reproducibility
 
 
-def compute_reproducibility_from_tensor(pred: torch.Tensor, target: torch.Tensor):
+def compute_genomedisco(pred: np.ndarray, target: np.ndarray):
+    try:
+        reproducibility = compute_reproducibility(pred, target, True)
+        return reproducibility
+    except Exception as e:
+        print(
+            f"Error occurred while computing reproducibility")
+        return np.nan
+
+
+def compute_genomedisco_from_tensor(pred: torch.Tensor, target: torch.Tensor):
     c = 0
     reproducibility_list = []
     for b in range(pred.shape[0]):
         pred_mat = pred[b, c, :, :].detach().cpu().numpy()
         target_mat = target[b, c, :, :].detach().cpu().numpy()
-        reproducibility = compute_reproducibility(pred_mat, target_mat, True)
-        reproducibility_list.append(reproducibility)
+        try:
+            reproducibility = compute_reproducibility(
+                pred_mat, target_mat, True)
+            reproducibility_list.append(reproducibility)
+        except Exception as e:
+            reproducibility_list.append(np.nan)
+            print(
+                f"Error occurred while computing reproducibility for batch {b}: {e}")
 
-    return np.array(reproducibility_list).mean()
+    return np.nanmean(reproducibility_list)

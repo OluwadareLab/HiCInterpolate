@@ -1,9 +1,6 @@
 from time import time
 
 from src.interpolator.model import Interpolator
-from src.metric.hicrep import compute_hicrep
-# from src.metric.genomedisco import compute_genomedisco
-from src.metric import genome_disco as compute_genomedisco
 import matplotlib.colors as mcolors
 from src.metric import metrics as eval_metric
 from src.data_loader.load_data import CustomDataset
@@ -18,32 +15,24 @@ import random
 from src.misc import plots as plot
 from flow_based_interpolation import of_interpolation as OF
 
-ROOT_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate'
-MODEL_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/triplets_dataset'
-DICT_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test'
-IMAGE_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset'
-
-MODEL_SUBDIR = "config_25k_256"
-MODEL_NAME = "hicinterpolate_256_p256_b20.pt"
-
-RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [512, 256, 128, 64]
-BATCHES = [10, 20, 20, 20]
-
-OUTPUT_DIR = f'/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/HiCInterpolate/{MODEL_SUBDIR}'
-CSV_FILENAME = os.path.join(
-    OUTPUT_DIR, "log_comparison_hicinterpolate_diag.csv")
-
-SUMMARY_FILENAME = os.path.join(OUTPUT_DIR, "log_comparison_summary_diag.csv")
-OUTPUT_HEATMAP_DIR = os.path.join(OUTPUT_DIR, "pred_heatmaps")
-CONFIG_PATH = f'/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate/src/inference/config.yml'
+ROOT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate'
+MODEL_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/triplets_dataset'
+DICT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test'
+IMAGE_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset'
+OUTPUT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/HiCInterpolate/'
+CSV_FILENAME_SUFFIX = "comparative_scores.csv"
 
 METHODS = ("hicinterpolate", "linear", "optical_flow")
-METRICS = ("psnr", "ssim", 'scc', "genome_disco", "hicrep", "lpips")
-
+METRICS = ("psnr", "ssim", 'scc', "genome_disco",
+           "hicrep", "spearman", "lpips")
 METRIC_PRECISION = 4
 NUM_VIZ_SAMPLES = 2
 
+BATCH_SIZE = 1
+
+RESOLUTIONS = [25000, 10000, 5000]
+PATCHES = [256, 128, 64]
+MODEL_BATCHES = [20, 20, 20]
 
 CHROMOSOMES = {
     "human": ["10", "11", "15", "16", "20", "21"]
@@ -123,6 +112,8 @@ def set_seed(seed_v: int = 42):
 
 def collate_fn(batch):
     batch = [b for b in batch if b is not None]
+    if len(batch) == 0:
+        return None
     return default_collate(batch)
 
 
@@ -131,10 +122,10 @@ def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False) -> D
         ds,
         batch_size=batch_size,
         collate_fn=collate_fn,
-        pin_memory=True,
+        pin_memory=False,
         shuffle=shuffle,
         worker_init_fn=set_seed,
-        num_workers=20,
+        num_workers=4,
         persistent_workers=True
     )
 
@@ -176,6 +167,7 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
     scc_list = []
     genome_disco_list = []
     hicrep_list = []
+    spearman_list = []
     lpips_list = []
 
     linear_psnr_list = []
@@ -183,6 +175,7 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
     linear_scc_list = []
     linear_genome_disco_list = []
     linear_hicrep_list = []
+    linear_spearman_list = []
     linear_lpips_list = []
 
     of_psnr_list = []
@@ -190,9 +183,13 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
     of_scc_list = []
     of_genome_disco_list = []
     of_hicrep_list = []
+    of_spearman_list = []
     of_lpips_list = []
 
-    for _, (x0, y, x1) in enumerate(tqdm(test_dl)):
+    for _, batch in enumerate(tqdm(test_dl)):
+        if batch is None:
+            continue
+        x0, y, x1 = batch
         x0 = x0.to(DEVICE)
         y = y.to(DEVICE)
         x1 = x1.to(DEVICE)
@@ -201,23 +198,24 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
         linear = linear_interpolation(x0, x1, t=0.5)
         of = OF(x0, x1)
 
-        if is_drawn is False:
-            num_examples = min(2, len(y))
-            y_cpu = y[:num_examples]
-            pred_cpu = pred[:num_examples]
-            linear_cpu = linear[:num_examples]
-            of_cpu = of[:num_examples]
-            plot.draw_hic_comparison(num_examples=num_examples, target=y_cpu,
-                                     pred=pred_cpu, linear=linear_cpu, of=of_cpu, file=heatmap_filename)
-            is_drawn = True
+        # if is_drawn is False:
+        #     num_examples = min(2, len(y))
+        #     y_cpu = y[:num_examples]
+        #     pred_cpu = pred[:num_examples]
+        #     linear_cpu = linear[:num_examples]
+        #     of_cpu = of[:num_examples]
+        #     plot.draw_hic_comparison(num_examples=num_examples, target=y_cpu,
+        #                              pred=pred_cpu, linear=linear_cpu, of=of_cpu, file=heatmap_filename)
+        #     is_drawn = True
 
         psnr_list.append(eval_metric.get_psnr_from_tensor(pred, y).item())
         ssim_list.append(eval_metric.get_ms_ssim_from_tensor(pred, y).item())
         scc_list.append(eval_metric.get_scc_from_tensor(pred, y).item())
-        genome_disco_list.append(compute_genomedisco.compute_reproducibility_from_tensor(
-            pred, y))
-        hicrep_list.append(compute_hicrep.get_hicrep_scc_from_tensor(
-            pred, y, resol=resol, h=5, lbr=0, ubr=resol*(patch-1)))
+        genome_disco_list.append(
+            eval_metric.get_genome_disco_from_tensor(pred, y).item())
+        hicrep_list.append(eval_metric.get_hicrep_from_tensor(pred, y).item())
+        spearman_list.append(
+            eval_metric.get_spearman_from_tensor(pred, y).item())
         lpips_list.append(eval_metric.get_lpips(pred, y).item())
 
         linear_psnr_list.append(
@@ -226,20 +224,23 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
             eval_metric.get_ms_ssim_from_tensor(linear, y).item())
         linear_scc_list.append(
             eval_metric.get_scc_from_tensor(linear, y).item())
-        linear_genome_disco_list.append(compute_genomedisco.compute_reproducibility_from_tensor(
-            linear, y))
-        linear_hicrep_list.append(compute_hicrep.get_hicrep_scc_from_tensor(
-            linear, y, resol=resol, h=5, lbr=0, ubr=resol*(patch-1)))
+        linear_genome_disco_list.append(
+            eval_metric.get_genome_disco_from_tensor(linear, y).item())
+        linear_hicrep_list.append(
+            eval_metric.get_hicrep_from_tensor(linear, y).item())
+        linear_spearman_list.append(
+            eval_metric.get_spearman_from_tensor(linear, y).item())
         linear_lpips_list.append(
             eval_metric.get_lpips(linear, y).item())
 
         of_psnr_list.append(eval_metric.get_psnr_from_tensor(of, y).item())
         of_ssim_list.append(eval_metric.get_ms_ssim_from_tensor(of, y).item())
         of_scc_list.append(eval_metric.get_scc_from_tensor(of, y).item())
-        of_genome_disco_list.append(compute_genomedisco.compute_reproducibility_from_tensor(
-            of, y))
-        of_hicrep_list.append(compute_hicrep.get_hicrep_scc_from_tensor(
-            of, y, resol=resol, h=5, lbr=0, ubr=resol*(patch-1)))
+        of_genome_disco_list.append(
+            eval_metric.get_genome_disco_from_tensor(of, y).item())
+        of_hicrep_list.append(eval_metric.get_hicrep_from_tensor(of, y).item())
+        of_spearman_list.append(
+            eval_metric.get_spearman_from_tensor(of, y).item())
         of_lpips_list.append(eval_metric.get_lpips(of, y).item())
 
         del x0, y, x1, pred, linear, of
@@ -247,9 +248,10 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
     metrics = {
         "psnr": {'ours': np.nanmean(np.array(psnr_list)), 'linear': np.nanmean(np.array(linear_psnr_list)), 'optical_flow': np.nanmean(np.array(of_psnr_list))},
         "ssim": {'ours': np.nanmean(np.array(ssim_list)), 'linear': np.nanmean(np.array(linear_ssim_list)), 'optical_flow': np.nanmean(np.array(of_ssim_list))},
-        "scc": {'ours': np.nanmean(np.array(scc_list)), 'linear': np.nanmean(np.array(linear_scc_list)), 'optical_flow': np.nanmean(np.array(of_scc_list))},
+        "spearman": {'ours': np.nanmean(np.array(spearman_list)), 'linear': np.nanmean(np.array(linear_spearman_list)), 'optical_flow': np.nanmean(np.array(of_spearman_list))},
         "genome_disco": {'ours': np.nanmean(np.array(genome_disco_list)), 'linear': np.nanmean(np.array(linear_genome_disco_list)), 'optical_flow': np.nanmean(np.array(of_genome_disco_list))},
         "hicrep": {'ours': np.nanmean(np.array(hicrep_list)), 'linear': np.nanmean(np.array(linear_hicrep_list)), 'optical_flow': np.nanmean(np.array(of_hicrep_list))},
+        "scc": {'ours': np.nanmean(np.array(scc_list)), 'linear': np.nanmean(np.array(linear_scc_list)), 'optical_flow': np.nanmean(np.array(of_scc_list))},
         "lpips": {'ours': np.nanmean(np.array(lpips_list)), 'linear': np.nanmean(np.array(linear_lpips_list)), 'optical_flow': np.nanmean(np.array(of_lpips_list))},
     }
 
@@ -259,9 +261,10 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
 COLUMN_NAMES = ["model", "resolution", "patch", "organism", "sample", "condition", "time", "chromosome",
                 "psnr_ours", "psnr_linear", "psnr_optical_flow",
                 "ssim_ours", "ssim_linear", "ssim_optical_flow",
-                "scc_ours", "scc_linear", "scc_optical_flow",
+                "spearman_ours", "spearman_linear", "spearman_optical_flow",
                 "genome_disco_ours", "genome_disco_linear", "genome_disco_optical_flow",
                 "hicrep_ours", "hicrep_linear", "hicrep_optical_flow",
+                "scc_ours", "scc_linear", "scc_optical_flow",
                 "lpips_ours", "lpips_linear", "lpips_optical_flow"]
 
 
@@ -281,15 +284,18 @@ def write_summary(model, resolution, patch, organism, sample, condition, time, c
         f"{metrics['ssim']['ours']:.{METRIC_PRECISION}f}",
         f"{metrics['ssim']['linear']:.{METRIC_PRECISION}f}",
         f"{metrics['ssim']['optical_flow']:.{METRIC_PRECISION}f}",
-        f"{metrics['scc']['ours']:.{METRIC_PRECISION}f}",
-        f"{metrics['scc']['linear']:.{METRIC_PRECISION}f}",
-        f"{metrics['scc']['optical_flow']:.{METRIC_PRECISION}f}",
+        f"{metrics['spearman']['ours']:.{METRIC_PRECISION}f}",
+        f"{metrics['spearman']['linear']:.{METRIC_PRECISION}f}",
+        f"{metrics['spearman']['optical_flow']:.{METRIC_PRECISION}f}",
         f"{metrics['genome_disco']['ours']:.{METRIC_PRECISION}f}",
         f"{metrics['genome_disco']['linear']:.{METRIC_PRECISION}f}",
         f"{metrics['genome_disco']['optical_flow']:.{METRIC_PRECISION}f}",
         f"{metrics['hicrep']['ours']:.{METRIC_PRECISION}f}",
         f"{metrics['hicrep']['linear']:.{METRIC_PRECISION}f}",
         f"{metrics['hicrep']['optical_flow']:.{METRIC_PRECISION}f}",
+        f"{metrics['scc']['ours']:.{METRIC_PRECISION}f}",
+        f"{metrics['scc']['linear']:.{METRIC_PRECISION}f}",
+        f"{metrics['scc']['optical_flow']:.{METRIC_PRECISION}f}",
         f"{metrics['lpips']['ours']:.{METRIC_PRECISION}f}",
         f"{metrics['lpips']['linear']:.{METRIC_PRECISION}f}",
         f"{metrics['lpips']['optical_flow']:.{METRIC_PRECISION}f}"
@@ -302,37 +308,44 @@ def write_summary(model, resolution, patch, organism, sample, condition, time, c
 
 
 def run_inference():
-    for model_res, model_patch, model_batch in zip(RESOLUTIONS, PATCHES, BATCHES):
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        os.makedirs(OUTPUT_HEATMAP_DIR, exist_ok=True)
+    for model_res in RESOLUTIONS:
+        for model_patch, model_batch in zip(PATCHES, MODEL_BATCHES):
+            config_name = f'config_{get_res_tag(model_res)}_{model_patch}'
 
-        with open(CSV_FILENAME, "w") as f:
-            f.write(",".join(COLUMN_NAMES) + "\n")
+            model_output_dir = os.path.join(OUTPUT_DIR, config_name)
+            os.makedirs(model_output_dir, exist_ok=True)
 
-        model_filename = os.path.join(
-            MODEL_DIR, f'config_{get_res_tag(model_res)}_{model_patch}', f"hicinterpolate_{model_patch}_p{model_patch}_b{model_batch}.pt")
-        model = load_model(model_filename)
-        print(f"Running inference for model: {model_filename}")
+            csv_filename = os.path.join(
+                model_output_dir, f'{config_name}_{CSV_FILENAME_SUFFIX}')
+            with open(csv_filename, "w") as f:
+                f.write(",".join(COLUMN_NAMES) + "\n")
 
-        for resolution in RESOLUTIONS:
-            for organism, samples in TEST_DATASET.items():
-                for sample, condition in samples.items():
-                    for subsample, content in condition.items():
-                        for triplet in content["triplets"]:
-                            uuid = triplet[0] + "_" + \
-                                triplet[1] + "_" + triplet[2]
-                            for chromosome in CHROMOSOMES[organism]:
-                                record_filename = os.path.join(
-                                    DICT_DIR, f"test_{str(resolution)}_{str(model_patch)}_{organism}_{triplet[1]}_{chromosome}.txt")
-                                print(
-                                    f"Running inference for record: {record_filename}")
-                                metrics = get_prediction(batch_size=model_batch, dataset_dict=record_filename, model=model,
-                                                         heatmap_filename=os.path.join(OUTPUT_HEATMAP_DIR, f"pred_heatmap_{str(resolution)}_{str(model_patch)}_{organism}_{triplet[1]}_{chromosome}.png"), resol=resolution, patch=model_patch)
+            heatmap_output_dir = os.path.join(
+                model_output_dir, 'heatmaps')
+            os.makedirs(heatmap_output_dir, exist_ok=True)
 
-                                write_summary(model=f'config_{get_res_tag(model_res)}_{model_patch}', resolution=resolution, patch=model_patch, organism=organism, sample=sample,
-                                              condition=subsample, time=triplet[1], chromosome=chromosome, metrics=metrics, output_file=CSV_FILENAME)
-                                print(
-                                    f"PSNR={metrics['psnr']['ours']:.4f}, SSIM={metrics['ssim']['ours']:.4f}, SCC={metrics['scc']['ours']:.4f}, GenomeDisco={metrics['genome_disco']['ours']:.4f}, HiCRep={metrics['hicrep']['ours']:.4f}, LPIPS={metrics['lpips']['ours']:.4f}")
+            model_filename = os.path.join(
+                MODEL_DIR, config_name, f"hicinterpolate_{model_patch}_p{model_patch}_b{model_batch}.pt")
+            model = load_model(model_filename)
+            print(f"Running inference for model: {model_filename}")
+
+            for resolution in RESOLUTIONS:
+                for organism, samples in TEST_DATASET.items():
+                    for sample, condition in samples.items():
+                        for subsample, content in condition.items():
+                            for triplet in content["triplets"]:
+                                for chromosome in CHROMOSOMES[organism]:
+                                    record_filename = os.path.join(
+                                        DICT_DIR, f"test_{str(resolution)}_{str(model_patch)}_{organism}_{triplet[1]}_{chromosome}.txt")
+                                    print(
+                                        f"Running inference for record: {record_filename}")
+                                    metrics = get_prediction(batch_size=BATCH_SIZE, dataset_dict=record_filename, model=model,
+                                                             heatmap_filename=os.path.join(heatmap_output_dir, f"pred_heatmap_{str(resolution)}_{str(model_patch)}_{organism}_{triplet[1]}_{chromosome}.png"), resol=resolution, patch=model_patch)
+
+                                    write_summary(model=config_name, resolution=resolution, patch=model_patch, organism=organism, sample=sample,
+                                                  condition=subsample, time=triplet[1], chromosome=chromosome, metrics=metrics, output_file=csv_filename)
+                                    print(
+                                        f"PSNR={metrics['psnr']['ours']:.4f}, SSIM={metrics['ssim']['ours']:.4f}, Spearman={metrics['spearman']['ours']:.4f}, GenomeDisco={metrics['genome_disco']['ours']:.4f}, HiCRep={metrics['hicrep']['ours']:.4f}, SCC={metrics['scc']['ours']:.4f}, LPIPS={metrics['lpips']['ours']:.4f}")
 
 
 if __name__ == "__main__":
