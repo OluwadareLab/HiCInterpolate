@@ -1,5 +1,4 @@
 from time import time
-
 from src.interpolator.model import Interpolator
 import matplotlib.colors as mcolors
 from src.metric import metrics as eval_metric
@@ -14,12 +13,14 @@ import os
 import random
 from src.misc import plots as plot
 from flow_based_interpolation import of_interpolation as OF
+import logging
 
-ROOT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate'
-MODEL_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/triplets_dataset'
-DICT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test'
-IMAGE_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset'
-OUTPUT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/HiCInterpolate/'
+ROOT_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate'
+MODEL_DIR = f'{ROOT_DIR}/datasets/final_output/triplets_dataset'
+DICT_DIR = f'{ROOT_DIR}/datasets/triplets_dataset/test'
+IMAGE_DIR = f'{ROOT_DIR}/datasets/triplets_dataset'
+OUTPUT_DIR = f'{ROOT_DIR}/datasets/final_output/HiCInterpolate/'
+LOG_FILE = f'{ROOT_DIR}/datasets/final_output/HiCInterpolate/inference.log'
 CSV_FILENAME_SUFFIX = "comparative_scores.csv"
 
 METHODS = ("hicinterpolate", "linear", "optical_flow")
@@ -28,7 +29,7 @@ METRICS = ("psnr", "ssim", 'scc', "genome_disco",
 METRIC_PRECISION = 4
 NUM_VIZ_SAMPLES = 2
 
-BATCH_SIZE = 1
+BATCH_SIZE = 10
 
 RESOLUTIONS = [25000, 10000, 5000]
 PATCHES = [256, 128, 64]
@@ -89,6 +90,16 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 CMAP_JUICEBOX = mcolors.LinearSegmentedColormap.from_list(
     "juicebox", ["#FFFFFF", "#FFAAAA", "#FF5555", "#FF0000", "#B30000"], N=256
 )
+
+
+def base_logger(file):
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(filename=file, format="[%(asctime)s] [%(levelname)s] %(message)s",
+                        datefmt="%Y-%m-%d %H:%M:%S", level=logging.INFO)
+    return logger
+
+
+LOG = base_logger(LOG_FILE)
 
 
 def get_res_tag(resolution: int) -> str:
@@ -328,6 +339,7 @@ def run_inference():
                 MODEL_DIR, config_name, f"hicinterpolate_{model_patch}_p{model_patch}_b{model_batch}.pt")
             model = load_model(model_filename)
             print(f"Running inference for model: {model_filename}")
+            LOG.info(f"Running inference for model: {model_filename}")
 
             for resolution in RESOLUTIONS:
                 for organism, samples in TEST_DATASET.items():
@@ -339,13 +351,17 @@ def run_inference():
                                         DICT_DIR, f"test_{str(resolution)}_{str(model_patch)}_{organism}_{triplet[1]}_{chromosome}.txt")
                                     print(
                                         f"Running inference for record: {record_filename}")
+                                    LOG.info(
+                                        f"Running inference for record: {record_filename}")
                                     metrics = get_prediction(batch_size=BATCH_SIZE, dataset_dict=record_filename, model=model,
                                                              heatmap_filename=os.path.join(heatmap_output_dir, f"pred_heatmap_{str(resolution)}_{str(model_patch)}_{organism}_{triplet[1]}_{chromosome}.png"), resol=resolution, patch=model_patch)
 
                                     write_summary(model=config_name, resolution=resolution, patch=model_patch, organism=organism, sample=sample,
                                                   condition=subsample, time=triplet[1], chromosome=chromosome, metrics=metrics, output_file=csv_filename)
-                                    print(
-                                        f"PSNR={metrics['psnr']['ours']:.4f}, SSIM={metrics['ssim']['ours']:.4f}, Spearman={metrics['spearman']['ours']:.4f}, GenomeDisco={metrics['genome_disco']['ours']:.4f}, HiCRep={metrics['hicrep']['ours']:.4f}, SCC={metrics['scc']['ours']:.4f}, LPIPS={metrics['lpips']['ours']:.4f}")
+
+                                    score_summary = f"PSNR={metrics['psnr']['ours']:.4f}, SSIM={metrics['ssim']['ours']:.4f}, Spearman={metrics['spearman']['ours']:.4f}, GenomeDisco={metrics['genome_disco']['ours']:.4f}, HiCRep={metrics['hicrep']['ours']:.4f}, SCC={metrics['scc']['ours']:.4f}, LPIPS={metrics['lpips']['ours']:.4f}"
+                                    print(score_summary)
+                                    LOG.info(score_summary)
 
 
 if __name__ == "__main__":
