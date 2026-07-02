@@ -68,3 +68,14 @@ Thumbs.db
 .cursorindexingignore
 .codegraph
 *.prompt.md
+.agents
+.codegraph
+.cursor
+.pytest_cache
+.vscode
+graphify-out
+*.md
+!README.md
+!requirements.txt
+!readme.md
+*.log

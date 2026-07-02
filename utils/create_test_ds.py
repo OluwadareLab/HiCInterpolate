@@ -1,8 +1,9 @@
 import os
 import re
 
-DATASET_DICT_PATH = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset'
-OUTPUT_PATH = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test'
+ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries"
+DATASET_DICT_PATH = f"{ROOT_PATH}/new_triplets"
+OUTPUT_PATH = f"{ROOT_PATH}/new_triplets/test"
 
 RESOLUTIONS = [25000, 10000, 5000]
 PATCHES = [64, 128, 256, 512]
@@ -15,38 +16,57 @@ DATASET = {
         "dmso": {
             "control": {
                 "triplets":
-                [
-                    ["4DNFIP9EJSOM_dmso_control_0m",
-                     "4DNFI7T93SHL_dmso_control_30m",
-                     "4DNFICF2Z2TG_dmso_control_60m"],
+                    [
+                        ["dmso_control_0m",
+                         "dmso_control_30m",
+                         "dmso_control_60m"],
 
-                    ["4DNFI7T93SHL_dmso_control_30m",
-                     "4DNFICF2Z2TG_dmso_control_60m",
-                     "4DNFILL624WG_dmso_control_90m"],
+                        ["dmso_control_30m",
+                         "dmso_control_60m",
+                         "dmso_control_90m"],
 
-                    ["4DNFICF2Z2TG_dmso_control_60m",
-                     "4DNFILL624WG_dmso_control_90m",
-                     "4DNFIC4GB8UM_dmso_control_120m"]
-                ]
+                        ["dmso_control_60m",
+                         "dmso_control_90m",
+                         "dmso_control_120m"]
+                    ]
             }
         },
         "dtag": {
             "v1": {
                 "triplets":
-                [
-                    ["4DNFI5EAPQTI_dtag_v1_0m",
-                     "4DNFIY1TCVLX_dtag_v1_30m",
-                     "4DNFIXWT5U42_dtag_v1_60m"],
+                    [
+                        ["dtag_v1_0m",
+                         "dtag_v1_30m",
+                         "dtag_v1_60m"],
 
-                    ["4DNFIY1TCVLX_dtag_v1_30m",
-                     "4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m"],
+                        ["dtag_v1_30m",
+                         "dtag_v1_60m",
+                         "dtag_v1_90m"],
 
-                    ["4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m",
-                     "4DNFIPZCCTV6_dtag_v1_120m"]
-                ]
+                        ["dtag_v1_60m",
+                         "dtag_v1_90m",
+                         "dtag_v1_120m"]
+                    ]
             }
+        },
+        "wtc11": {
+            "atrial": {
+                "triplets":
+                    [
+                        ["wtc11_atrial_2880m",
+                         "wtc11_atrial_5760m",
+                         "wtc11_atrial_8640m"]
+                    ]
+            },
+            "ventricular": {
+                "triplets":
+                    [
+                        ["wtc11_ventricular_2880m",
+                         "wtc11_ventricular_5760m",
+                         "wtc11_ventricular_8640m"]
+                    ]
+            }
+
         }
     }
 }
@@ -74,15 +94,11 @@ def prepare_triplates():
                 for sample, subsamples in samples.items():
                     for subsample, content in subsamples.items():
                         for triplet in content["triplets"]:
-                            uuid = triplet[0] + "_" + \
-                                triplet[1] + "_" + triplet[2]
                             for chromosome in CHROMOSOMES[organism]:
-                                record = f"{str(resolution)}/{str(patch)}/{organism}/{sample}/{subsample}/{str(uuid)}/{chromosome}"
-
-                                output_file = f"{OUTPUT_PATH}/test_{resolution}_{patch}_{organism}_{triplet[1]}_{chromosome}.txt"
+                                record = f"{resolution}/{organism}/{sample}/{subsample}/{triplet[1]}/chr{chromosome}/{patch}"
+                                output_file = f"{OUTPUT_PATH}/test_{resolution}_{patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.txt"
                                 os.makedirs(os.path.dirname(
                                     output_file), exist_ok=True)
-
                                 get_triplet_dict(
                                     input_file, output_file, record)
 

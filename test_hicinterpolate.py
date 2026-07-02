@@ -14,26 +14,26 @@ import random
 from src.misc import plots as plot
 from flow_based_interpolation import of_interpolation as OF
 import logging
+from _4DMax import model as _4DMax_model
 
 ROOT_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate'
 MODEL_DIR = f'{ROOT_DIR}/datasets/final_output/triplets_dataset'
 DICT_DIR = f'{ROOT_DIR}/datasets/triplets_dataset/test'
 IMAGE_DIR = f'{ROOT_DIR}/datasets/triplets_dataset'
-OUTPUT_DIR = f'{ROOT_DIR}/datasets/final_output/HiCInterpolate/'
-LOG_FILE = f'{ROOT_DIR}/datasets/final_output/HiCInterpolate/inference.log'
+OUTPUT_DIR = f'{ROOT_DIR}/datasets/final_output/Plots_HiCInterpolate/'
+LOG_FILE = f'{ROOT_DIR}/datasets/final_output/Plots_HiCInterpolate/inference.log'
 CSV_FILENAME_SUFFIX = "comparative_scores.csv"
 
-METHODS = ("hicinterpolate", "linear", "optical_flow")
-METRICS = ("psnr", "ssim", 'scc', "genome_disco",
-           "hicrep", "spearman", "lpips")
+METHODS = ("Hicinterpolate", "4DMax", "Linear", "Optical Flow")
+METRICS = ("psnr", "ssim",  "spearman", 'scc',
+           "genome_disco", "genome_disco2", "hicrep")
 METRIC_PRECISION = 4
-NUM_VIZ_SAMPLES = 2
 
-BATCH_SIZE = 10
+BATCH_SIZE = 1
 
-RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [256, 128, 64]
-MODEL_BATCHES = [20, 20, 20]
+RESOLUTIONS = [25000]
+PATCHES = [64]
+MODEL_BATCHES = [20]
 
 CHROMOSOMES = {
     "human": ["10", "11", "15", "16", "20", "21"]
@@ -45,17 +45,9 @@ TEST_DATASET = {
             "control": {
                 "triplets":
                 [
-                    ["4DNFIP9EJSOM_dmso_control_0m",
-                     "4DNFI7T93SHL_dmso_control_30m",
-                     "4DNFICF2Z2TG_dmso_control_60m"],
-
                     ["4DNFI7T93SHL_dmso_control_30m",
                      "4DNFICF2Z2TG_dmso_control_60m",
-                     "4DNFILL624WG_dmso_control_90m"],
-
-                    ["4DNFICF2Z2TG_dmso_control_60m",
-                     "4DNFILL624WG_dmso_control_90m",
-                     "4DNFIC4GB8UM_dmso_control_120m"]
+                     "4DNFILL624WG_dmso_control_90m"]
                 ]
             }
         },
@@ -63,18 +55,28 @@ TEST_DATASET = {
             "v1": {
                 "triplets":
                 [
-                    ["4DNFI5EAPQTI_dtag_v1_0m",
-                     "4DNFIY1TCVLX_dtag_v1_30m",
-                     "4DNFIXWT5U42_dtag_v1_60m"],
-
                     ["4DNFIY1TCVLX_dtag_v1_30m",
                      "4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m"],
-
-                    ["4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m",
-                     "4DNFIPZCCTV6_dtag_v1_120m"]
+                     "4DNFIHTFIMGG_dtag_v1_90m"]
                 ]
+            }
+        },
+        "wtc11": {
+            "atrial": {
+                "triplets":
+                    [
+                        ["wtc11_atrial_2880m",
+                         "wtc11_atrial_5760m",
+                         "wtc11_atrial_8640m"]
+                    ]
+            },
+            "ventricular": {
+                "triplets":
+                    [
+                        ["wtc11_ventricular_2880m",
+                         "wtc11_ventricular_5760m",
+                         "wtc11_ventricular_8640m"]
+                    ]
             }
         }
     }
@@ -85,6 +87,7 @@ IMAGE_MAP = {
     'frame_1': 'img2.npy',
     'frame_2': 'img3.npy'
 }
+
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 CMAP_JUICEBOX = mcolors.LinearSegmentedColormap.from_list(
@@ -128,7 +131,7 @@ def collate_fn(batch):
     return default_collate(batch)
 
 
-def get_dataloader(ds: Dataset, batch_size: int = 8, shuffle: bool = False) -> DataLoader:
+def get_dataloader(ds: Dataset, batch_size: int = 1, shuffle: bool = False) -> DataLoader:
     return DataLoader(
         ds,
         batch_size=batch_size,
@@ -171,112 +174,186 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
     _, _, test_ds = cds._get_dataset()
 
     test_dl = get_dataloader(ds=test_ds, batch_size=batch_size, shuffle=False)
-    is_drawn = False
-
+    
     psnr_list = []
     ssim_list = []
+    spearman_list = []
     scc_list = []
     genome_disco_list = []
+    genome_disco2_list = []
     hicrep_list = []
-    spearman_list = []
-    lpips_list = []
 
-    linear_psnr_list = []
-    linear_ssim_list = []
-    linear_scc_list = []
-    linear_genome_disco_list = []
-    linear_hicrep_list = []
-    linear_spearman_list = []
-    linear_lpips_list = []
+    _4dmax_psnr_list = []
+    _4dmax_ssim_list = []
+    _4dmax_spearman_list = []
+    _4dmax_scc_list = []
+    _4dmax_genome_disco_list = []
+    _4dmax_genome_disco2_list = []
+    _4dmax_hicrep_list = []
 
     of_psnr_list = []
     of_ssim_list = []
+    of_spearman_list = []
     of_scc_list = []
     of_genome_disco_list = []
+    of_genome_disco2_list = []
     of_hicrep_list = []
-    of_spearman_list = []
-    of_lpips_list = []
 
+    linear_psnr_list = []
+    linear_ssim_list = []
+    linear_spearman_list = []
+    linear_scc_list = []
+    linear_genome_disco_list = []
+    linear_genome_disco2_list = []
+    linear_hicrep_list = []
+
+    count = 0
     for _, batch in enumerate(tqdm(test_dl)):
+        count += 1
         if batch is None:
             continue
-        x0, y, x1 = batch
-        x0 = x0.to(DEVICE)
-        y = y.to(DEVICE)
+        x1, target, x2 = batch
         x1 = x1.to(DEVICE)
-        pred = model(x0, x1)
+        target = target.to(DEVICE)
+        x2 = x2.to(DEVICE)
+        pred = model(x1, x2)
         pred[pred < 0] = 0
-        linear = linear_interpolation(x0, x1, t=0.5)
-        of = OF(x0, x1)
+        _4dmax_pred = _4DMax_model.run_4dmax(x1, x2)
+        linear = linear_interpolation(x1, x2, t=0.5)
+        of = OF(x1, x2)
 
-        # if is_drawn is False:
-        #     num_examples = min(2, len(y))
-        #     y_cpu = y[:num_examples]
-        #     pred_cpu = pred[:num_examples]
-        #     linear_cpu = linear[:num_examples]
-        #     of_cpu = of[:num_examples]
-        #     plot.draw_hic_comparison(num_examples=num_examples, target=y_cpu,
-        #                              pred=pred_cpu, linear=linear_cpu, of=of_cpu, file=heatmap_filename)
-        #     is_drawn = True
+        num_examples = min(1, len(target))
 
-        psnr_list.append(eval_metric.get_psnr_from_tensor(pred, y).item())
-        ssim_list.append(eval_metric.get_ms_ssim_from_tensor(pred, y).item())
-        scc_list.append(eval_metric.get_scc_from_tensor(pred, y).item())
-        genome_disco_list.append(
-            eval_metric.get_genome_disco_from_tensor(pred, y).item())
-        hicrep_list.append(eval_metric.get_hicrep_from_tensor(pred, y).item())
+        plot.plot_hic_heatmap(target=target[:num_examples],
+                              title="Ground Truth", filename_prefix=heatmap_filename, count=count)
+
+        plot.plot_hic_heatmap(target=pred[:num_examples],
+                              title="Ours", filename_prefix=heatmap_filename, count=count)
+        psnr_list.append(eval_metric.get_psnr_from_tensor(pred, target).item())
+        ssim_list.append(
+            eval_metric.get_ms_ssim_from_tensor(pred, target).item())
         spearman_list.append(
-            eval_metric.get_spearman_from_tensor(pred, y).item())
-        lpips_list.append(eval_metric.get_lpips(pred, y).item())
+            eval_metric.get_spearman_from_tensor(pred, target).item())
+        scc_list.append(eval_metric.get_scc_from_tensor(pred, target).item())
+        genome_disco_list.append(
+            eval_metric.get_genome_disco_from_tensor(pred, target).item())
+        genome_disco2_list.append(
+            eval_metric.get_genome_disco2_from_tensor(pred, target).item())
+        hicrep_list.append(
+            eval_metric.get_hicrep_from_tensor(pred, target).item())
 
-        linear_psnr_list.append(
-            eval_metric.get_psnr_from_tensor(linear, y).item())
-        linear_ssim_list.append(
-            eval_metric.get_ms_ssim_from_tensor(linear, y).item())
-        linear_scc_list.append(
-            eval_metric.get_scc_from_tensor(linear, y).item())
-        linear_genome_disco_list.append(
-            eval_metric.get_genome_disco_from_tensor(linear, y).item())
-        linear_hicrep_list.append(
-            eval_metric.get_hicrep_from_tensor(linear, y).item())
-        linear_spearman_list.append(
-            eval_metric.get_spearman_from_tensor(linear, y).item())
-        linear_lpips_list.append(
-            eval_metric.get_lpips(linear, y).item())
+        if not torch.isnan(_4dmax_pred).any():
+            plot.plot_hic_heatmap(target=_4dmax_pred[:num_examples],
+                                  title="4DMax", filename_prefix=heatmap_filename, count=count)
+            _4dmax_psnr_list.append(
+                eval_metric.get_psnr_from_tensor(_4dmax_pred, target).item())
+            _4dmax_ssim_list.append(
+                eval_metric.get_ms_ssim_from_tensor(_4dmax_pred, target).item())
+            _4dmax_spearman_list.append(
+                eval_metric.get_spearman_from_tensor(_4dmax_pred, target).item())
+            _4dmax_scc_list.append(
+                eval_metric.get_scc_from_tensor(_4dmax_pred, target).item())
+            _4dmax_genome_disco_list.append(
+                eval_metric.get_genome_disco_from_tensor(_4dmax_pred, target).item())
+            _4dmax_genome_disco2_list.append(
+                eval_metric.get_genome_disco2_from_tensor(_4dmax_pred, target).item())
+            _4dmax_hicrep_list.append(
+                eval_metric.get_hicrep_from_tensor(_4dmax_pred, target).item())
 
-        of_psnr_list.append(eval_metric.get_psnr_from_tensor(of, y).item())
-        of_ssim_list.append(eval_metric.get_ms_ssim_from_tensor(of, y).item())
-        of_scc_list.append(eval_metric.get_scc_from_tensor(of, y).item())
-        of_genome_disco_list.append(
-            eval_metric.get_genome_disco_from_tensor(of, y).item())
-        of_hicrep_list.append(eval_metric.get_hicrep_from_tensor(of, y).item())
+        plot.plot_hic_heatmap(target=of[:num_examples],
+                              title="Optical Flow", filename_prefix=heatmap_filename, count=count)
+        of_psnr_list.append(
+            eval_metric.get_psnr_from_tensor(of, target).item())
+        of_ssim_list.append(
+            eval_metric.get_ms_ssim_from_tensor(of, target).item())
         of_spearman_list.append(
-            eval_metric.get_spearman_from_tensor(of, y).item())
-        of_lpips_list.append(eval_metric.get_lpips(of, y).item())
+            eval_metric.get_spearman_from_tensor(of, target).item())
+        of_scc_list.append(eval_metric.get_scc_from_tensor(of, target).item())
+        of_genome_disco_list.append(
+            eval_metric.get_genome_disco2_from_tensor(of, target).item())
+        of_genome_disco2_list.append(
+            eval_metric.get_genome_disco2_from_tensor(of, target).item())
+        of_hicrep_list.append(
+            eval_metric.get_hicrep_from_tensor(of, target).item())
 
-        del x0, y, x1, pred, linear, of
+        plot.plot_hic_heatmap(target=linear[:num_examples],
+                              title="Linear", filename_prefix=heatmap_filename, count=count)
+        linear_psnr_list.append(
+            eval_metric.get_psnr_from_tensor(linear, target).item())
+        linear_ssim_list.append(
+            eval_metric.get_ms_ssim_from_tensor(linear, target).item())
+        linear_spearman_list.append(
+            eval_metric.get_spearman_from_tensor(linear, target).item())
+        linear_scc_list.append(
+            eval_metric.get_scc_from_tensor(linear, target).item())
+        linear_genome_disco_list.append(
+            eval_metric.get_genome_disco_from_tensor(linear, target).item())
+        linear_genome_disco2_list.append(
+            eval_metric.get_genome_disco2_from_tensor(linear, target).item())
+        linear_hicrep_list.append(
+            eval_metric.get_hicrep_from_tensor(linear, target).item())
+
+        del x1, target, x2, pred, _4dmax_pred, of, linear
 
     metrics = {
-        "psnr": {'ours': np.nanmean(np.array(psnr_list)), 'linear': np.nanmean(np.array(linear_psnr_list)), 'optical_flow': np.nanmean(np.array(of_psnr_list))},
-        "ssim": {'ours': np.nanmean(np.array(ssim_list)), 'linear': np.nanmean(np.array(linear_ssim_list)), 'optical_flow': np.nanmean(np.array(of_ssim_list))},
-        "spearman": {'ours': np.nanmean(np.array(spearman_list)), 'linear': np.nanmean(np.array(linear_spearman_list)), 'optical_flow': np.nanmean(np.array(of_spearman_list))},
-        "genome_disco": {'ours': np.nanmean(np.array(genome_disco_list)), 'linear': np.nanmean(np.array(linear_genome_disco_list)), 'optical_flow': np.nanmean(np.array(of_genome_disco_list))},
-        "hicrep": {'ours': np.nanmean(np.array(hicrep_list)), 'linear': np.nanmean(np.array(linear_hicrep_list)), 'optical_flow': np.nanmean(np.array(of_hicrep_list))},
-        "scc": {'ours': np.nanmean(np.array(scc_list)), 'linear': np.nanmean(np.array(linear_scc_list)), 'optical_flow': np.nanmean(np.array(of_scc_list))},
-        "lpips": {'ours': np.nanmean(np.array(lpips_list)), 'linear': np.nanmean(np.array(linear_lpips_list)), 'optical_flow': np.nanmean(np.array(of_lpips_list))},
+        "psnr": {
+            'ours': np.nanmean(psnr_list),
+            '4dmax': np.nanmean(_4dmax_psnr_list),
+            'optical_flow': np.nanmean(of_psnr_list),
+            'linear': np.nanmean(linear_psnr_list)
+        },
+        "ssim": {
+            'ours': np.nanmean(ssim_list),
+            '4dmax': np.nanmean(_4dmax_ssim_list),
+            'optical_flow': np.nanmean(of_ssim_list),
+            'linear': np.nanmean(linear_ssim_list)
+        },
+        "spearman": {
+            'ours': np.nanmean(spearman_list),
+            '4dmax': np.nanmean(_4dmax_spearman_list),
+            'optical_flow': np.nanmean(of_spearman_list),
+            'linear': np.nanmean(linear_spearman_list)
+        },
+        "scc": {
+            'ours': np.nanmean(scc_list),
+            '4dmax': np.nanmean(_4dmax_scc_list),
+            'optical_flow': np.nanmean(of_scc_list),
+            'linear': np.nanmean(linear_scc_list)
+
+        },
+        "genome_disco": {
+            'ours': np.nanmean(genome_disco_list),
+            '4dmax': np.nanmean(_4dmax_genome_disco_list),
+            'optical_flow': np.nanmean(of_genome_disco_list),
+            'linear': np.nanmean(linear_genome_disco_list)
+
+        },
+        "genome_disco2": {
+            'ours': np.nanmean(genome_disco2_list),
+            '4dmax': np.nanmean(_4dmax_genome_disco2_list),
+            'optical_flow': np.nanmean(of_genome_disco2_list),
+            'linear': np.nanmean(linear_genome_disco2_list)
+        },
+        "hicrep": {
+            'ours': np.nanmean(hicrep_list),
+            '4dmax': np.nanmean(_4dmax_hicrep_list),
+            'optical_flow': np.nanmean(of_hicrep_list),
+            'linear': np.nanmean(linear_hicrep_list)
+        }
     }
 
     return metrics
 
 
 COLUMN_NAMES = ["model", "resolution", "patch", "organism", "sample", "condition", "time", "chromosome",
-                "psnr_ours", "psnr_linear", "psnr_optical_flow",
-                "ssim_ours", "ssim_linear", "ssim_optical_flow",
-                "spearman_ours", "spearman_linear", "spearman_optical_flow",
-                "genome_disco_ours", "genome_disco_linear", "genome_disco_optical_flow",
-                "hicrep_ours", "hicrep_linear", "hicrep_optical_flow",
-                "scc_ours", "scc_linear", "scc_optical_flow",
-                "lpips_ours", "lpips_linear", "lpips_optical_flow"]
+                "psnr_ours", "psnr_4dmax",  "psnr_optical_flow", "psnr_linear",
+                "ssim_ours",  "ssim_4dmax", "ssim_optical_flow", "ssim_linear",
+                "spearman_ours",  "spearman_4dmax", "spearman_optical_flow", "spearman_linear",
+                "scc_ours",  "scc_4dmax", "scc_optical_flow", "scc_linear",
+                "genome_disco_ours",  "genome_disco_4dmax", "genome_disco_optical_flow", "genome_disco_linear",
+                "genome_disco2_ours",  "genome_disco2_4dmax", "genome_disco2_optical_flow", "genome_disco2_linear",
+                "hicrep_ours",  "hicrep_4dmax", "hicrep_optical_flow", "hicrep_linear"
+                ]
 
 
 def write_summary(model, resolution, patch, organism, sample, condition, time, chromosome, metrics, output_file):
@@ -290,32 +367,48 @@ def write_summary(model, resolution, patch, organism, sample, condition, time, c
         str(time),
         chromosome,
         f"{metrics['psnr']['ours']:.{METRIC_PRECISION}f}",
-        f"{metrics['psnr']['linear']:.{METRIC_PRECISION}f}",
+        f"{metrics['psnr']['4dmax']:.{METRIC_PRECISION}f}",
         f"{metrics['psnr']['optical_flow']:.{METRIC_PRECISION}f}",
+        f"{metrics['psnr']['linear']:.{METRIC_PRECISION}f}",
+
         f"{metrics['ssim']['ours']:.{METRIC_PRECISION}f}",
-        f"{metrics['ssim']['linear']:.{METRIC_PRECISION}f}",
+        f"{metrics['ssim']['4dmax']:.{METRIC_PRECISION}f}",
         f"{metrics['ssim']['optical_flow']:.{METRIC_PRECISION}f}",
+        f"{metrics['ssim']['linear']:.{METRIC_PRECISION}f}",
+
         f"{metrics['spearman']['ours']:.{METRIC_PRECISION}f}",
-        f"{metrics['spearman']['linear']:.{METRIC_PRECISION}f}",
+        f"{metrics['spearman']['4dmax']:.{METRIC_PRECISION}f}",
         f"{metrics['spearman']['optical_flow']:.{METRIC_PRECISION}f}",
-        f"{metrics['genome_disco']['ours']:.{METRIC_PRECISION}f}",
-        f"{metrics['genome_disco']['linear']:.{METRIC_PRECISION}f}",
-        f"{metrics['genome_disco']['optical_flow']:.{METRIC_PRECISION}f}",
-        f"{metrics['hicrep']['ours']:.{METRIC_PRECISION}f}",
-        f"{metrics['hicrep']['linear']:.{METRIC_PRECISION}f}",
-        f"{metrics['hicrep']['optical_flow']:.{METRIC_PRECISION}f}",
+        f"{metrics['spearman']['linear']:.{METRIC_PRECISION}f}",
+
         f"{metrics['scc']['ours']:.{METRIC_PRECISION}f}",
-        f"{metrics['scc']['linear']:.{METRIC_PRECISION}f}",
+        f"{metrics['scc']['4dmax']:.{METRIC_PRECISION}f}",
         f"{metrics['scc']['optical_flow']:.{METRIC_PRECISION}f}",
-        f"{metrics['lpips']['ours']:.{METRIC_PRECISION}f}",
-        f"{metrics['lpips']['linear']:.{METRIC_PRECISION}f}",
-        f"{metrics['lpips']['optical_flow']:.{METRIC_PRECISION}f}"
+        f"{metrics['scc']['linear']:.{METRIC_PRECISION}f}",
+
+        f"{metrics['genome_disco']['ours']:.{METRIC_PRECISION}f}",
+        f"{metrics['genome_disco']['4dmax']:.{METRIC_PRECISION}f}",
+        f"{metrics['genome_disco']['optical_flow']:.{METRIC_PRECISION}f}",
+        f"{metrics['genome_disco']['linear']:.{METRIC_PRECISION}f}",
+
+        f"{metrics['genome_disco2']['ours']:.{METRIC_PRECISION}f}",
+        f"{metrics['genome_disco2']['4dmax']:.{METRIC_PRECISION}f}",
+        f"{metrics['genome_disco2']['optical_flow']:.{METRIC_PRECISION}f}",
+        f"{metrics['genome_disco2']['linear']:.{METRIC_PRECISION}f}",
+
+        f"{metrics['hicrep']['ours']:.{METRIC_PRECISION}f}",
+        f"{metrics['hicrep']['4dmax']:.{METRIC_PRECISION}f}",
+        f"{metrics['hicrep']['optical_flow']:.{METRIC_PRECISION}f}",
+        f"{metrics['hicrep']['linear']:.{METRIC_PRECISION}f}"
     ]
 
     with open(output_file, "a") as f:
         f.write(",".join(row) + "\n")
         f.flush()
         f.close()
+
+    print(row)
+    LOG.info(row)
 
 
 def run_inference():
@@ -348,20 +441,18 @@ def run_inference():
                             for triplet in content["triplets"]:
                                 for chromosome in CHROMOSOMES[organism]:
                                     record_filename = os.path.join(
-                                        DICT_DIR, f"test_{str(resolution)}_{str(model_patch)}_{organism}_{triplet[1]}_{chromosome}.txt")
+                                        DICT_DIR, f'test_{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.txt')
                                     print(
                                         f"Running inference for record: {record_filename}")
                                     LOG.info(
                                         f"Running inference for record: {record_filename}")
+
+                                    plot_filename = f"{heatmap_output_dir}/plot_{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_{chromosome}.png"
                                     metrics = get_prediction(batch_size=BATCH_SIZE, dataset_dict=record_filename, model=model,
-                                                             heatmap_filename=os.path.join(heatmap_output_dir, f"pred_heatmap_{str(resolution)}_{str(model_patch)}_{organism}_{triplet[1]}_{chromosome}.png"), resol=resolution, patch=model_patch)
+                                                             heatmap_filename=plot_filename, resol=resolution, patch=model_patch)
 
                                     write_summary(model=config_name, resolution=resolution, patch=model_patch, organism=organism, sample=sample,
                                                   condition=subsample, time=triplet[1], chromosome=chromosome, metrics=metrics, output_file=csv_filename)
-
-                                    score_summary = f"PSNR={metrics['psnr']['ours']:.4f}, SSIM={metrics['ssim']['ours']:.4f}, Spearman={metrics['spearman']['ours']:.4f}, GenomeDisco={metrics['genome_disco']['ours']:.4f}, HiCRep={metrics['hicrep']['ours']:.4f}, SCC={metrics['scc']['ours']:.4f}, LPIPS={metrics['lpips']['ours']:.4f}"
-                                    print(score_summary)
-                                    LOG.info(score_summary)
 
 
 if __name__ == "__main__":

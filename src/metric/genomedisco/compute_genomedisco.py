@@ -16,51 +16,50 @@ def compute_reproducibility_from_tensor(pred: torch.Tensor, target: torch.Tensor
             reproducibility_list = [reproducibility]
         else:
             reproducibility_list.append(reproducibility)
-    return np.array(reproducibility_list).mean()
+    return np.nanmean(reproducibility_list)
 
 
 def compute_reproducibility(pred: np.ndarray, target: np.ndarray):
-    # try:
-    #     assert pred.shape == target.shape
-    # except Exception as e:
-    #     print(e)
-    #     return np.nan
+    try:
+        pred_csr = processing.construct_csr_matrix_from_data_and_nodes(pred)
+        target_csr = processing.construct_csr_matrix_from_data_and_nodes(
+            target)
 
-    pred_csr = processing.construct_csr_matrix_from_data_and_nodes(pred)
-    target_csr = processing.construct_csr_matrix_from_data_and_nodes(target)
+        stats = {}
+        stats['mat1'] = {}
+        stats['mat2'] = {}
+        stats['mat1']['depth'] = pred_csr.sum()
+        stats['mat2']['depth'] = target_csr.sum()
 
-    stats = {}
-    stats['mat1'] = {}
-    stats['mat2'] = {}
-    stats['mat1']['depth'] = pred_csr.sum()
-    stats['mat2']['depth'] = target_csr.sum()
+        m1_subsample = copy.deepcopy(pred_csr)
+        m2_subsample = copy.deepcopy(target_csr)
 
-    m1_subsample = copy.deepcopy(pred_csr)
-    m2_subsample = copy.deepcopy(target_csr)
+        if stats['mat1']['depth'] >= stats['mat2']['depth']:
+            m_subsample = copy.deepcopy(target_csr)
+        if stats['mat1']['depth'] < stats['mat2']['depth']:
+            m_subsample = copy.deepcopy(pred_csr)
+        desired_depth = m_subsample.sum()
 
-    if stats['mat1']['depth'] >= stats['mat2']['depth']:
-        m_subsample = copy.deepcopy(target_csr)
-    if stats['mat1']['depth'] < stats['mat2']['depth']:
-        m_subsample = copy.deepcopy(pred_csr)
-    desired_depth = m_subsample.sum()
+        if pred_csr.sum() > desired_depth:
+            m1_subsample = data_operations.subsample_to_depth(
+                pred_csr, desired_depth)
+        if target_csr.sum() > desired_depth:
+            m2_subsample = data_operations.subsample_to_depth(
+                target_csr, desired_depth)
 
-    if pred_csr.sum() > desired_depth:
-        m1_subsample = data_operations.subsample_to_depth(
-            pred_csr, desired_depth)
-    if target_csr.sum() > desired_depth:
-        m2_subsample = data_operations.subsample_to_depth(
-            target_csr, desired_depth)
+        stats['mat1']['subsampled_depth'] = m1_subsample.sum()
+        stats['mat2']['subsampled_depth'] = m2_subsample.sum()
 
-    stats['mat1']['subsampled_depth'] = m1_subsample.sum()
-    stats['mat2']['subsampled_depth'] = m2_subsample.sum()
+        m1_norm = data_operations.process_matrix(m1_subsample, 'sqrtvc')
+        m2_norm = data_operations.process_matrix(m2_subsample, 'sqrtvc')
 
-    m1_norm = data_operations.process_matrix(m1_subsample, 'sqrtvc')
-    m2_norm = data_operations.process_matrix(m2_subsample, 'sqrtvc')
+        comparer = DiscoRandomWalks()
+        reproducibility = comparer.compute_reproducibility(m1_norm, m2_norm)
 
-    comparer = DiscoRandomWalks()
-    reproducibility = comparer.compute_reproducibility(m1_norm, m2_norm)
-
-    return reproducibility
+        return reproducibility
+    except Exception as e:
+        print(e)
+        return np.nan
 
 
 def get_dd_diff(m1dd, m2dd):

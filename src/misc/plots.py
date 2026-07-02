@@ -31,6 +31,20 @@ def draw_hic_map(num_examples, x0: np.ndarray, y: np.ndarray, pred: np.ndarray, 
     plt.close()
 
 
+def plot_hic_heatmap(target: torch.Tensor, title, filename_prefix, count):
+    matrix = target.squeeze().detach().cpu().numpy()
+    fig, ax = plt.subplots(figsize=(5, 5))
+    im = ax.imshow(matrix, cmap=CMAP_)
+    ax.set_title(title)
+    ax.axis("off")
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    plt.savefig(
+        f"{filename_prefix}_{title.lower().replace(' ', '_')}_{count}.png", dpi=300, format='png')
+    plt.close()
+
+
 def draw_hic_comparison(num_examples, target: torch.Tensor, pred: torch.Tensor, linear: torch.Tensor, of: torch.Tensor, file):
     data_groups = [target, pred, linear, of]
     titles = ["Ground Truth", "Ours", "Linear", "Optical Flow"]

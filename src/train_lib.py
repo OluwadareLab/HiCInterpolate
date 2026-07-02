@@ -1,7 +1,5 @@
 from src.loss import CombinedLoss
 from src.metric import metrics as eval_metric
-from src.metric.hicrep import compute_hicrep
-from src.metric.genomedisco import compute_genomedisco
 from src.misc import plots as plot
 from src.interpolator import Interpolator
 from tqdm import tqdm
@@ -18,14 +16,12 @@ import gc
 import pandas as pd
 import traceback
 from collections import OrderedDict
-from torchvision import ops
-import src.misc.utils as utils
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Trainer:
-    EVAL_METRICS = ("psnr", "ssim", "scc",
-                    "hicrep", "genome_disco", "lpips")
+    EVAL_METRICS = ("psnr", "ssim", "ms-ssim", "spearman", "scc",
+                    "genome_disco", "genome_disco2", "hicrep")
 
     def __init__(self, cfg, log, train_dl: DataLoader, val_dl: DataLoader, load_snapshot: bool = False, isDistributed: bool = False) -> None:
         self.cfg = cfg
@@ -305,7 +301,7 @@ class Trainer:
         local_train_loss = torch.tensor(0.0, device=self.device)
         local_train_samples = torch.tensor(0.0, device=self.device)
 
-        for step, (x0, y, x1, _) in enumerate(tqdm(self.train_dl)):
+        for step, (x0, y, x1) in enumerate(tqdm(self.train_dl)):
             x0 = x0.to(self.device)
             y = y.to(self.device)
             x1 = x1.to(self.device)
@@ -339,7 +335,7 @@ class Trainer:
 
         with torch.no_grad():
             self.model.eval()
-            for _, (x0, y, x1, _) in enumerate(self.val_dl):
+            for _, (x0, y, x1) in enumerate(self.val_dl):
                 x0 = x0.to(self.device)
                 y = y.to(self.device)
                 x1 = x1.to(self.device)
@@ -352,8 +348,11 @@ class Trainer:
 
                 for metric in self.active_eval_metrics:
                     metric_value = eval_metric.get_metric_gpu(metric, pred, y)
-                    local_metric_totals[metric] += metric_value.detach() * \
-                        batch_size
+                    if isinstance(metric_value, torch.Tensor):
+                        metric_value = metric_value.item()
+                    else:
+                        metric_value = metric_value
+                    local_metric_totals[metric] += metric_value * batch_size
                 local_val_samples += batch_size
 
                 if self.best_plot_batch is None:

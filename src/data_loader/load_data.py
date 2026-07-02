@@ -78,7 +78,6 @@ class TripletDataset(Dataset):
         x0_raw = self._load_valid_matrix(image_file=key["frame_0"])
         y_raw = self._load_valid_matrix(image_file=key["frame_1"])
         x1_raw = self._load_valid_matrix(image_file=key["frame_2"])
-        time = torch.tensor([key["time"]], dtype=torch.float32)
         if x0_raw is None or y_raw is None or x1_raw is None:
             return None
 
