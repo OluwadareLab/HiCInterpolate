@@ -1,3 +1,4 @@
+import math
 from time import time
 from src.interpolator.model import Interpolator
 import matplotlib.colors as mcolors
@@ -16,16 +17,27 @@ from flow_based_interpolation import of_interpolation as OF
 import logging
 from _4DMax import model as _4DMax_model
 
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import numpy as np
+import torch
+
+plt.rcParams['figure.figsize'] = (12, 6)
+plt.rcParams['figure.dpi'] = 300
+CMAP_ = mcolors.LinearSegmentedColormap.from_list(
+    "juicebox", ["#FFFFFF", "#FFAAAA", "#FF5555", "#FF0000", "#B30000"], N=256
+)
+
 ROOT_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate'
 MODEL_DIR = f'{ROOT_DIR}/datasets/final_output/triplets_dataset'
-DICT_DIR = f'{ROOT_DIR}/datasets/triplets_dataset/test'
-IMAGE_DIR = f'{ROOT_DIR}/datasets/triplets_dataset'
-OUTPUT_DIR = f'{ROOT_DIR}/datasets/final_output/Plots_HiCInterpolate/'
-LOG_FILE = f'{ROOT_DIR}/datasets/final_output/Plots_HiCInterpolate/inference.log'
+DICT_DIR = f'{ROOT_DIR}/datasets/timeseries/new_triplets/test'
+IMAGE_DIR = f'{ROOT_DIR}/datasets/timeseries/new_triplets'
+OUTPUT_DIR = f'{ROOT_DIR}/datasets/timeseries/output/full/test'
+LOG_FILE = f'{ROOT_DIR}/datasets/timeseries/output/full/test/inference.log'
 CSV_FILENAME_SUFFIX = "comparative_scores.csv"
 
 METHODS = ("Hicinterpolate", "4DMax", "Linear", "Optical Flow")
-METRICS = ("psnr", "ssim",  "spearman", 'scc',
+METRICS = ("psnr", "ssim", "ms-ssim", "spearman", "scc",
            "genome_disco", "genome_disco2", "hicrep")
 METRIC_PRECISION = 4
 
@@ -45,9 +57,9 @@ TEST_DATASET = {
             "control": {
                 "triplets":
                 [
-                    ["4DNFI7T93SHL_dmso_control_30m",
-                     "4DNFICF2Z2TG_dmso_control_60m",
-                     "4DNFILL624WG_dmso_control_90m"]
+                    ["dmso_control_30m",
+                     "dmso_control_60m",
+                     "dmso_control_90m"],
                 ]
             }
         },
@@ -55,9 +67,9 @@ TEST_DATASET = {
             "v1": {
                 "triplets":
                 [
-                    ["4DNFIY1TCVLX_dtag_v1_30m",
-                     "4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m"]
+                    ["dtag_v1_60m",
+                     "dtag_v1_90m",
+                     "dtag_v1_120m"]
                 ]
             }
         },
@@ -77,6 +89,31 @@ TEST_DATASET = {
                          "wtc11_ventricular_5760m",
                          "wtc11_ventricular_8640m"]
                     ]
+            }
+        }
+    },
+    "mouse": {
+        "cerebellar_granule_neuron": {
+            "control": {
+                "triplets":
+                [
+                    ["cerebellar_granule_neuron_control_10080m",
+                     "cerebellar_granule_neuron_control_11520m",
+                     "cerebellar_granule_neuron_control_12960m"]
+                ]
+            }
+        },
+        "embryo": {
+            "development": {
+                "triplets": [
+                    ["mii_oocyte",
+                     "zygote",
+                     "early2_cell"],
+
+                    ["late2_cell",
+                     "8cell",
+                     "icm"]
+                ]
             }
         }
     }
@@ -102,6 +139,7 @@ def base_logger(file):
     return logger
 
 
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 LOG = base_logger(LOG_FILE)
 
 
@@ -168,13 +206,43 @@ def linear_interpolation(x0: torch.Tensor, x1: torch.Tensor, t: float = 0.5) -> 
     return (1.0 - t) * x0 + t * x1
 
 
+def has_nan(x):
+    if isinstance(x, torch.Tensor):
+        return torch.isnan(x).any().item()
+
+    elif isinstance(x, np.ndarray):
+        return np.isnan(x).any()
+
+    elif isinstance(x, (float, np.floating)):
+        return math.isnan(x)
+
+    elif isinstance(x, (list, tuple)):
+        return any(has_nan(v) for v in x)
+
+    return False
+
+
+def plot_hic_heatmap(target: torch.Tensor, title, filename_prefix, count):
+    matrix = target.squeeze().detach().cpu().numpy()
+    fig, ax = plt.subplots(figsize=(5, 5))
+    im = ax.imshow(matrix, cmap=CMAP_)
+    ax.set_title(title)
+    ax.axis("off")
+    # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    plt.tight_layout()
+    plt.savefig(
+        f"{filename_prefix}_{title.lower().replace(' ', '_')}_{count}.png", dpi=300, format='png')
+    plt.close()
+
+
 def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename, resol, patch):
     cds = CustomDataset(record_file=dataset_dict, img_dir=IMAGE_DIR,
                         img_map=IMAGE_MAP, shuffle=True, train_val_test_ratio=[0.0, 0.0, 1.0])
     _, _, test_ds = cds._get_dataset()
 
     test_dl = get_dataloader(ds=test_ds, batch_size=batch_size, shuffle=False)
-    
+
     psnr_list = []
     ssim_list = []
     spearman_list = []
@@ -218,17 +286,18 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
         x2 = x2.to(DEVICE)
         pred = model(x1, x2)
         pred[pred < 0] = 0
-        _4dmax_pred = _4DMax_model.run_4dmax(x1, x2)
+        _4dmax_pred = _4DMax_model.run_4dmax(
+            timeframe=[x1, x2], patch_size=patch)
         linear = linear_interpolation(x1, x2, t=0.5)
         of = OF(x1, x2)
 
         num_examples = min(1, len(target))
 
-        plot.plot_hic_heatmap(target=target[:num_examples],
-                              title="Ground Truth", filename_prefix=heatmap_filename, count=count)
+        plot_hic_heatmap(target=target[:num_examples],
+                          title="Ground Truth", filename_prefix=heatmap_filename, count=count)
 
-        plot.plot_hic_heatmap(target=pred[:num_examples],
-                              title="Ours", filename_prefix=heatmap_filename, count=count)
+        plot_hic_heatmap(target=pred[:num_examples],
+                          title="Ours", filename_prefix=heatmap_filename, count=count)
         psnr_list.append(eval_metric.get_psnr_from_tensor(pred, target).item())
         ssim_list.append(
             eval_metric.get_ms_ssim_from_tensor(pred, target).item())
@@ -242,7 +311,7 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
         hicrep_list.append(
             eval_metric.get_hicrep_from_tensor(pred, target).item())
 
-        if not torch.isnan(_4dmax_pred).any():
+        if not has_nan(_4dmax_pred):
             plot.plot_hic_heatmap(target=_4dmax_pred[:num_examples],
                                   title="4DMax", filename_prefix=heatmap_filename, count=count)
             _4dmax_psnr_list.append(
@@ -260,7 +329,7 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
             _4dmax_hicrep_list.append(
                 eval_metric.get_hicrep_from_tensor(_4dmax_pred, target).item())
 
-        plot.plot_hic_heatmap(target=of[:num_examples],
+        plot_hic_heatmap(target=of[:num_examples],
                               title="Optical Flow", filename_prefix=heatmap_filename, count=count)
         of_psnr_list.append(
             eval_metric.get_psnr_from_tensor(of, target).item())
@@ -270,13 +339,13 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
             eval_metric.get_spearman_from_tensor(of, target).item())
         of_scc_list.append(eval_metric.get_scc_from_tensor(of, target).item())
         of_genome_disco_list.append(
-            eval_metric.get_genome_disco2_from_tensor(of, target).item())
+            eval_metric.get_genome_disco_from_tensor(of, target).item())
         of_genome_disco2_list.append(
             eval_metric.get_genome_disco2_from_tensor(of, target).item())
         of_hicrep_list.append(
             eval_metric.get_hicrep_from_tensor(of, target).item())
 
-        plot.plot_hic_heatmap(target=linear[:num_examples],
+        plot_hic_heatmap(target=linear[:num_examples],
                               title="Linear", filename_prefix=heatmap_filename, count=count)
         linear_psnr_list.append(
             eval_metric.get_psnr_from_tensor(linear, target).item())
@@ -441,13 +510,13 @@ def run_inference():
                             for triplet in content["triplets"]:
                                 for chromosome in CHROMOSOMES[organism]:
                                     record_filename = os.path.join(
-                                        DICT_DIR, f'test_{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.txt')
+                                        DICT_DIR, f'{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.test')
                                     print(
                                         f"Running inference for record: {record_filename}")
                                     LOG.info(
                                         f"Running inference for record: {record_filename}")
 
-                                    plot_filename = f"{heatmap_output_dir}/plot_{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_{chromosome}.png"
+                                    plot_filename = f"{heatmap_output_dir}/plot_{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_{chromosome}"
                                     metrics = get_prediction(batch_size=BATCH_SIZE, dataset_dict=record_filename, model=model,
                                                              heatmap_filename=plot_filename, resol=resolution, patch=model_patch)
 

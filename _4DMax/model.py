@@ -1,11 +1,13 @@
+from typing import List
+
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import cupy as cp
 import torch
 import numpy as np
-import Utils.util as ut
-import Utils.movement as mv
-import Utils.likelihood as li
+import _4DMax.Utils.util as ut
+import _4DMax.Utils.movement as mv
+import _4DMax.Utils.likelihood as li
 
 DATA_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset'
 DICT_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test'
@@ -79,7 +81,7 @@ def get_sparse_matrix(matrix):
     return sparse_matrix
 
 
-def run_4dmax(timeframe: torch.Tensor, patch_size=64):
+def run_4dmax(timeframe: List[torch.Tensor], patch_size=64):
     np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
     np.random.seed(42)
 
@@ -91,7 +93,7 @@ def run_4dmax(timeframe: torch.Tensor, patch_size=64):
     start_t = 0
     end_t = 2
     step = 1
-    taos = np.array([0, 2])
+    taos = np.array([0, 1])
     ts = np.linspace(start_t, end_t, step)
 
     map_tao = {}
@@ -104,14 +106,14 @@ def run_4dmax(timeframe: torch.Tensor, patch_size=64):
 
     sparse_matrix_size = patch_size * patch_size
     for key, val in enumerate(taos):
-        dense_matrix = timeframe[taos].squeeze().detach().cpu().numpy()
+        dense_matrix = timeframe[val].squeeze().cpu().numpy()
         log_norm_matrix = np.log1p(dense_matrix)
         sparse_matrix = get_sparse_matrix(log_norm_matrix)
 
-        if sparse_matrix.shape[0] < (sparse_matrix_size - sparse_matrix_size*0.10):
-            print(
-                f"[Warning] Skipping due to 10% less sparse matrix")
-            return np.nan
+        # if sparse_matrix.shape[0] < (sparse_matrix_size - sparse_matrix_size*0.10):
+        #     print(
+        #         f"[Warning] Skipping due to 10% less sparse matrix")
+        #     return np.nan
 
         map_tao[val] = sparse_matrix
         row_tao[val] = (map_tao[val][:, 0].astype(int)).astype(int)
@@ -162,7 +164,7 @@ def run_4dmax(timeframe: torch.Tensor, patch_size=64):
     pad_amount = patch_size - pr
     if pad_amount > 0:
         print(
-            f"[Warning] Padding predicted matrix with {pad_amount} zeros to match target size")
+            f"[Warning] Skipping due to shape mismatch between predicted {pred.shape} and ground truth {timeframe[0].shape}")
         # pred = np.pad(pred, ((0, pad_amount), (0, pad_amount)),
         #               mode='constant', constant_values=0)
         return np.nan
@@ -173,42 +175,42 @@ def run_4dmax(timeframe: torch.Tensor, patch_size=64):
     return pred_tensor
 
 
-with open(CSV_FILENAME, 'w') as f:
-    f.write(','.join(columns) + '\n')
-    for resolution in RESOLUTIONS:
-        for patch in PATCHES:
-            for organism in DATASET.keys():
-                for sample in DATASET[organism].keys():
-                    for condition in DATASET[organism][sample].keys():
-                        triplet_list = DATASET[organism][sample][condition]['triplets']
-                        for triplet in triplet_list:
-                            timeframe_name = "_".join(
-                                name.split('_')[-1] for name in triplet)
-                            for chromosome in CHROMOSOMES[organism]:
-                                dict_filename = f"{DICT_DIR}/test_{resolution}_{patch}_{organism}_{triplet[1]}_{chromosome}.txt"
-                                print(f"Running 4DMax for {dict_filename}...")
-                                plot_filename = f"{OUTPUT_DIR}/plot_{resolution}_{patch}_{organism}_{sample}_{triplet[1]}_{chromosome}.png"
-                                psnr, ssim, scc, genomedisco, hicrep, lpips = run_4dmax(
-                                    dict_filename, DATA_DIR, patch_size=patch, resolution=resolution, plot_filename=plot_filename)
-                                print(
-                                    f"Results for {dict_filename}: PSNR={psnr}, SSIM={ssim}, SCC={scc}, GenomeDISCO={genomedisco}, HiCRep={hicrep}, LPIPS={lpips}")
+# with open(CSV_FILENAME, 'w') as f:
+#     f.write(','.join(columns) + '\n')
+#     for resolution in RESOLUTIONS:
+#         for patch in PATCHES:
+#             for organism in DATASET.keys():
+#                 for sample in DATASET[organism].keys():
+#                     for condition in DATASET[organism][sample].keys():
+#                         triplet_list = DATASET[organism][sample][condition]['triplets']
+#                         for triplet in triplet_list:
+#                             timeframe_name = "_".join(
+#                                 name.split('_')[-1] for name in triplet)
+#                             for chromosome in CHROMOSOMES[organism]:
+#                                 dict_filename = f"{DICT_DIR}/test_{resolution}_{patch}_{organism}_{triplet[1]}_{chromosome}.txt"
+#                                 print(f"Running 4DMax for {dict_filename}...")
+#                                 plot_filename = f"{OUTPUT_DIR}/plot_{resolution}_{patch}_{organism}_{sample}_{triplet[1]}_{chromosome}.png"
+#                                 psnr, ssim, scc, genomedisco, hicrep, lpips = run_4dmax(
+#                                     dict_filename, DATA_DIR, patch_size=patch, resolution=resolution, plot_filename=plot_filename)
+#                                 print(
+#                                     f"Results for {dict_filename}: PSNR={psnr}, SSIM={ssim}, SCC={scc}, GenomeDISCO={genomedisco}, HiCRep={hicrep}, LPIPS={lpips}")
 
-                                row = {
-                                    "Resolution": resolution,
-                                    "Patch Size": patch,
-                                    "organism": organism,
-                                    "sample": sample,
-                                    "condition": condition,
-                                    "Timeframe": triplet[1],
-                                    "chromosome": chromosome,
-                                    "PSNR": psnr,
-                                    "SSIM": ssim,
-                                    "SCC": scc,
-                                    "GenomeDISCO": genomedisco,
-                                    "HiCRep": hicrep,
-                                    "LPIPS": lpips
-                                }
-                                print(
-                                    f"Writing results for {dict_filename}...")
-                                f.write(','.join(str(value)
-                                        for value in row.values()) + '\n')
+#                                 row = {
+#                                     "Resolution": resolution,
+#                                     "Patch Size": patch,
+#                                     "organism": organism,
+#                                     "sample": sample,
+#                                     "condition": condition,
+#                                     "Timeframe": triplet[1],
+#                                     "chromosome": chromosome,
+#                                     "PSNR": psnr,
+#                                     "SSIM": ssim,
+#                                     "SCC": scc,
+#                                     "GenomeDISCO": genomedisco,
+#                                     "HiCRep": hicrep,
+#                                     "LPIPS": lpips
+#                                 }
+#                                 print(
+#                                     f"Writing results for {dict_filename}...")
+#                                 f.write(','.join(str(value)
+#                                         for value in row.values()) + '\n')
