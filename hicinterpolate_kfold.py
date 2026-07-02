@@ -111,11 +111,16 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
 
     log = base_logger(cfg.file.log)
 
-    cds = CustomDatasetKF(record_file=cfg.file.dataset_dict, img_dir=cfg.dir.image,
-                          img_map=cfg.data.interpolator_images_map, shuffle=True)
-    data_dict = cds._get_dataset()
+    train_cds = CustomDatasetKF(record_file=f'{cfg.file.dataset_dict}.train', img_dir=cfg.dir.image,
+                                img_map=cfg.data.interpolator_images_map, shuffle=True)
+    train_dict = train_cds._get_dataset()
+    val_cds = CustomDatasetKF(record_file=f'{cfg.file.dataset_dict}.val', img_dir=cfg.dir.image,
+                              img_map=cfg.data.interpolator_images_map, shuffle=True)
+    val_dict = val_cds._get_dataset()
 
-    kfold = KFold(n_splits=4, shuffle=True, random_state=42)
+    data_dict = train_dict + val_dict
+
+    kfold = KFold(n_splits=5, shuffle=True, random_state=42)
 
     batch_size = cfg.data.batch_size
     output_dir = f"{cfg.dir.output}"

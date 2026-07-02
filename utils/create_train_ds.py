@@ -8,9 +8,7 @@ OUTPUT_PATH = f"{ROOT_PATH}/new_triplets/train"
 RESOLUTIONS = [25000, 10000, 5000]
 PATCHES = [64, 128, 256, 512]
 CHROMOSOMES = {
-    "human": ["1", "2", "3", "4", "5", "6", "7", "8", "9",
-              "11", "12", "13", "14", "16",
-              "17", "18", "19", "21", "22"]
+    "human": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "11", "13", "14", "16", "18", "19", "21"]
 }
 
 DATASET = {
@@ -92,7 +90,7 @@ def prepare_triplates():
     for resolution in RESOLUTIONS:
         input_file = f"{DATASET_DICT_PATH}/dataset_dict_{resolution}.txt"
         for patch in PATCHES:
-            output_file = f"{OUTPUT_PATH}/train_{resolution}_{patch}.txt"
+            output_file = f"{OUTPUT_PATH}/{resolution}_{patch}.train"
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
             for organism, samples in DATASET.items():
                 for sample, subsamples in samples.items():
