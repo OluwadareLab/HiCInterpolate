@@ -50,8 +50,8 @@ def compute_reproducibility(pred: np.ndarray, target: np.ndarray):
         stats['mat1']['subsampled_depth'] = m1_subsample.sum()
         stats['mat2']['subsampled_depth'] = m2_subsample.sum()
 
-        m1_norm = data_operations.process_matrix(m1_subsample, 'sqrtvc')
-        m2_norm = data_operations.process_matrix(m2_subsample, 'sqrtvc')
+        m1_norm = data_operations.process_matrix(m1_subsample, 'uniform')
+        m2_norm = data_operations.process_matrix(m2_subsample, 'uniform')
 
         comparer = DiscoRandomWalks()
         reproducibility = comparer.compute_reproducibility(m1_norm, m2_norm)

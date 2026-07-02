@@ -126,7 +126,7 @@ def get_lpips(preds: Tensor, target: Tensor):
 GPU_METRIC_FUNCS = {
     "psnr": get_psnr_from_tensor,
     "ssim": get_ssim_from_tensor,
-    "ms_ssim": get_ms_ssim_from_tensor,
+    "ms-ssim": get_ms_ssim_from_tensor,
     "spearman": get_spearman_from_tensor,
     "scc": get_scc_from_tensor,
     "genome_disco": get_genome_disco_from_tensor,
@@ -150,7 +150,7 @@ def get_eval_metrics_gpu(preds: Tensor, target: Tensor, include_lpips: bool = Tr
     metrics = {
         "psnr": get_psnr_from_tensor(preds, target),
         "ssim": get_ssim_from_tensor(preds, target),
-        "ms_ssim": get_ms_ssim_from_tensor(preds, target),
+        "ms-ssim": get_ms_ssim_from_tensor(preds, target),
         "spearman": get_spearman_from_tensor(preds, target),
         "scc": get_scc_from_tensor(preds, target),
         "genome_disco": get_genome_disco_from_tensor(preds, target),

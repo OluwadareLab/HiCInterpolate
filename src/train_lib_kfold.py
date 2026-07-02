@@ -68,7 +68,7 @@ def get_dataloader(ds: Dataset, batch_size: int = 20, shuffle: bool = False, isD
 
 
 class Trainer:
-    EVAL_METRICS = ("psnr", "ssim", "spearman", "scc",
+    EVAL_METRICS = ("psnr", "ssim", "ms-ssim", "spearman", "scc",
                     "genome_disco", "genome_disco2", "hicrep")
 
     def __init__(self, cfg, log, dataset_dict: List, load_snapshot: bool = False, isDistributed: bool = False) -> None:
