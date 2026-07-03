@@ -301,7 +301,10 @@ class Trainer:
         local_train_loss = torch.tensor(0.0, device=self.device)
         local_train_samples = torch.tensor(0.0, device=self.device)
 
-        for step, (x0, y, x1) in enumerate(tqdm(self.train_dl)):
+        for _, batch in enumerate(tqdm(self.train_dl)):
+            if batch is None:
+                continue
+            x0, y, x1 = batch
             x0 = x0.to(self.device)
             y = y.to(self.device)
             x1 = x1.to(self.device)
@@ -335,7 +338,10 @@ class Trainer:
 
         with torch.no_grad():
             self.model.eval()
-            for _, (x0, y, x1) in enumerate(self.val_dl):
+            for _, batch in enumerate(self.val_dl):
+                if batch is None:
+                    continue
+                x0, y, x1 = batch
                 x0 = x0.to(self.device)
                 y = y.to(self.device)
                 x1 = x1.to(self.device)
@@ -347,7 +353,8 @@ class Trainer:
                 local_val_loss += val_loss.detach() * batch_size
 
                 for metric in self.active_eval_metrics:
-                    metric_value = eval_metric.get_metric_gpu(metric, pred, y)
+                    metric_value = eval_metric.get_metric_gpu(
+                        metric, pred, y, self.cfg.data.resolution, self.cfg.data.patch, 5)
                     if isinstance(metric_value, torch.Tensor):
                         metric_value = metric_value.item()
                     else:

@@ -80,6 +80,21 @@ def get_sparse_matrix(matrix):
     sparse_matrix = np.column_stack((rows, cols, values))
     return sparse_matrix
 
+def normalize(mat, is_log=False, is_min_max=False):
+    if is_log:
+        mat = np.log1p(mat)
+
+    if is_min_max:
+        min_val = np.min(mat)
+        max_val = np.max(mat)
+        denom = max_val - min_val
+        if denom == 0:
+            fill_value = 1.0 if min_val > 0 else 0.0
+            mat = np.full_like(mat, fill_value, dtype=np.float32)
+        else:
+            mat = (mat - min_val) / denom
+
+    return mat
 
 def run_4dmax(timeframe: List[torch.Tensor], patch_size=64):
     np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
@@ -107,8 +122,7 @@ def run_4dmax(timeframe: List[torch.Tensor], patch_size=64):
     sparse_matrix_size = patch_size * patch_size
     for key, val in enumerate(taos):
         dense_matrix = timeframe[val].squeeze().cpu().numpy()
-        log_norm_matrix = np.log1p(dense_matrix)
-        sparse_matrix = get_sparse_matrix(log_norm_matrix)
+        sparse_matrix = get_sparse_matrix(dense_matrix)
 
         # if sparse_matrix.shape[0] < (sparse_matrix_size - sparse_matrix_size*0.10):
         #     print(

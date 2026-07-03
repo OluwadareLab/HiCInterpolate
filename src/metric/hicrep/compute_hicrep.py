@@ -100,23 +100,23 @@ def compute_hicrep_scc(mat1, mat2, resol=25000, h=1, lbr=0, ubr=25000 * 253):
     return scc
 
 
-def get_hicrep_scc(mat1, mat2, resol=25000, h=1, lbr=0, ubr=25000 * 253):
+def get_hicrep_scc(mat1, mat2, resol=25000, patch_size=64, h=1):
     try:
-        scc = compute_hicrep_scc(mat1, mat2, resol, h, lbr, ubr)
+        scc = compute_hicrep_scc(mat1, mat2, resol, h, 0, resol*(patch_size-1))
         return scc
     except Exception as e:
         print(f"Error computing HiCRep SCC: {e}")
         return np.nan
 
 
-def get_hicrep_scc_from_tensor(mat1, mat2, resol=25000, h=1, lbr=0, ubr=25000 * 253):
+def get_hicrep_scc_from_tensor(mat1, mat2, resol=25000, patch_size=64, h=1):
     c = 0
     hicrep_scc_list = []
     for b in range(mat1.shape[0]):
         m1 = mat1[b, c, :, :].detach().cpu().numpy()
         m2 = mat2[b, c, :, :].detach().cpu().numpy()
         try:
-            hicrep_scc = compute_hicrep_scc(m1, m2, resol, h, lbr, ubr)
+            hicrep_scc = compute_hicrep_scc(m1, m2, resol, h, 0, resol*(patch_size-1))
             hicrep_scc_list.append(hicrep_scc)
         except Exception as e:
             print(f"Error computing HiCRep SCC: {e}")

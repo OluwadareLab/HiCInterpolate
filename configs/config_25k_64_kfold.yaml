@@ -38,6 +38,7 @@ file:
 
 data:
   patch: 64
+  resolution: 25000
   batch_size: 20
   interpolator_images_map:
     frame_0: img1.npy
@@ -46,7 +47,7 @@ data:
   train_val_test_ratio: [0.8, 0.2, 0.0]
 
 training:
-  epochs: 100
+  epochs: 1
   save_every: 10
   lr: 1e-4
   min_lr: 1e-5

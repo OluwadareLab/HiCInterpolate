@@ -10,12 +10,10 @@ import argparse
 import cupy as cp
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
-from torch_geometric.loader import DataLoader
-from torch_geometric.loader import DataLoader
-from src import CustomDatasetKF, TrainLib
+from src import TrainLib, TestLib
 from omegaconf import OmegaConf
 from configs.config import Config
-from src.data_loader.load_data_kfold import TripletDatasetKF
+from src.data_loader.load_data import TripletDataset, CustomDataset
 from torch.utils.data.dataloader import default_collate
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -110,21 +108,28 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
     OmegaConf.update(cfg, "dir.model_state", model_state_dir)
 
     log = base_logger(cfg.file.log)
-
-    train_cds = CustomDatasetKF(record_file=f'{cfg.file.dataset_dict}.train', img_dir=cfg.dir.image,
-                                img_map=cfg.data.interpolator_images_map, shuffle=True)
+    batch_size = cfg.data.batch_size
+    train_cds = CustomDataset(record_file=f'{cfg.file.dataset_dict}.train', img_dir=cfg.dir.image,
+                              img_map=cfg.data.interpolator_images_map)
     train_dict = train_cds._get_dataset()
-    val_cds = CustomDatasetKF(record_file=f'{cfg.file.dataset_dict}.val', img_dir=cfg.dir.image,
-                              img_map=cfg.data.interpolator_images_map, shuffle=True)
+    val_cds = CustomDataset(record_file=f'{cfg.file.dataset_dict}.val', img_dir=cfg.dir.image,
+                            img_map=cfg.data.interpolator_images_map)
     val_dict = val_cds._get_dataset()
+
+    test_cds = CustomDataset(record_file=f'{cfg.file.dataset_dict}.test', img_dir=cfg.dir.image,
+                             img_map=cfg.data.interpolator_images_map)
+    test_dict = test_cds._get_dataset()
+    test_ds = TripletDataset(triplet_dicts=test_dict)
+    test_dl = get_dataloader(
+        ds=test_ds, batch_size=batch_size, shuffle=False, isDistributed=isDistributed)
 
     data_dict = train_dict + val_dict
 
     kfold = KFold(n_splits=5, shuffle=True, random_state=42)
 
-    batch_size = cfg.data.batch_size
     output_dir = f"{cfg.dir.output}"
     model_state_dir = f"{cfg.dir.model_state}"
+    ssim_scores = []
     for fold, (train_idx, val_idx) in enumerate(kfold.split(data_dict)):
         print(f"--- FOLD {fold} ---")
         log.info(f"--- FOLD {fold} ---")
@@ -137,11 +142,11 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
         OmegaConf.update(cfg, "dir.model_state", sub_model_state_dir)
 
         train_set = [data_dict[i] for i in train_idx]
-        train_ds = TripletDatasetKF(
+        train_ds = TripletDataset(
             triplet_dicts=train_set)
 
         val_set = [data_dict[i] for i in val_idx]
-        val_ds = TripletDatasetKF(triplet_dicts=val_set)
+        val_ds = TripletDataset(triplet_dicts=val_set)
 
         train_dl = get_dataloader(
             ds=train_ds, batch_size=batch_size, shuffle=True, isDistributed=isDistributed)
@@ -152,8 +157,18 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
                                    load_snapshot=load_snapshot, isDistributed=isDistributed)
         trainer.train(max_epochs=cfg.training.epochs)
 
+        if test and os.path.exists(cfg.file.model):
+            tester = TestLib.Tester(
+                cfg=cfg, log=log, model=cfg.file.model, test_dl=test_dl, isDistributed=isDistributed)
+            psnr, ssim, ms_ssim, spearman, scc, genome_disco, genome_disco2, hicrep = tester.test()
+            ssim_scores.append(ssim)
+
     if isDistributed:
         dist.destroy_process_group()
+    
+    max_score, max_idx = np.array(ssim_scores).max(), np.argmax(ssim_scores)
+    print(f"SSIM scores for each fold: {ssim_scores}")
+    print(f"Maximum SSIM score: {max_score}, Fold: {max_idx}")
 
 
 if __name__ == "__main__":

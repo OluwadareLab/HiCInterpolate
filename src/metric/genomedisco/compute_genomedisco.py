@@ -6,12 +6,12 @@ from src.metric.genomedisco.comparison_types.disco_random_walks import DiscoRand
 from src.metric.genomedisco import processing
 
 
-def compute_reproducibility_from_tensor(pred: torch.Tensor, target: torch.Tensor):
+def compute_reproducibility_from_tensor(pred: torch.Tensor, target: torch.Tensor, resol):
     c = 0
     for b in range(pred.shape[0]):
         pred_mat = pred[b, c, :, :].detach().cpu().numpy()
         target_mat = target[b, c, :, :].detach().cpu().numpy()
-        reproducibility = compute_reproducibility(pred_mat, target_mat)
+        reproducibility = compute_reproducibility(pred_mat, target_mat, resol)
         if b == 0:
             reproducibility_list = [reproducibility]
         else:
@@ -19,11 +19,43 @@ def compute_reproducibility_from_tensor(pred: torch.Tensor, target: torch.Tensor
     return np.nanmean(reproducibility_list)
 
 
-def compute_reproducibility(pred: np.ndarray, target: np.ndarray):
+def get_sparse_matrix(matrix, binsize):
+    rows, cols = np.where(matrix > 0)
+    values = matrix[rows, cols]
+    chr = np.ones_like(rows)
+
+    lines = []
+    for i in range(len(rows)):
+        chr[i] = 1
+        lines.append(f"{chr[i]}\t{rows[i] * binsize}\t{chr[i]}\t{cols[i] * binsize}\t{values[i]}")
+
+    return lines
+
+
+def build_node(matrix, binsize, chr_name="chr1"):
+    rows, _ = matrix.shape
+    nodes = {}
+    for i in range(rows):
+        start = i * binsize
+        end = (i + 1) * binsize
+        value = start 
+        nodes[i] = f"{chr_name}\t{start}\t{end}\t{value}"
+
+    return nodes
+
+
+def compute_reproducibility(pred: np.ndarray, target: np.ndarray, resol):
     try:
-        pred_csr = processing.construct_csr_matrix_from_data_and_nodes(pred)
+        pred_bed = get_sparse_matrix(pred, binsize=resol)
+        target_bed = get_sparse_matrix(target, binsize=resol)
+        node_file = build_node(pred, binsize=resol)
+
+        nodes,nodes_idx,blacklist_nodes=processing.read_nodes_from_bed(node_file)
+        
+        pred_csr = processing.construct_csr_matrix_from_data_and_nodes(
+            pred_bed, nodes)
         target_csr = processing.construct_csr_matrix_from_data_and_nodes(
-            target)
+            target_bed, nodes)
 
         stats = {}
         stats['mat1'] = {}

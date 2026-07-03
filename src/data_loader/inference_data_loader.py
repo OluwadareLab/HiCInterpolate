@@ -31,16 +31,33 @@ class TripletDataset(Dataset):
 
     def normalize_triplet(self, x0, y, x1):
         logged = [self.log1p(matrix) for matrix in (x0, y, x1)]
-        upper = max(np.percentile(matrix, CLIPPING_PERCENTILE)
-                    for matrix in logged)
+
+        upper = max(
+            np.percentile(matrix, CLIPPING_PERCENTILE)
+            for matrix in logged
+        )
+
         if upper <= _EPSILON:
             return None
-        tensors = []
-        for matrix in logged:
-            matrix = np.clip(matrix, 0.0, upper) / upper
-            tensors.append(torch.from_numpy(
-                matrix.astype(np.float32)).unsqueeze(0))
-        return tensors
+
+        images = torch.stack([
+            torch.from_numpy(
+                (np.clip(matrix, 0.0, upper) / upper).astype(np.float32)
+            )
+            for matrix in logged
+        ], dim=0)
+
+        max_values = torch.tensor(
+            [np.max(x0), np.max(y), np.max(x1)],
+            dtype=torch.float32
+        )
+
+        packed = torch.cat([
+            images.flatten(),
+            max_values
+        ])
+
+        return packed
 
     def __getitem__(self, idx):
         key = self.triplet_dicts[idx]
@@ -53,8 +70,17 @@ class TripletDataset(Dataset):
         normalized = self.normalize_triplet(x0_raw, y_raw, x1_raw)
         if normalized is None:
             return None
-        x0, y, x1 = normalized
-        return x0, y, x1
+        H, W = x0_raw.shape
+        images = normalized[:-3].reshape(3, H, W)
+        upper_x0, upper_y, upper_x1 = normalized[-3:]
+
+        upper_x0 = upper_x0.unsqueeze(0)
+        upper_y = upper_y.unsqueeze(0)
+        upper_x1 = upper_x1.unsqueeze(0)
+        x0_tensor = images[0].unsqueeze(0)
+        y_tensor = images[1].unsqueeze(0)
+        x1_tensor = images[2].unsqueeze(0)
+        return x0_tensor, y_tensor, x1_tensor, upper_x0, upper_y, upper_x1
 
 
 class CustomDataset:
@@ -82,4 +108,5 @@ class CustomDataset:
 
     def _get_dataset(self) -> Tuple[Dataset, Dataset, Dataset]:
         triplet_dicts = self._prep_triplets()
+
         return triplet_dicts

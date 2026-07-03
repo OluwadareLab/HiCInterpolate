@@ -3,7 +3,7 @@ from time import time
 from src.interpolator.model import Interpolator
 import matplotlib.colors as mcolors
 from src.metric import metrics as eval_metric
-from src.data_loader.load_data import CustomDataset
+from src.data_loader.inference_data_loader import CustomDataset, TripletDataset
 from tqdm import tqdm
 from torch.utils.data.dataloader import default_collate
 from torch.utils.data import DataLoader, Dataset
@@ -16,7 +16,6 @@ from src.misc import plots as plot
 from flow_based_interpolation import of_interpolation as OF
 import logging
 from _4DMax import model as _4DMax_model
-
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
@@ -48,7 +47,8 @@ PATCHES = [64]
 MODEL_BATCHES = [20]
 
 CHROMOSOMES = {
-    "human": ["10", "11", "15", "16", "20", "21"]
+    "human": ["10", "11", "15", "16", "20", "21"],
+    "mouse": ["10", "15", "19"]
 }
 
 TEST_DATASET = {
@@ -169,13 +169,13 @@ def collate_fn(batch):
     return default_collate(batch)
 
 
-def get_dataloader(ds: Dataset, batch_size: int = 1, shuffle: bool = False) -> DataLoader:
+def get_dataloader(ds: Dataset, batch_size: int = 1) -> DataLoader:
     return DataLoader(
         ds,
         batch_size=batch_size,
         collate_fn=collate_fn,
         pin_memory=False,
-        shuffle=shuffle,
+        shuffle=False,
         worker_init_fn=set_seed,
         num_workers=4,
         persistent_workers=True
@@ -238,13 +238,17 @@ def plot_hic_heatmap(target: torch.Tensor, title, filename_prefix, count):
 
 def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename, resol, patch):
     cds = CustomDataset(record_file=dataset_dict, img_dir=IMAGE_DIR,
-                        img_map=IMAGE_MAP, shuffle=True, train_val_test_ratio=[0.0, 0.0, 1.0])
-    _, _, test_ds = cds._get_dataset()
+                        img_map=IMAGE_MAP)
 
-    test_dl = get_dataloader(ds=test_ds, batch_size=batch_size, shuffle=False)
+    dataset_dict = cds._get_dataset()
+
+    dataset = TripletDataset(triplet_dicts=dataset_dict)
+
+    test_dl = get_dataloader(ds=dataset, batch_size=batch_size)
 
     psnr_list = []
     ssim_list = []
+    ms_ssim_list = []
     spearman_list = []
     scc_list = []
     genome_disco_list = []
@@ -253,6 +257,7 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
 
     _4dmax_psnr_list = []
     _4dmax_ssim_list = []
+    _4dmax_ms_ssim_list = []
     _4dmax_spearman_list = []
     _4dmax_scc_list = []
     _4dmax_genome_disco_list = []
@@ -261,6 +266,7 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
 
     of_psnr_list = []
     of_ssim_list = []
+    of_ms_ssim_list = []
     of_spearman_list = []
     of_scc_list = []
     of_genome_disco_list = []
@@ -269,6 +275,7 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
 
     linear_psnr_list = []
     linear_ssim_list = []
+    linear_ms_ssim_list = []
     linear_spearman_list = []
     linear_scc_list = []
     linear_genome_disco_list = []
@@ -280,26 +287,32 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
         count += 1
         if batch is None:
             continue
-        x1, target, x2 = batch
+        x1, target, x2, upper_x0, upper_y, upper_x1 = batch
+        upper_x0 = upper_x0.to(DEVICE)
+        upper_y = upper_y.to(DEVICE)
+        upper_x1 = upper_x1.to(DEVICE)
         x1 = x1.to(DEVICE)
-        target = target.to(DEVICE)
+        target = target.to(DEVICE)*upper_y
         x2 = x2.to(DEVICE)
         pred = model(x1, x2)
         pred[pred < 0] = 0
+        pred = pred*upper_y
         _4dmax_pred = _4DMax_model.run_4dmax(
-            timeframe=[x1, x2], patch_size=patch)
-        linear = linear_interpolation(x1, x2, t=0.5)
-        of = OF(x1, x2)
+            timeframe=[x1*upper_x0, x2*upper_x1], patch_size=patch)
+        linear = linear_interpolation(x1, x2, t=0.5)*upper_y
+        of = OF(x1, x2)*upper_y
 
         num_examples = min(1, len(target))
 
         plot_hic_heatmap(target=target[:num_examples],
-                          title="Ground Truth", filename_prefix=heatmap_filename, count=count)
+                         title="Ground Truth", filename_prefix=heatmap_filename, count=count)
 
         plot_hic_heatmap(target=pred[:num_examples],
-                          title="Ours", filename_prefix=heatmap_filename, count=count)
+                         title="Ours", filename_prefix=heatmap_filename, count=count)
         psnr_list.append(eval_metric.get_psnr_from_tensor(pred, target).item())
         ssim_list.append(
+            eval_metric.get_ssim_from_tensor(pred, target).item())
+        ms_ssim_list.append(
             eval_metric.get_ms_ssim_from_tensor(pred, target).item())
         spearman_list.append(
             eval_metric.get_spearman_from_tensor(pred, target).item())
@@ -307,16 +320,18 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
         genome_disco_list.append(
             eval_metric.get_genome_disco_from_tensor(pred, target).item())
         genome_disco2_list.append(
-            eval_metric.get_genome_disco2_from_tensor(pred, target).item())
+            eval_metric.get_genome_disco2_from_tensor(pred, target, resol=resol).item())
         hicrep_list.append(
-            eval_metric.get_hicrep_from_tensor(pred, target).item())
+            eval_metric.get_hicrep_from_tensor(pred, target, resol=resol, patch_size=patch, h=5).item())
 
         if not has_nan(_4dmax_pred):
-            plot.plot_hic_heatmap(target=_4dmax_pred[:num_examples],
-                                  title="4DMax", filename_prefix=heatmap_filename, count=count)
+            plot_hic_heatmap(target=_4dmax_pred[:num_examples],
+                             title="4DMax", filename_prefix=heatmap_filename, count=count)
             _4dmax_psnr_list.append(
                 eval_metric.get_psnr_from_tensor(_4dmax_pred, target).item())
             _4dmax_ssim_list.append(
+                eval_metric.get_ssim_from_tensor(_4dmax_pred, target).item())
+            _4dmax_ms_ssim_list.append(
                 eval_metric.get_ms_ssim_from_tensor(_4dmax_pred, target).item())
             _4dmax_spearman_list.append(
                 eval_metric.get_spearman_from_tensor(_4dmax_pred, target).item())
@@ -325,15 +340,17 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
             _4dmax_genome_disco_list.append(
                 eval_metric.get_genome_disco_from_tensor(_4dmax_pred, target).item())
             _4dmax_genome_disco2_list.append(
-                eval_metric.get_genome_disco2_from_tensor(_4dmax_pred, target).item())
+                eval_metric.get_genome_disco2_from_tensor(_4dmax_pred, target, resol=resol).item())
             _4dmax_hicrep_list.append(
-                eval_metric.get_hicrep_from_tensor(_4dmax_pred, target).item())
+                eval_metric.get_hicrep_from_tensor(_4dmax_pred, target, resol=resol, patch_size=patch, h=5).item())
 
         plot_hic_heatmap(target=of[:num_examples],
-                              title="Optical Flow", filename_prefix=heatmap_filename, count=count)
+                         title="Optical Flow", filename_prefix=heatmap_filename, count=count)
         of_psnr_list.append(
             eval_metric.get_psnr_from_tensor(of, target).item())
         of_ssim_list.append(
+            eval_metric.get_ssim_from_tensor(of, target).item())
+        of_ms_ssim_list.append(
             eval_metric.get_ms_ssim_from_tensor(of, target).item())
         of_spearman_list.append(
             eval_metric.get_spearman_from_tensor(of, target).item())
@@ -341,15 +358,17 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
         of_genome_disco_list.append(
             eval_metric.get_genome_disco_from_tensor(of, target).item())
         of_genome_disco2_list.append(
-            eval_metric.get_genome_disco2_from_tensor(of, target).item())
+            eval_metric.get_genome_disco2_from_tensor(of, target, resol=resol).item())
         of_hicrep_list.append(
-            eval_metric.get_hicrep_from_tensor(of, target).item())
+            eval_metric.get_hicrep_from_tensor(of, target, resol=resol, patch_size=patch, h=5).item())
 
         plot_hic_heatmap(target=linear[:num_examples],
-                              title="Linear", filename_prefix=heatmap_filename, count=count)
+                         title="Linear", filename_prefix=heatmap_filename, count=count)
         linear_psnr_list.append(
             eval_metric.get_psnr_from_tensor(linear, target).item())
         linear_ssim_list.append(
+            eval_metric.get_ssim_from_tensor(linear, target).item())
+        linear_ms_ssim_list.append(
             eval_metric.get_ms_ssim_from_tensor(linear, target).item())
         linear_spearman_list.append(
             eval_metric.get_spearman_from_tensor(linear, target).item())
@@ -358,9 +377,9 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
         linear_genome_disco_list.append(
             eval_metric.get_genome_disco_from_tensor(linear, target).item())
         linear_genome_disco2_list.append(
-            eval_metric.get_genome_disco2_from_tensor(linear, target).item())
+            eval_metric.get_genome_disco2_from_tensor(linear, target, resol=resol).item())
         linear_hicrep_list.append(
-            eval_metric.get_hicrep_from_tensor(linear, target).item())
+            eval_metric.get_hicrep_from_tensor(linear, target, resol=resol, patch_size=patch, h=5).item())
 
         del x1, target, x2, pred, _4dmax_pred, of, linear
 
@@ -376,6 +395,12 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
             '4dmax': np.nanmean(_4dmax_ssim_list),
             'optical_flow': np.nanmean(of_ssim_list),
             'linear': np.nanmean(linear_ssim_list)
+        },
+        "ms-ssim": {
+            'ours': np.nanmean(ms_ssim_list),
+            '4dmax': np.nanmean(_4dmax_ms_ssim_list),
+            'optical_flow': np.nanmean(of_ms_ssim_list),
+            'linear': np.nanmean(linear_ms_ssim_list)
         },
         "spearman": {
             'ours': np.nanmean(spearman_list),
@@ -417,6 +442,7 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
 COLUMN_NAMES = ["model", "resolution", "patch", "organism", "sample", "condition", "time", "chromosome",
                 "psnr_ours", "psnr_4dmax",  "psnr_optical_flow", "psnr_linear",
                 "ssim_ours",  "ssim_4dmax", "ssim_optical_flow", "ssim_linear",
+                "ms-ssim_ours",  "ms-ssim_4dmax", "ms-ssim_optical_flow", "ms-ssim_linear",
                 "spearman_ours",  "spearman_4dmax", "spearman_optical_flow", "spearman_linear",
                 "scc_ours",  "scc_4dmax", "scc_optical_flow", "scc_linear",
                 "genome_disco_ours",  "genome_disco_4dmax", "genome_disco_optical_flow", "genome_disco_linear",
@@ -444,6 +470,11 @@ def write_summary(model, resolution, patch, organism, sample, condition, time, c
         f"{metrics['ssim']['4dmax']:.{METRIC_PRECISION}f}",
         f"{metrics['ssim']['optical_flow']:.{METRIC_PRECISION}f}",
         f"{metrics['ssim']['linear']:.{METRIC_PRECISION}f}",
+
+        f"{metrics['ms-ssim']['ours']:.{METRIC_PRECISION}f}",
+        f"{metrics['ms-ssim']['4dmax']:.{METRIC_PRECISION}f}",
+        f"{metrics['ms-ssim']['optical_flow']:.{METRIC_PRECISION}f}",
+        f"{metrics['ms-ssim']['linear']:.{METRIC_PRECISION}f}",
 
         f"{metrics['spearman']['ours']:.{METRIC_PRECISION}f}",
         f"{metrics['spearman']['4dmax']:.{METRIC_PRECISION}f}",

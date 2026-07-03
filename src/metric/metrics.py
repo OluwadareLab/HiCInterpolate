@@ -83,20 +83,19 @@ def get_genome_disco_from_tensor(preds: Tensor, target: Tensor):
     return genome_disco.compute_genomedisco_from_tensor(preds, target)
 
 
-def get_genome_disco2(preds: np.ndarray, target: np.ndarray):
-    return compute_genomedisco.compute_reproducibility(preds, target)
+def get_genome_disco2(preds: np.ndarray, target: np.ndarray, resol=None):
+    return compute_genomedisco.compute_reproducibility(preds, target, resol=resol)
 
 
-def get_genome_disco2_from_tensor(preds: Tensor, target: Tensor):
-    return compute_genomedisco.compute_reproducibility_from_tensor(preds, target)
+def get_genome_disco2_from_tensor(preds: Tensor, target: Tensor, resol=None):
+    return compute_genomedisco.compute_reproducibility_from_tensor(preds, target, resol=resol)
+
+def get_hicrep(preds: Tensor, target: Tensor, resol=None, patch_size=None, h=None):
+    return compute_hicrep.get_hicrep_scc(preds, target, resol, patch_size, h)
 
 
-def get_hicrep(preds: Tensor, target: Tensor):
-    return compute_hicrep.get_hicrep_scc(preds, target)
-
-
-def get_hicrep_from_tensor(preds: Tensor, target: Tensor):
-    return compute_hicrep.get_hicrep_scc_from_tensor(preds, target)
+def get_hicrep_from_tensor(preds: Tensor, target: Tensor, resol=None, patch_size=None, h=None):
+    return compute_hicrep.get_hicrep_scc_from_tensor(preds, target, resol, patch_size, h)
 
 
 def _minmax_01(x: Tensor):
@@ -137,11 +136,15 @@ GPU_METRIC_FUNCS = {
 
 
 @torch.no_grad()
-def get_metric_gpu(metric_name: str, preds: Tensor, target: Tensor):
+def get_metric_gpu(metric_name: str, preds: Tensor, target: Tensor, resol=None, patch_size=None, h=None):
     if metric_name not in GPU_METRIC_FUNCS:
         valid_metrics = ", ".join(GPU_METRIC_FUNCS)
         raise ValueError(
             f"Unknown GPU metric '{metric_name}'. Valid metrics: {valid_metrics}")
+    if metric_name == "genome_disco2":
+        return GPU_METRIC_FUNCS[metric_name](preds, target, resol=resol)
+    if metric_name == "hicrep":
+        return GPU_METRIC_FUNCS[metric_name](preds, target, resol=resol, patch_size=patch_size, h=h)
     return GPU_METRIC_FUNCS[metric_name](preds, target)
 
 

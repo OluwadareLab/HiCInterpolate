@@ -34,6 +34,7 @@ class FileConfig:
 @dataclass
 class DataConfig:
     patch: int
+    resolution: int
     interpolator_images_map: Dict[str, str]
     train_val_test_ratio: List[float]
     batch_size: int

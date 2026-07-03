@@ -13,8 +13,7 @@ from omegaconf import OmegaConf
 from configs.config import Config
 from torch.utils.data.dataloader import default_collate
 import cupy as cp
-
-from src.data_loader.load_data_kfold import CustomDatasetKF, TripletDatasetKF
+from src.data_loader.load_data import TripletDataset
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -108,36 +107,41 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
     log = base_logger(cfg.file.log)
 
     batch_size = cfg.data.batch_size
-    train_cds = CustomDatasetKF(record_file=f'{cfg.file.dataset_dict}.train', img_dir=cfg.dir.image,
-                                img_map=cfg.data.interpolator_images_map, shuffle=True)
-    train_dict = train_cds._get_dataset()
-    val_cds = CustomDatasetKF(record_file=f'{cfg.file.dataset_dict}.val', img_dir=cfg.dir.image,
-                              img_map=cfg.data.interpolator_images_map, shuffle=True)
-    val_dict = val_cds._get_dataset()
 
     if train:
-        train_ds = TripletDatasetKF(
-            triplet_dicts=train_dict)
-        val_ds = TripletDatasetKF(triplet_dicts=val_dict)
-
+        train_cds = CustomDataset(record_file=f'{cfg.file.dataset_dict}.train', img_dir=cfg.dir.image,
+                                  img_map=cfg.data.interpolator_images_map)
+        train_dict = train_cds._get_dataset()
+        train_ds = TripletDataset(triplet_dicts=train_dict)
         train_dl = get_dataloader(
             ds=train_ds, batch_size=batch_size, shuffle=True, isDistributed=isDistributed)
+
+        val_cds = CustomDataset(record_file=f'{cfg.file.dataset_dict}.val', img_dir=cfg.dir.image,
+                                img_map=cfg.data.interpolator_images_map)
+        val_dict = val_cds._get_dataset()
+        val_ds = TripletDataset(triplet_dicts=val_dict)
         val_dl = get_dataloader(ds=val_ds, batch_size=batch_size,
                                 shuffle=False, isDistributed=isDistributed)
+
         trainer = TrainLib.Trainer(cfg=cfg, log=log, train_dl=train_dl, val_dl=val_dl,
                                    load_snapshot=load_snapshot, isDistributed=isDistributed)
         trainer.train(max_epochs=cfg.training.epochs)
 
-    # if test and os.path.exists(cfg.file.model):
-    #     test_dl = get_dataloader(
-    #         ds=test_ds, batch_size=batch_size, shuffle=False, isDistributed=isDistributed)
-    #     tester = TestLib.Tester(
-    #         cfg=cfg, log=log, model=cfg.file.model, test_dl=test_dl, isDistributed=isDistributed)
-    #     tester.test()
-    # else:
-    #     log.info(
-    #         f"Model file {cfg.file.model} does not exist. Skipping testing.")
-    #     print(f"Model file {cfg.file.model} does not exist. Skipping testing.")
+    if test and os.path.exists(cfg.file.model):
+        test_cds = CustomDataset(record_file=f'{cfg.file.dataset_dict}.test', img_dir=cfg.dir.image,
+                                 img_map=cfg.data.interpolator_images_map)
+        test_dict = test_cds._get_dataset()
+        test_ds = TripletDataset(triplet_dicts=test_dict)
+        test_dl = get_dataloader(
+            ds=test_ds, batch_size=batch_size, shuffle=False, isDistributed=isDistributed)
+
+        tester = TestLib.Tester(
+            cfg=cfg, log=log, model=cfg.file.model, test_dl=test_dl, isDistributed=isDistributed)
+        tester.test()
+    else:
+        log.info(
+            f"Model file {cfg.file.model} does not exist. Skipping testing.")
+        print(f"Model file {cfg.file.model} does not exist. Skipping testing.")
 
     if isDistributed:
         dist.destroy_process_group()
