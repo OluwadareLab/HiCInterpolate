@@ -1,15 +1,15 @@
 device: cuda
 
 dir:
-  root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
-  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/full
-  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/full
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
-  image: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
+  root: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate
+  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/full
+  output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/full
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
+  image: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
 
 
 file:
-  dataset_dict: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets/train/25000_64
+  dataset_dict: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets/train/25000_64
 # dir:
 #   root: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/HiCInterpolate
 #   model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/triplets_dataset
@@ -47,7 +47,7 @@ data:
   train_val_test_ratio: [0.8, 0.2, 0.0]
 
 training:
-  epochs: 1
+  epochs: 100
   save_every: 10
   lr: 1e-4
   min_lr: 1e-5

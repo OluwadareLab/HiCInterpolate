@@ -27,12 +27,12 @@ CMAP_ = mcolors.LinearSegmentedColormap.from_list(
     "juicebox", ["#FFFFFF", "#FFAAAA", "#FF5555", "#FF0000", "#B30000"], N=256
 )
 
-ROOT_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate'
+ROOT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate'
 MODEL_DIR = f'{ROOT_DIR}/datasets/final_output/triplets_dataset'
-DICT_DIR = f'{ROOT_DIR}/datasets/timeseries/new_triplets/test'
+DICT_DIR = f'{ROOT_DIR}/datasets/timeseries/new_triplets/inference'
 IMAGE_DIR = f'{ROOT_DIR}/datasets/timeseries/new_triplets'
-OUTPUT_DIR = f'{ROOT_DIR}/datasets/timeseries/output/full/test'
-LOG_FILE = f'{ROOT_DIR}/datasets/timeseries/output/full/test/inference.log'
+OUTPUT_DIR = f'{ROOT_DIR}/datasets/final_output/inference'
+LOG_FILE = f'{OUTPUT_DIR}/inference.log'
 CSV_FILENAME_SUFFIX = "comparative_scores.csv"
 
 METHODS = ("Hicinterpolate", "4DMax", "Linear", "Optical Flow")
@@ -56,21 +56,37 @@ TEST_DATASET = {
         "dmso": {
             "control": {
                 "triplets":
-                [
-                    ["dmso_control_30m",
-                     "dmso_control_60m",
-                     "dmso_control_90m"],
-                ]
+                    [
+                        ["dmso_control_0m",
+                         "dmso_control_30m",
+                         "dmso_control_60m"],
+
+                        ["dmso_control_30m",
+                         "dmso_control_60m",
+                         "dmso_control_90m"],
+
+                        ["dmso_control_60m",
+                         "dmso_control_90m",
+                         "dmso_control_120m"]
+                    ]
             }
         },
         "dtag": {
             "v1": {
                 "triplets":
-                [
-                    ["dtag_v1_60m",
-                     "dtag_v1_90m",
-                     "dtag_v1_120m"]
-                ]
+                    [
+                        ["dtag_v1_0m",
+                         "dtag_v1_30m",
+                         "dtag_v1_60m"],
+
+                        ["dtag_v1_30m",
+                         "dtag_v1_60m",
+                         "dtag_v1_90m"],
+
+                        ["dtag_v1_60m",
+                         "dtag_v1_90m",
+                         "dtag_v1_120m"]
+                    ]
             }
         },
         "wtc11": {
@@ -90,6 +106,7 @@ TEST_DATASET = {
                          "wtc11_ventricular_8640m"]
                     ]
             }
+
         }
     },
     "mouse": {
@@ -106,13 +123,29 @@ TEST_DATASET = {
         "embryo": {
             "development": {
                 "triplets": [
+                    ["sperm",
+                     "mii_oocyte",
+                     "zygote"],
+
                     ["mii_oocyte",
                      "zygote",
                      "early2_cell"],
 
+                    ["zygote",
+                     "early2_cell",
+                     "late2_cell"],
+
+                    ["early2_cell",
+                     "late2_cell",
+                     "8cell"],
+
                     ["late2_cell",
                      "8cell",
-                     "icm"]
+                     "icm"],
+
+                    ["8cell",
+                     "icm",
+                     "mes_cell"]
                 ]
             }
         }
@@ -541,7 +574,7 @@ def run_inference():
                             for triplet in content["triplets"]:
                                 for chromosome in CHROMOSOMES[organism]:
                                     record_filename = os.path.join(
-                                        DICT_DIR, f'{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.test')
+                                        DICT_DIR, f'{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.inference')
                                     print(
                                         f"Running inference for record: {record_filename}")
                                     LOG.info(

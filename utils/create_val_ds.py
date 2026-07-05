@@ -1,7 +1,7 @@
 import os
 import re
 
-ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries"
+ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries"
 DATASET_DICT_PATH = f"{ROOT_PATH}/new_triplets"
 OUTPUT_PATH = f"{ROOT_PATH}/new_triplets/train"
 

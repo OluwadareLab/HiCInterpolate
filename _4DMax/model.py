@@ -1,76 +1,10 @@
 from typing import List
-
-import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
 import cupy as cp
 import torch
 import numpy as np
 import _4DMax.Utils.util as ut
 import _4DMax.Utils.movement as mv
 import _4DMax.Utils.likelihood as li
-
-DATA_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset'
-DICT_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplets_dataset/test'
-OUTPUT_DIR = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/final_output/Plot_4DMax'
-
-RESOLUTIONS = [25000]
-PATCHES = [64]
-CHROMOSOMES = {
-    "human": ["10", "11"]
-}
-DATASET = {
-    "human": {
-        "dmso": {
-            "control": {
-                "triplets":
-                [
-                    ["4DNFI7T93SHL_dmso_control_30m",
-                     "4DNFICF2Z2TG_dmso_control_60m",
-                     "4DNFILL624WG_dmso_control_90m"]
-                ]
-            }
-        },
-        "dtag": {
-            "v1": {
-                "triplets":
-                [
-
-                    ["4DNFIY1TCVLX_dtag_v1_30m",
-                     "4DNFIXWT5U42_dtag_v1_60m",
-                     "4DNFIHTFIMGG_dtag_v1_90m"]
-                ]
-            }
-        }
-    }
-}
-
-columns = ["Resolution", "Patch Size", "organism", "sample", "condition", "Timeframe",  "chromosome", "PSNR",
-           "SSIM", "SCC", "GenomeDISCO", "HiCRep", "LPIPS"]
-
-CSV_FILENAME = f"{OUTPUT_DIR}/4DMax_results.csv"
-
-plt.rcParams['figure.figsize'] = (12, 6)
-plt.rcParams['figure.dpi'] = 300
-CMAP_ = mcolors.LinearSegmentedColormap.from_list(
-    "juicebox", ["#FFFFFF", "#FFAAAA", "#FF5555", "#FF0000", "#B30000"], N=256
-)
-
-
-def draw_hic_comparison_one(num_examples, target: torch.Tensor, title, file, count):
-    matrix = np.log1p(target.squeeze().detach().cpu().numpy())
-    _min = np.min(matrix)
-    _max = np.max(matrix)
-    matrix = (matrix - _min) / (_max - _min + 1e-10)  # Normalize to [0, 1]
-    fig, ax = plt.subplots(figsize=(5, 5))
-    im = ax.imshow(matrix, cmap=CMAP_)
-    ax.set_title(title)
-    ax.axis("off")
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
-    plt.tight_layout()
-    plt.savefig(f"{file.removesuffix('.png')}_{title}_{count}.png",
-                dpi=300, format='png')
-    plt.close()
 
 
 def get_sparse_matrix(matrix):
@@ -79,6 +13,7 @@ def get_sparse_matrix(matrix):
 
     sparse_matrix = np.column_stack((rows, cols, values))
     return sparse_matrix
+
 
 def normalize(mat, is_log=False, is_min_max=False):
     if is_log:
@@ -95,6 +30,7 @@ def normalize(mat, is_log=False, is_min_max=False):
             mat = (mat - min_val) / denom
 
     return mat
+
 
 def run_4dmax(timeframe: List[torch.Tensor], patch_size=64):
     np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
@@ -119,15 +55,12 @@ def run_4dmax(timeframe: List[torch.Tensor], patch_size=64):
     n_tao = {}
     n_min_tao = {}
 
+    DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
     sparse_matrix_size = patch_size * patch_size
     for key, val in enumerate(taos):
+        DEVICE = timeframe[val].device
         dense_matrix = timeframe[val].squeeze().cpu().numpy()
         sparse_matrix = get_sparse_matrix(dense_matrix)
-
-        # if sparse_matrix.shape[0] < (sparse_matrix_size - sparse_matrix_size*0.10):
-        #     print(
-        #         f"[Warning] Skipping due to 10% less sparse matrix")
-        #     return np.nan
 
         map_tao[val] = sparse_matrix
         row_tao[val] = (map_tao[val][:, 0].astype(int)).astype(int)
@@ -184,47 +117,6 @@ def run_4dmax(timeframe: List[torch.Tensor], patch_size=64):
         return np.nan
 
     pred_tensor = torch.tensor(pred).unsqueeze(
-        0).unsqueeze(0).float().to('cuda')
+        0).unsqueeze(0).float().to(DEVICE)
 
     return pred_tensor
-
-
-# with open(CSV_FILENAME, 'w') as f:
-#     f.write(','.join(columns) + '\n')
-#     for resolution in RESOLUTIONS:
-#         for patch in PATCHES:
-#             for organism in DATASET.keys():
-#                 for sample in DATASET[organism].keys():
-#                     for condition in DATASET[organism][sample].keys():
-#                         triplet_list = DATASET[organism][sample][condition]['triplets']
-#                         for triplet in triplet_list:
-#                             timeframe_name = "_".join(
-#                                 name.split('_')[-1] for name in triplet)
-#                             for chromosome in CHROMOSOMES[organism]:
-#                                 dict_filename = f"{DICT_DIR}/test_{resolution}_{patch}_{organism}_{triplet[1]}_{chromosome}.txt"
-#                                 print(f"Running 4DMax for {dict_filename}...")
-#                                 plot_filename = f"{OUTPUT_DIR}/plot_{resolution}_{patch}_{organism}_{sample}_{triplet[1]}_{chromosome}.png"
-#                                 psnr, ssim, scc, genomedisco, hicrep, lpips = run_4dmax(
-#                                     dict_filename, DATA_DIR, patch_size=patch, resolution=resolution, plot_filename=plot_filename)
-#                                 print(
-#                                     f"Results for {dict_filename}: PSNR={psnr}, SSIM={ssim}, SCC={scc}, GenomeDISCO={genomedisco}, HiCRep={hicrep}, LPIPS={lpips}")
-
-#                                 row = {
-#                                     "Resolution": resolution,
-#                                     "Patch Size": patch,
-#                                     "organism": organism,
-#                                     "sample": sample,
-#                                     "condition": condition,
-#                                     "Timeframe": triplet[1],
-#                                     "chromosome": chromosome,
-#                                     "PSNR": psnr,
-#                                     "SSIM": ssim,
-#                                     "SCC": scc,
-#                                     "GenomeDISCO": genomedisco,
-#                                     "HiCRep": hicrep,
-#                                     "LPIPS": lpips
-#                                 }
-#                                 print(
-#                                     f"Writing results for {dict_filename}...")
-#                                 f.write(','.join(str(value)
-#                                         for value in row.values()) + '\n')

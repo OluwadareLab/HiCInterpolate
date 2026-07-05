@@ -1,7 +1,7 @@
 import os
 import re
 
-ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries"
+ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries"
 DATASET_DICT_PATH = f"{ROOT_PATH}/new_triplets"
 OUTPUT_PATH = f"{ROOT_PATH}/new_triplets/train"
 
@@ -90,7 +90,7 @@ def prepare_triplates():
     for resolution in RESOLUTIONS:
         input_file = f"{DATASET_DICT_PATH}/dataset_dict_{resolution}.txt"
         for patch in PATCHES:
-            output_file = f"{OUTPUT_PATH}/{resolution}_{patch}.test"
+            output_file = f"{OUTPUT_PATH}/{resolution}_{patch}.train"
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
             for organism, samples in DATASET.items():
                 for sample, subsamples in samples.items():

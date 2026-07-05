@@ -11,7 +11,7 @@
 # 1. Initialize and activate Conda
 source /opt/miniconda3/etc/profile.d/conda.sh  # Adjust path to your conda installation if needed
 conda activate hicinterpolate
-cd /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
+cd /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
 
 torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_25k_64
 torchrun --standalone --nproc_per_node=1 hicinterpolate_kfold.py --train --test --config config_25k_64_kfold

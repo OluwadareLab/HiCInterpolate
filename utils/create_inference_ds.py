@@ -1,9 +1,9 @@
 import os
 import re
 
-ROOT_PATH = f"/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries"
+ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries"
 DATASET_DICT_PATH = f"{ROOT_PATH}/new_triplets"
-OUTPUT_PATH = f"{ROOT_PATH}/new_triplets/test"
+OUTPUT_PATH = f"{ROOT_PATH}/new_triplets/inference"
 
 RESOLUTIONS = [25000, 10000, 5000]
 PATCHES = [64, 128, 256, 512]
@@ -138,7 +138,7 @@ def prepare_triplates():
                         for triplet in content["triplets"]:
                             for chromosome in CHROMOSOMES[organism]:
                                 record = f"{resolution}/{organism}/{sample}/{subsample}/{triplet[1]}/chr{chromosome}/{patch}"
-                                output_file = f"{OUTPUT_PATH}/{resolution}_{patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.test"
+                                output_file = f"{OUTPUT_PATH}/{resolution}_{patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.inference"
                                 os.makedirs(os.path.dirname(
                                     output_file), exist_ok=True)
                                 get_triplet_dict(
