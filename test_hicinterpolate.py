@@ -12,7 +12,6 @@ import torch.nn as nn
 import numpy as np
 import os
 import random
-from src.misc import plots as plot
 from flow_based_interpolation import of_interpolation as OF
 import logging
 from _4DMax import model as _4DMax_model
@@ -31,7 +30,7 @@ ROOT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate'
 MODEL_DIR = f'{ROOT_DIR}/datasets/final_output/triplets_dataset'
 DICT_DIR = f'{ROOT_DIR}/datasets/timeseries/new_triplets/inference'
 IMAGE_DIR = f'{ROOT_DIR}/datasets/timeseries/new_triplets'
-OUTPUT_DIR = f'{ROOT_DIR}/datasets/final_output/inference'
+OUTPUT_DIR = f'{ROOT_DIR}/datasets/timeseries/new_triplets/output/inference'
 LOG_FILE = f'{OUTPUT_DIR}/inference.log'
 CSV_FILENAME_SUFFIX = "comparative_scores.csv"
 
@@ -47,7 +46,7 @@ PATCHES = [64]
 MODEL_BATCHES = [20]
 
 CHROMOSOMES = {
-    "human": ["10", "11", "15", "16", "20", "21"],
+    "human": ["10", "15", "20", "11", "16", "21"],
     "mouse": ["10", "15", "19"]
 }
 
@@ -88,25 +87,6 @@ TEST_DATASET = {
                          "dtag_v1_120m"]
                     ]
             }
-        },
-        "wtc11": {
-            "atrial": {
-                "triplets":
-                    [
-                        ["wtc11_atrial_2880m",
-                         "wtc11_atrial_5760m",
-                         "wtc11_atrial_8640m"]
-                    ]
-            },
-            "ventricular": {
-                "triplets":
-                    [
-                        ["wtc11_ventricular_2880m",
-                         "wtc11_ventricular_5760m",
-                         "wtc11_ventricular_8640m"]
-                    ]
-            }
-
         }
     },
     "mouse": {
@@ -259,7 +239,7 @@ def plot_hic_heatmap(target: torch.Tensor, title, filename_prefix, count):
     matrix = target.squeeze().detach().cpu().numpy()
     fig, ax = plt.subplots(figsize=(5, 5))
     im = ax.imshow(matrix, cmap=CMAP_)
-    ax.set_title(title)
+    # ax.set_title(title)
     ax.axis("off")
     # fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
@@ -328,7 +308,6 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
         target = target.to(DEVICE)*upper_y
         x2 = x2.to(DEVICE)
         pred = model(x1, x2)
-        pred[pred < 0] = 0
         pred = pred*upper_y
         _4dmax_pred = _4DMax_model.run_4dmax(
             timeframe=[x1*upper_x0, x2*upper_x1], patch_size=patch)
@@ -561,8 +540,7 @@ def run_inference():
                 model_output_dir, 'heatmaps')
             os.makedirs(heatmap_output_dir, exist_ok=True)
 
-            model_filename = os.path.join(
-                MODEL_DIR, config_name, f"hicinterpolate_{model_patch}_p{model_patch}_b{model_batch}.pt")
+            model_filename = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate/config_25k_64/hicinterpolate_64.pt'
             model = load_model(model_filename)
             print(f"Running inference for model: {model_filename}")
             LOG.info(f"Running inference for model: {model_filename}")

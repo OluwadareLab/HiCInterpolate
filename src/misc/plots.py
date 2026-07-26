@@ -125,10 +125,8 @@ def draw_metric(cfg, state):
     metric_specs = {
         "psnr": ("val_psnr", "PSNR on validation set", "PSNR", getattr(cfg.file, "psnr_val_plot", None)),
         "ssim": ("val_ssim", "SSIM on validation set", "SSIM", getattr(cfg.file, "ssim_val_plot", None)),
-        "scc": ("val_scc", "SCC on validation set", "SCC", getattr(cfg.file, "scc_val_plot", None)),
-        "hicrep": ("val_hicrep", "HiCRep on validation set", "HiCRep", getattr(cfg.file, "hicrep_val_plot", None)),
-        "genome_disco": ("val_genome_disco", "GenomeDISCO on validation set", "GenomeDISCO", getattr(cfg.file, "genome_disco_val_plot", None)),
-        "lpips": ("val_lpips", "LPIPS on validation set", "LPIPS", getattr(cfg.file, "lpips_val_plot", None)),
+        "ms_ssim": ("val_ms_ssim", "MS-SSIM on validation set", "MS-SSIM", getattr(cfg.file, "ms_ssim_val_plot", None)),
+        "hicrep": ("val_hicrep", "HiCRep on validation set", "HiCRep", getattr(cfg.file, "hicrep_val_plot", None))
     }
 
     for _, (key, title, ylabel, file) in metric_specs.items():
@@ -141,10 +139,10 @@ def draw_metric(cfg, state):
         if key in state:
             plt.plot(state[key], label=key.replace("val_", "").upper())
             has_metric = True
-    if has_metric:
-        plt.title("validation metrics")
-        plt.xlabel("epoch")
-        plt.ylabel("score")
-        plt.legend(loc="best")
-        plt.savefig(cfg.file.val_metrics_plot, dpi=300, format='png')
+    # if has_metric:
+    #     plt.title("validation metrics")
+    #     plt.xlabel("epoch")
+    #     plt.ylabel("score")
+    #     plt.legend(loc="best")
+    #     plt.savefig(cfg.file.val_metrics_plot, dpi=300, format='png')
     plt.close()

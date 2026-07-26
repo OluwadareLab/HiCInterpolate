@@ -4,7 +4,6 @@ from typing import List, Dict
 
 @dataclass
 class DirConfig:
-    root: str
     data: str
     image: str
     model_state: str
@@ -21,14 +20,11 @@ class FileConfig:
     num_visualization_samples: int
     psnr_val_plot: str
     ssim_val_plot: str
-    scc_val_plot: str
+    ms_ssim_val_plot: str
     hicrep_val_plot: str
-    genome_disco_val_plot: str
-    lpips_val_plot: str
     train_val_loss_plot: str
     lr_plot: str
     log: str
-    val_metrics_plot: str
 
 
 @dataclass
@@ -36,7 +32,6 @@ class DataConfig:
     patch: int
     resolution: int
     interpolator_images_map: Dict[str, str]
-    train_val_test_ratio: List[float]
     batch_size: int
 
 
@@ -58,27 +53,8 @@ class FlowConfig:
 
 
 @dataclass
-class DiffusionConfig:
-    enabled: bool = True
-    timesteps: int = 64
-    beta_start: float = 0.0001
-    beta_end: float = 0.02
-    hidden_channels: int = 32
-    inference_timestep: int = 4
-    preserve_input_support: bool = True
-
-
-@dataclass
 class ModelConfig:
     name: str
-    init_in_channels: int
-    init_out_channels: int
-    pyramid_level: int
-    ext_feature_level: int
-    unique_levels: int
-    flow: FlowConfig
-    fusion_pyramid_level: int
-    diffusion: DiffusionConfig = field(default_factory=DiffusionConfig)
 
 
 @dataclass
@@ -97,10 +73,8 @@ class LossConfig:
 class EvalMetricConfig:
     psnr: bool = True
     ssim: bool = True
-    scc: bool = True
     hicrep: bool = True
-    genome_disco: bool = True
-    lpips: bool = True
+
 
 
 @dataclass

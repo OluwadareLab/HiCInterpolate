@@ -165,10 +165,12 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
 
     if isDistributed:
         dist.destroy_process_group()
-    
+
     max_score, max_idx = np.array(ssim_scores).max(), np.argmax(ssim_scores)
     print(f"SSIM scores for each fold: {ssim_scores}")
+    log.info(f"SSIM scores for each fold: {ssim_scores}")
     print(f"Maximum SSIM score: {max_score}, Fold: {max_idx}")
+    log.info(f"Maximum SSIM score: {max_score}, Fold: {max_idx}")
 
 
 if __name__ == "__main__":

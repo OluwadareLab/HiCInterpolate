@@ -148,14 +148,16 @@ class Interpolator(nn.Module):
             base_channels=self.base_channels, depth=self.depth+1, max_disp=4)
         self.feature_decoder = FeatureDecoder(
             base_channels=self.base_channels, depth=self.depth)
-        self.residual_head = nn.Conv2d(self.base_channels, 1,
-                                       kernel_size=1, padding=0, bias=False)
+
         self.output_projection = OutputProjection(
             in_channels=6, hidden_channels=32)
         self.multiscale_attention = MultiScaleBlockAttention(
             channels=self.base_channels)
         self.sparse_attention = SparseAttentionMask(
             channels=self.base_channels)
+        self.residual_head = nn.Conv2d(self.base_channels, 1,
+                                       kernel_size=1, padding=0, bias=False)
+        self.softplus = nn.Softplus()
 
     def forward(self, x0: Tensor, x2: Tensor):
         enc0 = self.feature_encoder(x0)
@@ -164,16 +166,15 @@ class Interpolator(nn.Module):
         interpolations = self.flow_predictor(enc0, enc2)
         decoded = self.feature_decoder(interpolations)
 
-        multiscale_attended = self.multiscale_attention(decoded)
-        sparse_attended = self.sparse_attention(multiscale_attended, x0, x2)
-        projection = self.residual_head(sparse_attended)
+        # multiscale_attended = self.multiscale_attention(decoded)
+        # sparse_attended = self.sparse_attention(multiscale_attended, x0, x2)
+        projection = self.residual_head(decoded)
 
         # squares0, dots0, h_edges0, v_edges0 = utils.image_segmentation_batch(
         #     x0)
         # squares2, dots2, h_edges2, v_edges2 = utils.image_segmentation_batch(
         #     x2)
-
         # pred, mask = self.output_projection(
         #     projection, dots0, dots2)
-
+        projection[projection < 0] = 0
         return projection

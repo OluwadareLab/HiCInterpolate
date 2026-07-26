@@ -22,8 +22,8 @@ class TripletDataset(Dataset):
 
     def _load_valid_matrix(self, image_file: str):
         img = np.load(image_file)
-        if np.isnan(img).any() or np.isinf(img).any() or img.min() == img.max():
-            return None
+        # if np.isnan(img).any() or np.isinf(img).any() or img.min() == img.max():
+        #     return None
         return img
 
     def log1p(self, matrix):
@@ -32,13 +32,14 @@ class TripletDataset(Dataset):
     def normalize_triplet(self, x0, y, x1):
         logged = [self.log1p(matrix) for matrix in (x0, y, x1)]
 
+
         upper = max(
-            np.percentile(matrix, CLIPPING_PERCENTILE)
+            max(np.percentile(matrix, CLIPPING_PERCENTILE), _EPSILON)
             for matrix in logged
         )
 
-        if upper <= _EPSILON:
-            return None
+        # if upper <= _EPSILON:
+        #     return None
 
         images = torch.stack([
             torch.from_numpy(

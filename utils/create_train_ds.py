@@ -6,7 +6,7 @@ DATASET_DICT_PATH = f"{ROOT_PATH}/new_triplets"
 OUTPUT_PATH = f"{ROOT_PATH}/new_triplets/train"
 
 RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [64, 128, 256, 512]
+PATCHES = [64, 128, 256]
 CHROMOSOMES = {
     "human": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "11", "13", "14", "16", "18", "19", "21"]
 }
@@ -48,25 +48,6 @@ DATASET = {
                          "dtag_v1_120m"]
                     ]
             }
-        },
-        "wtc11": {
-            "atrial": {
-                "triplets":
-                    [
-                        ["wtc11_atrial_2880m",
-                         "wtc11_atrial_5760m",
-                         "wtc11_atrial_8640m"]
-                    ]
-            },
-            "ventricular": {
-                "triplets":
-                    [
-                        ["wtc11_ventricular_2880m",
-                         "wtc11_ventricular_5760m",
-                         "wtc11_ventricular_8640m"]
-                    ]
-            }
-
         }
     }
 }

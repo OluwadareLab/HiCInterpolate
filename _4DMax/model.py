@@ -61,6 +61,10 @@ def run_4dmax(timeframe: List[torch.Tensor], patch_size=64):
         DEVICE = timeframe[val].device
         dense_matrix = timeframe[val].squeeze().cpu().numpy()
         sparse_matrix = get_sparse_matrix(dense_matrix)
+        if sparse_matrix.shape[0] < 1:
+            print(
+                f"[Warning] Skipping due to sparse matrix size {sparse_matrix.shape[0]} less than patch size {sparse_matrix_size}")
+            return np.nan
 
         map_tao[val] = sparse_matrix
         row_tao[val] = (map_tao[val][:, 0].astype(int)).astype(int)

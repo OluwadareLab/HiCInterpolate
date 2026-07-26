@@ -56,6 +56,8 @@ def ddp_setup():
 
 def collate_fn(batch):
     batch = [b for b in batch if b is not None]
+    if len(batch) == 0:
+        return None
     return default_collate(batch)
 
 
@@ -93,9 +95,6 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
     if isDistributed:
         local_rank = ddp_setup()
         OmegaConf.update(cfg, "device", f"cuda:{local_rank}", force_add=True)
-
-    # OmegaConf.update(cfg, "dir.root", "/home/mohit/Documents/project/interpolation/HiCInterpolate")
-    # OmegaConf.update(cfg, "dir.data", "/home/mohit/Documents/project/interpolation/data/triplets/normalized")
 
     output_dir = f"{cfg.dir.output}/{config_filename}"
     model_state_dir = f"{cfg.dir.model_state}/{config_filename}"
@@ -164,10 +163,4 @@ if __name__ == "__main__":
                         action='store_true', help='Test Model (default: False)')
     args = parser.parse_args()
 
-    # args.config = "config_dilated_25k_128"
-    # args.train = True
-    # args.test = False
     main(args.config, args.distributed, args.load_snapshot, args.train, args.test)
-
-
-# torchrun --standalone --nproc_per_node=1 hicinterpolate.py --test --config config_a1_5k_p64_b128

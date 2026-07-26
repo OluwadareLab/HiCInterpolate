@@ -20,8 +20,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Trainer:
-    EVAL_METRICS = ("psnr", "ssim", "ms-ssim", "spearman", "scc",
-                    "genome_disco", "genome_disco2", "hicrep")
+    EVAL_METRICS = ("psnr", "ssim", "hicrep")
 
     def __init__(self, cfg, log, train_dl: DataLoader, val_dl: DataLoader, load_snapshot: bool = False, isDistributed: bool = False) -> None:
         self.cfg = cfg
@@ -102,7 +101,7 @@ class Trainer:
         self.metric_columns = ['epoch', 'lr', 'train_loss', 'val_loss',
                                *[f'val_{metric}' for metric in self.active_eval_metrics],
                                'best_val']
-        self.patience = 200
+        self.patience = 100
         self.epochs_no_improve = 0
         self.best_val = -float('inf')
         self.best_model = f'{self.cfg.file.model}'

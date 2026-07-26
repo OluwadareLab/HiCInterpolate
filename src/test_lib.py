@@ -39,10 +39,6 @@ class Tester:
         self.psnr = 0
         self.ssim = 0
         self.ms_ssim = 0
-        self.spearman = 0
-        self.scc = 0
-        self.genome_disco = 0
-        self.genome_disco2 = 0
         self.hicrep = 0
 
     def _remove_module_prefix(self, state_dict):
@@ -53,24 +49,16 @@ class Tester:
             new_state_dict[name] = v
         return new_state_dict
 
-    def _update_metrics(self, local_steps, local_psnr, local_ssim, local_ms_ssim, local_spearman, local_scc, local_genome_disco, local_genome_disco2, local_hicrep):
+    def _update_metrics(self, local_steps, local_psnr, local_ssim, local_ms_ssim, local_hicrep):
         self.psnr = local_psnr / local_steps
         self.ssim = local_ssim / local_steps
         self.ms_ssim = local_ms_ssim / local_steps
-        self.spearman = local_spearman / local_steps
-        self.scc = local_scc / local_steps
-        self.genome_disco = local_genome_disco / local_steps
-        self.genome_disco2 = local_genome_disco2 / local_steps
         self.hicrep = local_hicrep / local_steps
 
     def _run(self):
         local_psnr = 0
         local_ssim = 0
         local_ms_ssim = 0
-        local_spearman = 0
-        local_scc = 0
-        local_genome_disco = 0
-        local_genome_disco2 = 0
         local_hicrep = 0
 
         with torch.no_grad():
@@ -90,22 +78,13 @@ class Tester:
                 psnr_val = eval_metric.get_psnr_from_tensor(pred, y)
                 ssim_val = eval_metric.get_ssim_from_tensor(pred, y)
                 ms_ssim_val = eval_metric.get_ms_ssim_from_tensor(pred, y)
-                spearman_val = eval_metric.get_spearman_from_tensor(pred, y)
-                scc_val = eval_metric.get_scc_from_tensor(pred, y)
-                genome_disco_val = eval_metric.get_genome_disco_from_tensor(
-                    pred, y)
-                genome_disco2_val = eval_metric.get_genome_disco2_from_tensor(
-                    pred, y, resol=self.cfg.data.resolution)
+
                 hicrep_val = eval_metric.get_hicrep_from_tensor(
                     pred, y, resol=self.cfg.data.resolution, patch_size=self.cfg.data.patch, h=5)
 
                 local_psnr += psnr_val.item()
                 local_ssim += ssim_val.item()
                 local_ms_ssim += ms_ssim_val.item()
-                local_spearman += spearman_val.item()
-                local_scc += scc_val.item()
-                local_genome_disco += genome_disco_val.item()
-                local_genome_disco2 += genome_disco2_val.item()
                 local_hicrep += hicrep_val.item()
 
                 if drawn == 0:
@@ -130,14 +109,6 @@ class Tester:
                 local_ssim, device=self.device)
             local_ms_ssim = torch.tensor(
                 local_ms_ssim, device=self.device)
-            local_spearman = torch.tensor(
-                local_spearman, device=self.device)
-            local_scc = torch.tensor(
-                local_scc, device=self.device)
-            local_genome_disco = torch.tensor(
-                local_genome_disco, device=self.device)
-            local_genome_disco2 = torch.tensor(
-                local_genome_disco2, device=self.device)
             local_hicrep = torch.tensor(
                 local_hicrep, device=self.device)
 
@@ -145,27 +116,19 @@ class Tester:
             dist.all_reduce(local_psnr, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_ssim, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_ms_ssim, op=dist.ReduceOp.SUM)
-            dist.all_reduce(local_spearman, op=dist.ReduceOp.SUM)
-            dist.all_reduce(local_scc, op=dist.ReduceOp.SUM)
-            dist.all_reduce(local_genome_disco, op=dist.ReduceOp.SUM)
-            dist.all_reduce(local_genome_disco2, op=dist.ReduceOp.SUM)
             dist.all_reduce(local_hicrep, op=dist.ReduceOp.SUM)
 
             local_steps = local_steps.item()
             local_psnr = local_psnr.item()
             local_ssim = local_ssim.item()
             local_ms_ssim = local_ms_ssim.item()
-            local_spearman = local_spearman.item()
-            local_scc = local_scc.item()
-            local_genome_disco = local_genome_disco.item()
-            local_genome_disco2 = local_genome_disco2.item()
             local_hicrep = local_hicrep.item()
 
-            self._update_metrics(local_steps, local_psnr, local_ssim, local_ms_ssim,
-                                 local_spearman, local_scc, local_genome_disco, local_genome_disco2, local_hicrep)
+            self._update_metrics(local_steps, local_psnr,
+                                 local_ssim, local_ms_ssim, local_hicrep)
         else:
-            self._update_metrics(self.test_steps, local_psnr, local_ssim, local_ms_ssim,
-                                 local_spearman, local_scc, local_genome_disco, local_genome_disco2, local_hicrep)
+            self._update_metrics(self.test_steps, local_psnr,
+                                 local_ssim, local_ms_ssim, local_hicrep)
 
     def test(self):
         self.log.info(f"[{self.device}] ==== Testing Started ====")
@@ -174,16 +137,16 @@ class Tester:
         try:
             self._run()
             if self.isDistributed and self.device == 0:
-                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, MS-SSIM: {format(self.ms_ssim, '.4f')}, Spearman: {format(self.spearman, '.4f')}, SCC: {format(self.scc, '.4f')}, GenomeDISCO: {format(self.genome_disco, '.4f')}, GenomeDISCO2: {format(self.genome_disco2, '.4f')}, HiCRep: {format(self.hicrep, '.4f')};"
+                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, MS-SSIM: {format(self.ms_ssim, '.4f')}, HiCRep: {format(self.hicrep, '.4f')};"
                 self.log.info(f"{scores}")
                 print(f"[INFO] {scores}")
 
             elif not self.isDistributed:
-                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, MS-SSIM: {format(self.ms_ssim, '.4f')}, Spearman: {format(self.spearman, '.4f')}, SCC: {format(self.scc, '.4f')}, GenomeDISCO: {format(self.genome_disco, '.4f')}, GenomeDISCO2: {format(self.genome_disco2, '.4f')}, HiCRep: {format(self.hicrep, '.4f')};"
+                scores = f"PSNR: {format(self.psnr, '.4f')}, SSIM: {format(self.ssim, '.4f')}, MS-SSIM: {format(self.ms_ssim, '.4f')}, HiCRep: {format(self.hicrep, '.4f')};"
                 self.log.info(f"{scores}")
                 print(f"[INFO] {scores}")
 
-            return self.psnr, self.ssim, self.ms_ssim, self.spearman, self.scc, self.genome_disco, self.genome_disco2, self.hicrep
+            return self.psnr, self.ssim, self.ms_ssim, self.hicrep
         except Exception as ex:
             print(ex)
             traceback.print_exc()
