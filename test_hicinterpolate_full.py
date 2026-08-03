@@ -248,10 +248,6 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, resol, patch, org
         print(f"[WARNING] Patch count mismatch for {dataset_dict}: "
               f"pred={len(pred_list)}, target={len(y_list)}")
 
-    print(
-        f"[WARNING] Reconstructing from {len(y_list)} patches with patch size {patch}")
-    print(f"[WARNING] sqrt(total_patches) assumes square grid; this may fail if tiles are incomplete")
-
     y_tensor = torch.stack(y_list, dim=0)
     y_tensor = y_tensor.permute(1, 0, 2, 3, 4)
     y_matrix = reconstruct_from_model_outputs(y_tensor, patch)
@@ -283,7 +279,7 @@ def run_inference():
                 model_output_dir)
             os.makedirs(heatmap_output_dir, exist_ok=True)
 
-            model_filename = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate/config_25k_64/hicinterpolate_64.pt'
+            model_filename = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate/config_25k_64/hicinterpolate_25000_64.pt'
             model = load_model(model_filename)
             print(f"Running inference for model: {model_filename}")
             LOG.info(f"Running inference for model: {model_filename}")
@@ -309,6 +305,11 @@ def run_inference():
                                         f"{matrix_filename_prefix}_y.npy", y_matrix)
                                     np.save(
                                         f"{matrix_filename_prefix}_pred.npy", pred_matrix)
+
+                                    print(
+                                        f"Saving inference for record: {record_filename}")
+                                    LOG.info(
+                                        f"Saving inference for record: {record_filename}")
 
 
 if __name__ == "__main__":

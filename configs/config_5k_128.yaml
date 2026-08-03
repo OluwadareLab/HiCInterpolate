@@ -1,8 +1,8 @@
 device: cuda
 
 dir:
-  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate_wo
-  output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate_wo
+  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate
+  output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate
   data: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
   image: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
 
@@ -36,24 +36,29 @@ training:
   save_every: 10
   lr: 1e-4
   min_lr: 1e-5
-  weight_decay: 5e-5
+  weight_decay: 1e-3
   warmup_epochs: 3
   grad_clip: 1.0
+  patience: 20
+  dropout: 0.1
 
 model:
   name: hicinterpolate_${data.resolution}_${data.patch}
 
 loss:
   weight_parameters:
-    - name: l1
+    - name: mse
       boundaries: [0]
       values: [1.0]
     - name: ssim
       boundaries: [0]
-      values: [1.0]
+      values: [0.8]
+    - name: symmetry
+      boundaries: [0]
+      values: [0.1]
 
 evaluation:
-  monitor: ssim
+  monitor: loss
   metrics:
     psnr: true
     ssim: true

@@ -79,3 +79,6 @@ graphify-out
 !requirements.txt
 !readme.md
 *.log
+*.png
+*.tsv
+*.csv

@@ -14,11 +14,24 @@ CLIPPING_PERCENTILE = 99.99
 
 
 class TripletDataset(Dataset):
-    def __init__(self, triplet_dicts: List):
+    def __init__(self, triplet_dicts: List, augment: bool = False):
         self.triplet_dicts = triplet_dicts
+        self.augment = augment
 
     def __len__(self):
         return len(self.triplet_dicts)
+
+    def _augment(self, x0, y, x1):
+        # Endpoint swap: interpolation midpoint is symmetric in the two ends.
+        if random.random() < 0.5:
+            x0, x1 = x1, x0
+        # Transpose: Hi-C contact matrices are symmetric, so a diagonal
+        # flip yields a valid, label-preserving sample.
+        if random.random() < 0.5:
+            x0 = x0.transpose(-1, -2)
+            y = y.transpose(-1, -2)
+            x1 = x1.transpose(-1, -2)
+        return x0, y, x1
 
     def _load_valid_matrix(self, image_file: str):
         img = np.load(image_file)
@@ -54,6 +67,8 @@ class TripletDataset(Dataset):
         if normalized is None:
             return None
         x0, y, x1 = normalized
+        if self.augment:
+            x0, y, x1 = self._augment(x0, y, x1)
         return x0, y, x1
 
 

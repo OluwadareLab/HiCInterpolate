@@ -111,7 +111,7 @@ def main(config_filename: str, isDistributed: bool = False, load_snapshot: bool 
         train_cds = CustomDataset(record_file=f'{cfg.file.dataset_dict}.train', img_dir=cfg.dir.image,
                                   img_map=cfg.data.interpolator_images_map)
         train_dict = train_cds._get_dataset()
-        train_ds = TripletDataset(triplet_dicts=train_dict)
+        train_ds = TripletDataset(triplet_dicts=train_dict, augment=True)
         train_dl = get_dataloader(
             ds=train_ds, batch_size=batch_size, shuffle=True, isDistributed=isDistributed)
 

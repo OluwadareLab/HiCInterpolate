@@ -41,9 +41,11 @@ class TrainingConfig:
     save_every: int
     lr: float
     min_lr: float
-    weight_decay: float = 5e-5
+    weight_decay: float = 1e-3
     warmup_epochs: int = 3
     grad_clip: float = 1.0
+    patience: int = 20
+    dropout: float = 0.1
 
 
 @dataclass
@@ -79,7 +81,7 @@ class EvalMetricConfig:
 
 @dataclass
 class EvaluationConfig:
-    monitor: str = "ssim"
+    monitor: str = "loss"
     metrics: EvalMetricConfig = field(default_factory=EvalMetricConfig)
 
 

@@ -19,14 +19,11 @@ cd /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
 # torchrun --standalone --nproc_per_node=1 test_hicinterpolate.py
 
 
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_5k_64
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_5k_128
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_5k_256
-
 torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_10k_64
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_10k_128
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_10k_256
+# torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_10k_128
 
 torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_25k_64
 torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_25k_128
-torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_25k_256
+
+torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_5k_64
+torchrun --standalone --nproc_per_node=1 hicinterpolate.py --train --test --config config_5k_128

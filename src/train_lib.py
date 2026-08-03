@@ -20,7 +20,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Trainer:
-    EVAL_METRICS = ("psnr", "ssim", "hicrep")
+    EVAL_METRICS = ("psnr", "ssim", "ms-ssim", "hicrep")
 
     def __init__(self, cfg, log, train_dl: DataLoader, val_dl: DataLoader, load_snapshot: bool = False, isDistributed: bool = False) -> None:
         self.cfg = cfg
@@ -32,7 +32,8 @@ class Trainer:
         self.val_steps = len(self.val_dl)
         self.save_every = self.cfg.training.save_every
 
-        self.model = Interpolator()
+        self.model = Interpolator(
+            dropout=getattr(self.cfg.training, "dropout", 0.0))
 
         self.isDistributed = isDistributed and dist.is_available() and dist.is_initialized()
         if self.isDistributed:
@@ -101,9 +102,9 @@ class Trainer:
         self.metric_columns = ['epoch', 'lr', 'train_loss', 'val_loss',
                                *[f'val_{metric}' for metric in self.active_eval_metrics],
                                'best_val']
-        self.patience = 100
+        self.patience = getattr(self.cfg.training, "patience", 20)
         self.epochs_no_improve = 0
-        self.best_val = -float('inf')
+        self.best_val = float('inf') if self._monitor_is_minimize() else -float('inf')
         self.best_model = f'{self.cfg.file.model}'
         self.best_plot_batch = None
 
@@ -135,9 +136,10 @@ class Trainer:
 
     def _ensure_state_keys(self):
         num_epochs = len(self.state.get('epoch', []))
+        worst = float('inf') if self._monitor_is_minimize() else -float('inf')
         for key in self.metric_columns:
             if key not in self.state:
-                self.state[key] = [-float('inf')] * \
+                self.state[key] = [worst] * \
                     num_epochs if key == 'best_val' else [0.0] * num_epochs
 
     def _load_optimizer_scheduler_state(self, snapshot):
@@ -149,6 +151,9 @@ class Trainer:
             self.log.info(msg)
             print(f"[INFO] {msg}")
 
+    def _default_best_val(self):
+        return float('inf') if self._monitor_is_minimize() else -float('inf')
+
     def _load_snapshot(self, snapshot):
         if self.isDistributed:
             loc = f"cuda:{self.device}"
@@ -159,8 +164,7 @@ class Trainer:
             self.state = snapshot['state']
             self._ensure_state_keys()
             best_val_list = snapshot['state'].get('best_val', [])
-            self.best_val = best_val_list[-1] if best_val_list else - \
-                float('inf')
+            self.best_val = best_val_list[-1] if best_val_list else self._default_best_val()
         else:
             snapshot = torch.load(snapshot, map_location=self.device)
             self.epochs_run = snapshot['epoch']
@@ -170,8 +174,7 @@ class Trainer:
             self.state = snapshot['state']
             self._ensure_state_keys()
             best_val_list = self.state.get('best_val', [])
-            self.best_val = best_val_list[-1] if best_val_list else - \
-                float('inf')
+            self.best_val = best_val_list[-1] if best_val_list else self._default_best_val()
         self.log.info(
             f"Resuming training from snapshot at epoch {self.epochs_run}")
         print(
@@ -194,17 +197,24 @@ class Trainer:
 
     def _get_monitor_metric(self):
         cfg_eval = getattr(self.cfg, "evaluation", None)
-        monitor = getattr(cfg_eval, "monitor", "ssim")
+        monitor = getattr(cfg_eval, "monitor", "loss")
         if monitor == "loss" or monitor in self.active_eval_metrics:
             return monitor
         return self.active_eval_metrics[0] if self.active_eval_metrics else "loss"
 
+    def _monitor_is_minimize(self):
+        return self.monitor_metric in ("loss", "lpips")
+
     def _get_monitor_value(self):
         if self.monitor_metric == "loss":
-            return -self.val_loss_per_epoch
-        value = self.metric_values_per_epoch.get(
-            self.monitor_metric, -self.val_loss_per_epoch)
-        return -value if self.monitor_metric == "lpips" else value
+            return self.val_loss_per_epoch
+        return self.metric_values_per_epoch.get(
+            self.monitor_metric, self.val_loss_per_epoch)
+
+    def _is_better_monitor(self, current, best):
+        if self._monitor_is_minimize():
+            return current < best
+        return current > best
 
     def _update_metrics(self, epoch, train_samples, train_loss, val_samples, val_loss, metric_totals):
         self.train_loss_per_epoch = self._safe_average(
@@ -241,11 +251,11 @@ class Trainer:
         print(f"[DEBUG] Epoch {epoch+1} saved snapshot at {self.snapshot}")
 
     def _save_best_model(self, epoch: int, save_artifacts: bool = True):
-        best_val = self._get_monitor_value()
+        current = self._get_monitor_value()
 
-        if best_val > self.best_val:
+        if self._is_better_monitor(current, self.best_val):
             self.epochs_no_improve = 0
-            self.best_val = best_val
+            self.best_val = current
             if save_artifacts:
                 snapshot = self._get_model_stats(epoch)
                 torch.save(snapshot, self.best_model)
@@ -254,9 +264,11 @@ class Trainer:
                         self.cfg.dir.model_state, f"epoch_{epoch+1}_output.png")
                     plot.draw_hic_map(2, *self.best_plot_batch, plot_file)
                 self.log.info(
-                    f"Epoch {self.epochs_run+1} saved best model.")
+                    f"Epoch {self.epochs_run+1} saved best model "
+                    f"({self.monitor_metric}={current:.4f}).")
                 print(
-                    f"[DEBUG] Epoch {self.epochs_run+1} saved best model.")
+                    f"[DEBUG] Epoch {self.epochs_run+1} saved best model "
+                    f"({self.monitor_metric}={current:.4f}).")
         elif self.epochs_run > 5:
             self.epochs_no_improve += 1
 

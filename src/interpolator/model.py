@@ -137,17 +137,17 @@ class SparseAttentionMask(nn.Module):
 
 
 class Interpolator(nn.Module):
-    def __init__(self):
+    def __init__(self, dropout: float = 0.0):
         super().__init__()
         self.input_features = 1
         self.base_channels = 32
         self.depth = 4
         self.feature_encoder = FeatureEncoder(
-            input_channels=self.input_features, base_channels=self.base_channels, depth=self.depth)
+            input_channels=self.input_features, base_channels=self.base_channels, depth=self.depth, dropout=dropout)
         self.flow_predictor = FlowPredictor(
             base_channels=self.base_channels, depth=self.depth+1, max_disp=4)
         self.feature_decoder = FeatureDecoder(
-            base_channels=self.base_channels, depth=self.depth)
+            base_channels=self.base_channels, depth=self.depth, dropout=dropout)
 
         self.output_projection = OutputProjection(
             in_channels=6, hidden_channels=32)
@@ -166,9 +166,9 @@ class Interpolator(nn.Module):
         interpolations = self.flow_predictor(enc0, enc2)
         decoded = self.feature_decoder(interpolations)
 
-        # multiscale_attended = self.multiscale_attention(decoded)
-        # sparse_attended = self.sparse_attention(multiscale_attended, x0, x2)
-        projection = self.residual_head(decoded)
+        multiscale_attended = self.multiscale_attention(decoded)
+        sparse_attended = self.sparse_attention(multiscale_attended, x0, x2)
+        projection = self.residual_head(sparse_attended)
 
         # squares0, dots0, h_edges0, v_edges0 = utils.image_segmentation_batch(
         #     x0)

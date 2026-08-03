@@ -125,7 +125,6 @@ def draw_metric(cfg, state):
     metric_specs = {
         "psnr": ("val_psnr", "PSNR on validation set", "PSNR", getattr(cfg.file, "psnr_val_plot", None)),
         "ssim": ("val_ssim", "SSIM on validation set", "SSIM", getattr(cfg.file, "ssim_val_plot", None)),
-        "ms_ssim": ("val_ms_ssim", "MS-SSIM on validation set", "MS-SSIM", getattr(cfg.file, "ms_ssim_val_plot", None)),
         "hicrep": ("val_hicrep", "HiCRep on validation set", "HiCRep", getattr(cfg.file, "hicrep_val_plot", None))
     }
 
