@@ -8,7 +8,7 @@ dir:
 
 
 file:
-  dataset_dict: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets/train/10000_64
+  dataset_dict: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets/train/25000_64
   snapshot: ${dir.model_state}/${model.name}_snapshot.pt
   model: ${dir.model_state}/${model.name}.pt
   test_hic_map: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_hic_map.jpg
@@ -24,7 +24,7 @@ file:
 
 data:
   patch: 64
-  resolution: 10000
+  resolution: 25000
   batch_size: 20
   interpolator_images_map:
     frame_0: img1.npy
@@ -43,7 +43,7 @@ training:
   dropout: 0.1
 
 model:
-  name: hicinterpolate_${data.resolution}_${data.patch}
+  name: hicinterpolate_10000_64
 
 loss:
   weight_parameters:
