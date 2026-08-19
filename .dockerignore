@@ -50,6 +50,7 @@
 **/.github/instructions
 **/llms.txt
 **/.llmignore
+**/.Rhistory
 analysis/compartment_25k_64
 analysis/aggregate_tad_plots
 analysis/chip_loop_agreement
