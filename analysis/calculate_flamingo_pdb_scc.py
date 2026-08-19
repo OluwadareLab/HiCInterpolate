@@ -18,10 +18,10 @@ except ImportError:
     spearmanr = None
 
 METHOD_COLS = {
-    "pred": "ours",
+    "pred": "HiCInterpolate",
+    "linear": "HL",
+    "of": "HOF",
     "4dmax": "4DMax",
-    "linear": "Linear",
-    "of": "Optical Flow",
 }
 METHODS = tuple(METHOD_COLS.keys())
 _METHOD_SUFFIX_RE = re.compile(
@@ -271,7 +271,7 @@ def main(argv=None):
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
-    n_ours = sum(1 for r in rows if r.get("ours") is not None)
+    n_ours = sum(1 for r in rows if r.get("HiCInterpolate") is not None)
     print(f"Wrote {out_csv} ({len(rows)} rows, {n_ours} with ours/pred)", flush=True)
     return 0 if rows else 1
 

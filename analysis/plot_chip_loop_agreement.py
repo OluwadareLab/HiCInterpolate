@@ -32,13 +32,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-METHODS = ("y", "pred", "4dmax", "linear", "of")
+METHODS = ("y", "pred", "linear", "of", "4dmax")
 METHOD_LABELS = {
     "y": "Ground Truth",
-    "pred": "Ours",
+    "pred": "HiCInterpolate",
+    "linear": "HL",
+    "of": "HOF",
     "4dmax": "4DMax",
-    "linear": "Linear",
-    "of": "Optical Flow",
 }
 # Okabe–Ito / Nature colorblind palette
 METHOD_COLORS = {

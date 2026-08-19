@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""Upper-triangular Hi-C heatmaps with Mustache loop circles (top-to-bottom).
-
-Panels: Ground Truth | Ours | 4DMax | Linear | Optical Flow
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -19,14 +13,14 @@ from matplotlib.colors import LinearSegmentedColormap
 
 Loop = Tuple[str, int, int, str, int, int]
 
-METHODS = ("y", "pred", "4dmax", "linear", "of")
-COMPARE_METHODS = ("pred", "4dmax", "linear", "of")
+METHODS = ("y", "pred", "linear", "of", "4dmax")
+COMPARE_METHODS = ("pred", "linear", "of", "4dmax")
 METHOD_LABELS = {
     "y": "Ground Truth",
-    "pred": "Ours",
+    "pred": "HiCInterpolate",
+    "linear": "HL",
+    "of": "HOF",
     "4dmax": "4DMax",
-    "linear": "Linear",
-    "of": "Optical Flow",
 }
 
 NPY_RE = re.compile(

@@ -29,8 +29,8 @@ CMAP_ = mcolors.LinearSegmentedColormap.from_list(
 ROOT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate'
 DICT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets/inference'
 IMAGE_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets'
-OUTPUT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/analysis'
-LOG_FILE = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/analysis/inference.log'
+OUTPUT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/new_analysis'
+LOG_FILE = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/new_analysis/inference.log'
 CSV_FILENAME_SUFFIX = "comparative_scores.csv"
 
 METHODS = ("Hicinterpolate", "4DMax", "Linear", "Optical Flow")
@@ -45,7 +45,7 @@ MODEL_BATCHES = [20]
 
 CHROMOSOMES = {
     "human": ["10", "15", "20", "11", "16", "21"],
-    "mouse": ["10", "15", "19"]
+    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"]
 }
 
 TEST_DATASET = {
@@ -97,37 +97,36 @@ TEST_DATASET = {
                      "cerebellar_granule_neuron_control_12960m"]
                 ]
             }
+        },
+        "embryo": {
+            "development": {
+                "triplets": [
+                    ["sperm",
+                     "mii_oocyte",
+                     "zygote"],
+
+                    ["mii_oocyte",
+                     "zygote",
+                     "early2_cell"],
+
+                    ["zygote",
+                     "early2_cell",
+                     "late2_cell"],
+
+                    ["early2_cell",
+                     "late2_cell",
+                     "8cell"],
+
+                    ["late2_cell",
+                     "8cell",
+                     "icm"],
+
+                    ["8cell",
+                     "icm",
+                     "mes_cell"]
+                ]
+            }
         }
-        # },
-        # "embryo": {
-        #     "development": {
-        #         "triplets": [
-        #             ["sperm",
-        #              "mii_oocyte",
-        #              "zygote"],
-
-        #             ["mii_oocyte",
-        #              "zygote",
-        #              "early2_cell"],
-
-        #             ["zygote",
-        #              "early2_cell",
-        #              "late2_cell"],
-
-        #             ["early2_cell",
-        #              "late2_cell",
-        #              "8cell"],
-
-        #             ["late2_cell",
-        #              "8cell",
-        #              "icm"],
-
-        #             ["8cell",
-        #              "icm",
-        #              "mes_cell"]
-        #         ]
-        #     }
-        # }
     }
 }
 

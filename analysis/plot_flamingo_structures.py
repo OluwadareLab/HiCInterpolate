@@ -5,7 +5,7 @@ Discovers flamingo_structure.pdb under --input_root, groups by
 (out_tag, chrom, region), and renders each method as spheres + connecting
 trace with rainbow coloring. No alignment or coordinate preprocessing.
 
-Methods: y (GT), pred (Ours), 4dmax, linear, of.
+Methods: y (GT), pred (HiCInterpolate), linear (HL), of (HOF), 4dmax.
 Writes per-structure PNGs (300 dpi) plus a labeled side-by-side panel per group.
 """
 
@@ -25,19 +25,19 @@ DPI = 300
 IMG_IN = 6.67  # inches → ~2000 px @ 300 dpi
 IMG_PX = int(round(IMG_IN * DPI))
 
-METHODS = ("y", "pred", "4dmax", "linear", "of")
+METHODS = ("y", "pred", "linear", "of", "4dmax")
 METHOD_LABELS = {
     "y": "Ground truth",
-    "pred": "Ours",
+    "pred": "HiCInterpolate",
+    "linear": "HL",
+    "of": "HOF",
     "4dmax": "4DMax",
-    "linear": "Linear",
-    "of": "Optical Flow",
 }
 METHOD_SCC_COLS = {
-    "pred": ("ours", "Ours"),
+    "pred": ("HiCInterpolate", "Ours", "ours"),
+    "linear": ("HL", "Linear"),
+    "of": ("HOF", "Optical Flow"),
     "4dmax": ("4DMax",),
-    "linear": ("Linear",),
-    "of": ("Optical Flow",),
 }
 _KNOWN_SAMPLE_SUBSAMPLE = (
     ("cerebellar_granule_neuron", "control"),
@@ -520,26 +520,16 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     p.add_argument("--limit", type=int, default=None, help="Render at most N groups")
     p.add_argument("--skip_panel", action="store_true")
+    p.add_argument(
+        "--repanel-only",
+        action="store_true",
+        help="Rebuild panel.png from existing method PNGs (no PyMOL)",
+    )
     return p.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
-    try:
-        pymol = find_pymol(args.pymol)
-    except FileNotFoundError as ex:
-        print(f"ERROR: {ex}", flush=True)
-        return 1
-    print(f"PyMOL: {pymol}", flush=True)
-    if args.pymol_license and os.path.isfile(args.pymol_license):
-        print(f"License: {args.pymol_license}", flush=True)
-        if ensure_pymol_license(pymol, args.pymol_license):
-            print("License installed → ~/.pymol/license.lic", flush=True)
-        else:
-            print("WARN: failed to install PyMOL license to ~/.pymol", flush=True)
-    else:
-        print(f"WARN: PyMOL license not found: {args.pymol_license}", flush=True)
-
     scc = load_scc_index(args.scc_csv)
     if scc:
         print(f"SCC: {args.scc_csv} ({len(scc)} rows)", flush=True)
@@ -564,6 +554,46 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         keys = [k for k in keys if k[1] in chrom_filter]
     if args.limit is not None:
         keys = keys[: max(0, args.limit)]
+
+    if args.repanel_only:
+        n_ok = 0
+        for key in keys:
+            out_tag, chrom, region = key
+            slug = f"{out_tag}_chr{chrom}_{region}"
+            group_dir = os.path.join(args.output_dir, slug)
+            pngs = {}
+            for method in METHODS:
+                if method not in want_methods:
+                    continue
+                png_path = os.path.join(group_dir, f"{method}.png")
+                if _png_ok(png_path):
+                    pngs[method] = png_path
+            if not pngs:
+                print(f"SKIP panel {slug}: no method PNGs", flush=True)
+                continue
+            panel = os.path.join(group_dir, "panel.png")
+            scores = scc_for_group(scc, out_tag, chrom, region)
+            compose_panel(pngs, panel, scores)
+            if _png_ok(panel):
+                n_ok += 1
+                print(f"Wrote {panel}", flush=True)
+        print(f"Done. Rebuilt {n_ok}/{len(keys)} panels → {args.output_dir}", flush=True)
+        return 0 if n_ok else 1
+
+    try:
+        pymol = find_pymol(args.pymol)
+    except FileNotFoundError as ex:
+        print(f"ERROR: {ex}", flush=True)
+        return 1
+    print(f"PyMOL: {pymol}", flush=True)
+    if args.pymol_license and os.path.isfile(args.pymol_license):
+        print(f"License: {args.pymol_license}", flush=True)
+        if ensure_pymol_license(pymol, args.pymol_license):
+            print("License installed → ~/.pymol/license.lic", flush=True)
+        else:
+            print("WARN: failed to install PyMOL license to ~/.pymol", flush=True)
+    else:
+        print(f"WARN: PyMOL license not found: {args.pymol_license}", flush=True)
 
     n_ok = 0
     for key in keys:

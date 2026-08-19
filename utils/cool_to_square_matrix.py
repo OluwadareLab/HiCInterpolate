@@ -140,7 +140,7 @@ if __name__ == "__main__":
         # generate_triplets(output_dir=output_dir, is_log=False, is_min_max=True)
 
         # none
-        output_dir = '/home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets'
+        output_dir = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets'
         os.makedirs(output_dir, exist_ok=True)
         generate_triplets(output_dir=output_dir,
                           is_log=False, is_min_max=False)

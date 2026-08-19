@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upper-triangular Hi-C heatmaps with TopDom TAD outlines (side-by-side).
 
-Panels: Ground Truth | Ours | 4DMax | Linear | Optical Flow
+Panels: Ground Truth | HiCInterpolate | HL | HOF | 4DMax
 """
 
 from __future__ import annotations
@@ -16,13 +16,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap
 
-METHODS = ("y", "pred", "4dmax", "linear", "of")
+METHODS = ("y", "pred", "linear", "of", "4dmax")
 METHOD_LABELS = {
     "y": "Ground Truth",
-    "pred": "Ours",
+    "pred": "HiCInterpolate",
+    "linear": "HL",
+    "of": "HOF",
     "4dmax": "4DMax",
-    "linear": "Linear",
-    "of": "Optical Flow",
 }
 
 NPY_RE = re.compile(

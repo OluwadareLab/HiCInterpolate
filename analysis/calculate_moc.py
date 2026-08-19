@@ -6,7 +6,7 @@ linear / of against y of the same caller.
 
 CSV columns:
   dataset, sample, subsample, timestamp, chromosome, tool,
-  Ours, 4DMax, Linear, Optical Flow
+  HiCInterpolate, HL, HOF, 4DMax
 """
 
 from __future__ import annotations
@@ -28,12 +28,12 @@ DEFAULT_TADS_ROOT = (
     "datasets/timeseries/full_triplets/output/tads"
 )
 
-METHODS = ("pred", "4dmax", "linear", "of")
+METHODS = ("pred", "linear", "of", "4dmax")
 METHOD_COLS = {
-    "pred": "Ours",
+    "pred": "HiCInterpolate",
+    "linear": "HL",
+    "of": "HOF",
     "4dmax": "4DMax",
-    "linear": "Linear",
-    "of": "Optical Flow",
 }
 TOOLS = ("embedtad", "topdom", "spectral")
 
@@ -57,10 +57,10 @@ FIELDNAMES = [
     "timestamp",
     "chromosome",
     "tool",
-    "Ours",
+    "HiCInterpolate",
+    "HL",
+    "HOF",
     "4DMax",
-    "Linear",
-    "Optical Flow",
 ]
 
 

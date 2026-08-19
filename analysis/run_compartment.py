@@ -35,14 +35,14 @@ import pandas as pd
 from cooltools.api.saddle import saddle_strength
 from matplotlib.colors import LogNorm
 
-# Display order: Ground Truth, Ours, 4DMax, Linear, Optical Flow
-METHODS = ("y", "pred", "4dmax", "linear", "of")
+# Display order: Ground Truth, HiCInterpolate, HL, HOF, 4DMax
+METHODS = ("y", "pred", "linear", "of", "4dmax")
 METHOD_LABELS = {
     "y": "Ground Truth",
-    "pred": "Ours",
+    "pred": "HiCInterpolate",
+    "linear": "HL",
+    "of": "HOF",
     "4dmax": "4DMax",
-    "linear": "Linear",
-    "of": "Optical Flow",
 }
 COLORS = {
     "y": "#000000",
@@ -573,12 +573,96 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--keep-cool", action="store_true", help="Keep per-sample .cool files")
     p.add_argument("--fasta-human", default=default_hg38 if os.path.isfile(default_hg38) else None)
     p.add_argument("--fasta-mouse", default=None)
+    p.add_argument(
+        "--plot-only",
+        action="store_true",
+        help="Rebuild plots from existing E1/saddle/metrics (no cooltools)",
+    )
     return p.parse_args()
+
+
+def _to_float(v) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return float("nan")
+
+
+def replot_from_output(
+    output_dir: str,
+    start_bp: int,
+    end_bp: int,
+    n_groups: int,
+    q_lo: float,
+    q_hi: float,
+) -> None:
+    csv_path = os.path.join(output_dir, "compartment_metrics.csv")
+    rows: List[Dict] = []
+    if os.path.isfile(csv_path):
+        with open(csv_path, newline="") as f:
+            for r in csv.DictReader(f):
+                rows.append(
+                    {
+                        "key": r["key"],
+                        "method": r["method"],
+                        "strength": _to_float(r.get("strength")),
+                        "e1_pearson": _to_float(r.get("e1_pearson")),
+                    }
+                )
+    n_sample = 0
+    for name in sorted(os.listdir(output_dir)):
+        sample_dir = os.path.join(output_dir, name)
+        if not os.path.isdir(sample_dir):
+            continue
+        e1_by_method: Dict[str, pd.DataFrame] = {}
+        saddles: Dict[str, np.ndarray] = {}
+        for method in METHODS:
+            e1_path = os.path.join(sample_dir, f"{method}_E1.tsv")
+            saddle_path = os.path.join(sample_dir, f"{method}_saddle.npy")
+            if os.path.isfile(e1_path):
+                e1_by_method[method] = pd.read_csv(e1_path, sep="\t")
+            if os.path.isfile(saddle_path):
+                saddles[method] = np.load(saddle_path)
+        if not e1_by_method:
+            continue
+        track = next(iter(e1_by_method.values()))
+        chrom = track["chrom"].iloc[0]
+        view_df = pd.DataFrame(
+            {"chrom": [chrom], "start": [start_bp], "end": [end_bp]}
+        )
+        strengths = {
+            r["method"]: r["strength"] for r in rows if r["key"] == name
+        }
+        plot_e1_tracks(e1_by_method, view_df, os.path.join(sample_dir, "e1_tracks.png"))
+        if saddles:
+            plot_saddles(
+                saddles,
+                strengths,
+                n_groups,
+                q_lo,
+                q_hi,
+                os.path.join(sample_dir, "saddle_plots.png"),
+            )
+        n_sample += 1
+        print(f"Replotted {name}", flush=True)
+    plot_strength_summary(rows, os.path.join(output_dir, "strength_summary.png"))
+    plot_agreement_summary(rows, os.path.join(output_dir, "e1_agreement_summary.png"))
+    print(f"Replotted {n_sample} samples -> {output_dir}", flush=True)
 
 
 def main() -> None:
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
+    if args.plot_only:
+        replot_from_output(
+            args.output_dir,
+            args.start_bp,
+            args.end_bp,
+            args.n_groups,
+            args.q_lo,
+            args.q_hi,
+        )
+        return
     samples, meta = discover_samples(args.input_dir)
     if not samples:
         raise SystemExit(f"No matching .npy samples in {args.input_dir}")

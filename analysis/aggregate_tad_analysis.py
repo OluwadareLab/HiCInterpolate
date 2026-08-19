@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
+from matplotlib.patches import FancyArrowPatch
 from scipy.ndimage import zoom
 from scipy.signal import find_peaks
 
@@ -318,7 +319,7 @@ def plot_figure2(
     cbar_pad = 0.05
     gap_agg = 0.45
     gap_diff = 0.75
-    row_gap_agg_diff = 0.12
+    row_gap_agg_diff = 0.42
     row_gap_diff_ins = 0.32
     left_m = 1.05
     right_m = 0.35
@@ -438,6 +439,33 @@ def plot_figure2(
         cb.ax.tick_params(labelsize=FS_TICK, width=0.5, length=2)
         cb.outline.set_linewidth(0.5)
 
+        # Out arrow (stage j → diff) + enter arrow (diff → stage j+1)
+        x_out = left_m + j * (cell_agg + gap_agg) + 0.5 * panel
+        x_enter = left_m + (j + 1) * (cell_agg + gap_agg) + 0.5 * panel
+        x_dest = x0 + 0.5 * panel
+        y_src = y_agg - 0.02
+        y_dst = y_diff_title + diff_title_h + 0.02
+        arrow_ends = [
+            ((x_out / fig_w, y_src / fig_h), (x_dest / fig_w, y_dst / fig_h)),
+            ((x_dest / fig_w, y_dst / fig_h), (x_enter / fig_w, y_src / fig_h)),
+        ]
+        for p0, p1 in arrow_ends:
+            fig.add_artist(
+                FancyArrowPatch(
+                    p0,
+                    p1,
+                    transform=fig.transFigure,
+                    arrowstyle="-|>",
+                    mutation_scale=10,
+                    lw=1.2,
+                    color=CB_BLACK,
+                    shrinkA=0,
+                    shrinkB=0,
+                    clip_on=False,
+                    zorder=5,
+                )
+            )
+
     # --- Insulation ---
     ax = ax_box(left_m, y_ins, top_w, ins_h)
     handles = []
@@ -457,7 +485,7 @@ def plot_figure2(
     ax.axvline(-0.5, color=CB_GREY, lw=0.6, ls="--", alpha=0.7)
     ax.axvline(0.5, color=CB_GREY, lw=0.6, ls="--", alpha=0.7)
     ax.set_ylabel(
-        "Insulation score  log2(IS / mean)",
+        "Insulation Score",
         fontsize=FS_LABEL,
         fontweight=FW_LABEL,
         labelpad=6,

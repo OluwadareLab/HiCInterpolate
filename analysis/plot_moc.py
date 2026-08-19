@@ -1,18 +1,3 @@
-#!/usr/bin/env python3
-"""Nature-style MoC bar plots for TAD callers vs interpolation methods.
-
-Reads moc.csv from calculate_moc.py and writes one 300 dpi PNG per panel:
-
-  Human DMSO / dTAG:
-    seen   — chr11, 16, 21
-    unseen — chr10, 15, 20
-  Mouse cerebellar granule neuron — cross-organism (all chroms)
-  Mouse embryo development — cell cycle (one figure per chromosome)
-
-Each figure: 3 panels (EmbedTAD, TopDom, Spectral), grouped bars for
-Ours / 4DMax / Linear / Optical Flow. Legend top, 4 columns. No title.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -27,25 +12,31 @@ import numpy as np
 
 DPI = 300
 
-METHOD_COLS = ("Ours", "4DMax", "Linear", "Optical Flow")
+METHOD_COLS = ("HiCInterpolate", "HL", "HOF", "4DMax")
 METHOD_COLORS = {
-    "Ours": "#009E73",
+    "HiCInterpolate": "#009E73",
+    "HL": "#0072B2",
+    "HOF": "#E69F00",
     "4DMax": "#CC79A7",
-    "Linear": "#0072B2",
-    "Optical Flow": "#E69F00",
+}
+_METHOD_CSV_KEYS = {
+    "HiCInterpolate": ("HiCInterpolate", "Ours", "ours"),
+    "HL": ("HL", "Linear"),
+    "HOF": ("HOF", "Optical Flow"),
+    "4DMax": ("4DMax",),
 }
 TOOLS = ("embedtad", "topdom", "spectral")
 TOOL_LABELS = {
     "embedtad": "EmbedTAD",
     "topdom": "TopDom",
-    "spectral": "Spectral",
+    "spectral": "Spectral"
 }
 
 TIMESTAMP_ORDER = ("early2_cell", "late2_cell", "8cell")
 TIMESTAMP_LABELS = {
     "early2_cell": "Early 2-cell",
     "late2_cell": "Late 2-cell",
-    "8cell": "8-cell",
+    "8cell": "8-cell"
 }
 
 DEFAULT_MOC_CSV = (
@@ -135,24 +126,28 @@ def apply_nature_style() -> None:
     )
 
 
+def _row_method_value(r: Dict, method: str) -> Optional[float]:
+    for key in _METHOD_CSV_KEYS[method]:
+        if key in r:
+            return _to_float(r.get(key))
+    return None
+
+
 def load_moc_csv(path: str) -> List[Dict]:
     rows: List[Dict] = []
     with open(path, newline="") as f:
         for r in csv.DictReader(f):
-            rows.append(
-                {
-                    "dataset": r["dataset"],
-                    "sample": r["sample"],
-                    "subsample": r["subsample"],
-                    "timestamp": r["timestamp"],
-                    "chromosome": int(r["chromosome"]),
-                    "tool": r["tool"],
-                    "Ours": _to_float(r.get("Ours")),
-                    "4DMax": _to_float(r.get("4DMax")),
-                    "Linear": _to_float(r.get("Linear")),
-                    "Optical Flow": _to_float(r.get("Optical Flow")),
-                }
-            )
+            entry = {
+                "dataset": r["dataset"],
+                "sample": r["sample"],
+                "subsample": r["subsample"],
+                "timestamp": r["timestamp"],
+                "chromosome": int(r["chromosome"]),
+                "tool": r["tool"],
+            }
+            for method in METHOD_COLS:
+                entry[method] = _row_method_value(r, method)
+            rows.append(entry)
     return rows
 
 

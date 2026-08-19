@@ -8,8 +8,8 @@ import os
 import sys
 from typing import Dict, List, Optional, Sequence, Tuple
 
-METHOD_COLS = ("ours", "4DMax", "Linear", "Optical Flow")
-METHOD_HEADERS = ("Ours", "4DMax", "Linear", "Optical Flow")
+METHOD_COLS = ("HiCInterpolate", "HL", "HOF", "4DMax")
+METHOD_HEADERS = ("HiCInterpolate", "HL", "HOF", "4DMax")
 
 SAMPLE_LABELS = {
     ("dmso", "control"): "Human DMSO",
@@ -44,8 +44,18 @@ def load_rows(path: str) -> List[dict]:
     out = []
     for r in rows:
         nr = dict(r)
-        if "Ours" in nr and "ours" not in nr:
-            nr["ours"] = nr["Ours"]
+        aliases = {
+            "HiCInterpolate": ("HiCInterpolate", "Ours", "ours"),
+            "HL": ("HL", "Linear"),
+            "HOF": ("HOF", "Optical Flow"),
+            "4DMax": ("4DMax",),
+        }
+        for dest, keys in aliases.items():
+            if dest not in nr or nr[dest] in (None, ""):
+                for k in keys:
+                    if k in nr and nr[k] not in (None, ""):
+                        nr[dest] = nr[k]
+                        break
         out.append(nr)
     return out
 

@@ -16,9 +16,9 @@ from matplotlib.patches import Circle
 
 METHODS = ("pred", "linear", "of", "4dmax")
 METHOD_LABELS = {
-    "pred": "Ours",
-    "linear": "Linear",
-    "of": "Optical Flow",
+    "pred": "HiCInterpolate",
+    "linear": "HL",
+    "of": "HOF",
     "4dmax": "4DMax",
 }
 GT_LABEL = "Ground Truth"

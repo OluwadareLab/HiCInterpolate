@@ -16,10 +16,10 @@ except ImportError:
     spearmanr = None
 
 METHOD_COLS = {
-    "pred": "ours",
+    "pred": "HiCInterpolate",
+    "linear": "HL",
+    "of": "HOF",
     "4dmax": "4DMax",
-    "linear": "Linear",
-    "of": "Optical Flow",
 }
 METHODS = tuple(METHOD_COLS.keys())
 FIELDNAMES = [
@@ -28,10 +28,10 @@ FIELDNAMES = [
     "timestamp",
     "chromosome",
     "region",
-    "ours",
+    "HiCInterpolate",
+    "HL",
+    "HOF",
     "4DMax",
-    "Linear",
-    "Optical Flow",
 ]
 _METHOD_SUFFIX_RE = re.compile(
     r"^(?P<out_tag>.+)_(?P<chrom>\d+)_(?P<method>y|pred|4dmax|linear|of)$"

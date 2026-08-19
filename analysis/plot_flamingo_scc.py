@@ -9,7 +9,7 @@ Reads calculate_flamingo_scc.py output and writes one 300 dpi PNG per panel:
   Mouse cerebellar granule neuron — cross-organism (all chroms)
   Mouse embryo development — cell cycle (one figure per chromosome)
 
-Grouped bars: Ours / 4DMax / Linear / Optical Flow. Legend top, 4 columns.
+Grouped bars: HiCInterpolate / HL / HOF / 4DMax. Legend top, 4 columns.
 """
 
 from __future__ import annotations
@@ -26,19 +26,19 @@ import numpy as np
 
 DPI = 300
 
-METHOD_COLS = ("Ours", "4DMax", "Linear", "Optical Flow")
+METHOD_COLS = ("HiCInterpolate", "HL", "HOF", "4DMax")
 METHOD_COLORS = {
-    "Ours": "#009E73",
+    "HiCInterpolate": "#009E73",
+    "HL": "#0072B2",
+    "HOF": "#E69F00",
     "4DMax": "#CC79A7",
-    "Linear": "#0072B2",
-    "Optical Flow": "#E69F00",
 }
-# CSV may use "ours" (calculate_flamingo_scc) or "Ours"
+# CSV may use HiCInterpolate / Ours / ours, HL / Linear, HOF / Optical Flow
 _METHOD_CSV_KEYS = {
-    "Ours": ("Ours", "ours"),
+    "HiCInterpolate": ("HiCInterpolate", "Ours", "ours"),
+    "HL": ("HL", "Linear"),
+    "HOF": ("HOF", "Optical Flow"),
     "4DMax": ("4DMax",),
-    "Linear": ("Linear",),
-    "Optical Flow": ("Optical Flow",),
 }
 
 TIMESTAMP_ORDER = ("early2_cell", "late2_cell", "8cell")
