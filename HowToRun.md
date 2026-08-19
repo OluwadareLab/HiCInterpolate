@@ -127,13 +127,24 @@ Inside `output` folder:
 
 ### Step 5: Use Pretrained Models
 
-**Best Model:**
+**Best Model (25KB):**
 
-[HiCInterpolate (300 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_64.pt)
-
-
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate.pt)
 **Latest Snapshot:**
-[Snapshot (300 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_64_snapshot.pt)
+[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_snapshot.pt)
+
+**Other Model:**
+
+***5KB***
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_5.pt)
+**Latest Snapshot:**
+[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_snapshot_5.pt)
+
+***10KB***
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_10.pt)
+**Latest Snapshot:**
+[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_64_snapshot_10.pt)
+
 
 
 ---
@@ -215,8 +226,6 @@ python dsa.py -ab -i /path/to/input.txt -o /path/to/output -r 10000 -c 11 -sc 50
 
 **Output:**
 - `ab_compartment.png` — Compartment visualization
-
-![A/B Compartments Example](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/chr11_yt.png)
 
 ---
 

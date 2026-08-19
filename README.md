@@ -1,6 +1,6 @@
 [![Hits](https://hits.sh/github.com/OluwadareLab/HiCInterpolate.svg)](https://hits.sh/github.com/OluwadareLab/HiCInterpolate/)
 
-# HiCInterpolate: 4D Spatiotemporal Interpolation of Hi-C Data for Genome Architecture Analysis.
+# HiCInterpolate: 4D Spatiotemporal Interpolation and Analysis of Hi-C Data for Dynamic Genome Architecture.
 
 ![HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/hicinterpolate.png)
 
@@ -8,7 +8,30 @@
 
 - **Architecture:** Deep learning flow predictor with a U-Net encoder–decoder.
 - **Analysis:** Integrated pipeline for A/B compartments, chromatin loops, and 3D genome structure.
-- **Performance:** Validated using PSNR, SSIM, GenomeDISCO, and HiCRep.
+- **Performance:** Validated using PSNR, MS-SSIM, and HiCRep.
+- **Biological Performace:** Validated with A/B compartment, Chromatin Loops, TADs, 3D Structures.
+- **Explainability:** Explain dynamics of 3D genomic architecture in early mammalian cells development.
+
+
+### Pretrained Models
+
+**Best Model (25KB):**
+
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate.pt)
+**Latest Snapshot:**
+[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_snapshot.pt)
+
+**Other Model:**
+
+***5KB***
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_5.pt)
+**Latest Snapshot:**
+[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_snapshot_5.pt)
+
+***10KB***
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_10.pt)
+**Latest Snapshot:**
+[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_64_snapshot_10.pt)
 
 ---
 
