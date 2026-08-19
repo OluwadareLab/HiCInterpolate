@@ -20,6 +20,7 @@ __pycache__/
 *.mcool
 *.hic
 *.pt
+!models/*.pt
 *.pth
 *.ckpt
 *.safetensors

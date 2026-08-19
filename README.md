@@ -15,23 +15,24 @@
 
 ### Pretrained Models
 
-**Best Model (25KB):**
+Weights are in [`models/`](https://github.com/OluwadareLab/HiCInterpolate/tree/main/models) (Git LFS). Use the checkpoint that matches the resolution you will interpolate.
 
-[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate.pt)
+**Best models by resolution:**
+
+***25KB (default)***
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate.pt)
 **Latest Snapshot:**
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_snapshot.pt)
-
-**Other Model:**
-
-***5KB***
-[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_5.pt)
-**Latest Snapshot:**
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_snapshot_5.pt)
+[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot.pt)
 
 ***10KB***
-[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_10.pt)
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_10000.pt)
 **Latest Snapshot:**
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_64_snapshot_10.pt)
+[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_10000.pt)
+
+***5KB***
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_5000.pt)
+**Latest Snapshot:**
+[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_5000.pt)
 
 ---
 
