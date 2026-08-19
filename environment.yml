@@ -1,0 +1,49 @@
+name: hicinterpolate
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - hdf5
+  - libgcc-ng
+  - r-base>=4.1
+  - r-matrix
+  - r-data.table
+  - r-remotes
+  - pip:
+      - --extra-index-url https://download.pytorch.org/whl/cu118
+      - --extra-index-url https://pypi.nvidia.com
+      - --find-links https://data.pyg.org/whl/torch-2.1.1+cu118.html
+      - torch==2.1.1+cu118
+      - torchvision==0.16.1+cu118
+      - torchaudio==2.1.1+cu118
+      - tensorflow==2.13.0
+      - torch-geometric==2.5.3
+      - torch-sparse==0.6.18
+      - torch-scatter==2.1.2
+      - cupy-cuda11x==13.3.0
+      - cugraph-cu11
+      - numpy==1.24.4
+      - scipy==1.10.1
+      - pandas==2.2.3
+      - scikit-learn==1.6.1
+      - scikit-image==0.22.0
+      - networkx==3.2.1
+      - matplotlib==3.9.4
+      - seaborn==0.13.2
+      - tqdm==4.65.0
+      - omegaconf==2.3.0
+      - torchmetrics==1.7.1
+      - lpips
+      - wandb
+      - gensim
+      - fastdtw
+      - cython
+      - h5py
+      - cooler
+      - cooltools
+      - bioframe
+      - mustache-hic

@@ -2,7 +2,7 @@
 
 # HiCInterpolate: 4D Spatiotemporal Interpolation of Hi-C Data for Genome Architecture Analysis.
 
-![HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/figure1.png)
+![HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/hicinterpolate.png)
 
 **HiCInterpolate** is a deep learning–based architecture for **4D spatiotemporal interpolation of Hi-C data**. Given two time-point Hi-C contact matrices, it predicts high-resolution intermediate states while preserving key biological features such as **TADs** and **chromatin loops**.
 
