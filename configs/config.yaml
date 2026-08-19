@@ -1,14 +1,14 @@
 device: cuda
 
 dir:
-  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate
-  output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate
-  data: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
-  image: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
+  model_state: ./hicinterpolate/datasets/timeseries/output/hicinterpolate
+  output: ./hicinterpolate/datasets/timeseries/output/hicinterpolate
+  data: ./hicinterpolate/datasets/timeseries/new_triplets
+  image: ./hicinterpolate/datasets/timeseries/new_triplets
 
 
 file:
-  dataset_dict: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets/train/10000_64
+  dataset_dict: ./hicinterpolate/datasets/timeseries/new_triplets/train/10000_64
   snapshot: ${dir.model_state}/${model.name}_snapshot.pt
   model: ${dir.model_state}/${model.name}.pt
   test_hic_map: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_hic_map.jpg

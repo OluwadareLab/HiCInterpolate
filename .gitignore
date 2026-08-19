@@ -76,6 +76,7 @@ Thumbs.db
 graphify-out
 *.md
 !README.md
+!HowToRun.md
 !requirements.txt
 !readme.md
 *.log
@@ -91,3 +92,5 @@ GEMINI.md
 look.md
 NoiseBlock.md
 task.md
+.agents
+*.md
