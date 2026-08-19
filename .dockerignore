@@ -8,15 +8,24 @@
 **/.mypy_cache
 **/*.egg-info
 
+# Markdown — keep only project docs
+**/*.md
+!README.md
+!HowToRun.md
+
 # Agent / LLM tooling
+**/.agents
 **/.cursor
 **/.cursorignore
 **/.cursorindexingignore
+**/.cursorrules
 **/.claude
 **/.codex
-**/.agents
 **/.continue
 **/.windsurf
+**/.gemini
+**/.openai
+**/.anthropic
 **/.aider*
 **/.copilot
 **/.augment
@@ -27,17 +36,20 @@
 **/.ai
 **/.llm
 **/.gpt
+**/.agent
 **/.mcp.json
 **/.codegraph
 **/graphify-out
 **/*.prompt.md
-**/AGENTS.md
-**/CLAUDE.md
-**/GEMINI.md
 **/.clinerules
 **/.windsurfrules
 **/copilot-instructions.md
 **/.github/copilot-instructions.md
+**/.github/prompts
+**/.github/agents
+**/.github/instructions
+**/llms.txt
+**/.llmignore
 analysis/compartment_25k_64
 analysis/aggregate_tad_plots
 analysis/chip_loop_agreement

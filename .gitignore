@@ -73,19 +73,26 @@ Thumbs.db
 *.pdf
 !hicinterpolate.png
 cufile.log
-look.md
-NoiseBlock.md
-task.md
+
+# Markdown — keep only project docs
+*.md
+!/README.md
+!/HowToRun.md
 
 # Agent / LLM tooling
+.agents/
+**/.agents/
 .cursor/
 .cursorignore
 .cursorindexingignore
+.cursorrules
 .claude/
 .codex/
-.agents/
 .continue/
 .windsurf/
+.gemini/
+.openai/
+.anthropic/
 .aider*
 .copilot/
 .augment/
@@ -96,18 +103,18 @@ task.md
 .ai/
 .llm/
 .gpt/
+.agent/
 .mcp.json
 .codegraph/
 graphify-out/
+**/graphify-out/
 *.prompt.md
-AGENTS.md
-CLAUDE.md
-GEMINI.md
 .clinerules
 .windsurfrules
 copilot-instructions.md
 .github/copilot-instructions.md
-*.md
-!README.md
-!HowToRun.md
-!readme.md
+.github/prompts/
+.github/agents/
+.github/instructions/
+llms.txt
+.llmignore
