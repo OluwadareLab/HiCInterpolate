@@ -42,13 +42,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
+    libgomp1 \
+    libicu-dev \
+    libglpk-dev \
+    libgmp-dev \
     openjdk-8-jdk \
     && rm -rf /var/lib/apt/lists/*
 
 # =========================
-# Python 3.9
+# Python 3.9 (deadsnakes; HTTPS key to avoid GPG keyserver timeouts)
 # =========================
-RUN add-apt-repository ppa:deadsnakes/ppa && \
+RUN mkdir -p /etc/apt/keyrings && \
+    curl --retry 8 --retry-delay 3 -fsSL \
+        "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xF23C5A6CF475977595C89F51BA6932366A755776" \
+        | gpg --dearmor -o /etc/apt/keyrings/deadsnakes.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/deadsnakes.gpg] https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu focal main" \
+        > /etc/apt/sources.list.d/deadsnakes.list && \
     apt-get update && apt-get install -y --no-install-recommends \
     python3.9 \
     python3.9-dev \
@@ -58,7 +67,13 @@ RUN add-apt-repository ppa:deadsnakes/ppa && \
 
 RUN ln -sf /usr/bin/python3.9 /usr/bin/python && \
     ln -sf /usr/bin/python3.9 /usr/bin/python3 && \
-    curl -sS https://bootstrap.pypa.io/get-pip.py | python
+    curl --retry 8 --retry-delay 3 -fsSL \
+        -o /tmp/pip-25.1.1-py3-none-any.whl \
+        https://files.pythonhosted.org/packages/29/a2/d40fb2460e883eca5199c62cfc2463fd261f760556ae6290f88488c362c0/pip-25.1.1-py3-none-any.whl && \
+    python /tmp/pip-25.1.1-py3-none-any.whl/pip install --no-cache-dir \
+        /tmp/pip-25.1.1-py3-none-any.whl setuptools wheel && \
+    rm -f /tmp/pip-25.1.1-py3-none-any.whl && \
+    python -m pip --version
 
 # =========================
 # R (CRAN binary for Ubuntu 20.04)
@@ -73,51 +88,56 @@ RUN wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc \
     && rm -rf /var/lib/apt/lists/*
 
 ENV R_HOME=/usr/lib/R
-ENV PATH=/usr/bin:$PATH
+ENV PATH=/usr/local/bin:/usr/bin:$PATH
 
 # =========================
 # R packages (HiCGNN KR + FLAMINGOr)
 # =========================
-RUN Rscript -e "install.packages( \
-    c('KernSmooth','MASS','Matrix','boot','class','cluster', \
+RUN Rscript -e "options(timeout=600); \
+    pkgs <- c('KernSmooth','MASS','Matrix','boot','class','cluster', \
       'codetools','foreign','lattice','mgcv','nlme','nnet', \
-      'rpart','spatial','survival','data.table','remotes'), \
-    repos='https://cloud.r-project.org/', Ncpus=parallel::detectCores())"
+      'rpart','spatial','survival','data.table','remotes', \
+      'igraph','Rcpp','RcppArmadillo'); \
+    install.packages(pkgs, repos='https://cloud.r-project.org/', Ncpus=parallel::detectCores()); \
+    missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly=TRUE)]; \
+    if (length(missing)) stop(paste('missing R packages:', paste(missing, collapse=', ')))"
 
-RUN Rscript -e "remotes::install_github('wangjr03/FLAMINGO', subdir='FLAMINGOr', upgrade='never', dependencies=TRUE)"
+COPY docker/fetch_flamingor.py /tmp/fetch_flamingor.py
+RUN python /tmp/fetch_flamingor.py && \
+    test -d /tmp/FLAMINGO/FLAMINGOr && \
+    Rscript -e "options(timeout=600); remotes::install_local('/tmp/FLAMINGO/FLAMINGOr', upgrade='never', dependencies=TRUE)" && \
+    rm -rf /tmp/FLAMINGO /tmp/fetch_flamingor.py
 
 # =========================
 # Python packages
 # =========================
-RUN pip install --upgrade pip setuptools wheel
-
 # PyTorch (CUDA 11.8)
-RUN pip install \
+RUN python -m pip install \
     torch==2.1.1+cu118 \
     torchvision==0.16.1+cu118 \
     torchaudio==2.1.1+cu118 \
     --index-url https://download.pytorch.org/whl/cu118
 
-# RAPIDS / CuPy (CUDA 11)
-RUN pip install \
+# RAPIDS / CuPy (CUDA 11; pin for Python 3.9)
+RUN python -m pip install \
     cupy-cuda11x==13.3.0 \
-    cugraph-cu11 \
+    cugraph-cu11==24.6.1 \
     --extra-index-url https://pypi.nvidia.com
 
 # PyTorch Geometric (precompiled wheels)
-RUN pip install \
+RUN python -m pip install \
     torch-geometric==2.5.3 \
     --find-links https://data.pyg.org/whl/torch-2.1.1+cu118.html
 
-RUN pip install torch-sparse==0.6.18 \
+RUN python -m pip install torch-sparse==0.6.18 \
     -f https://data.pyg.org/whl/torch-2.1.1+cu118.html
 
-RUN pip install torch-scatter==2.1.2 \
+RUN python -m pip install torch-scatter==2.1.2 \
     -f https://data.pyg.org/whl/torch-2.1.1+cu118.html
 
 # Remaining Python packages (compatible with Python 3.9 / TF 2.13)
-RUN pip install \
-    numpy==1.24.4 \
+RUN python -m pip install \
+    numpy==1.24.3 \
     tensorflow==2.13.0 \
     pandas==2.2.3 \
     matplotlib==3.9.4 \
@@ -138,20 +158,32 @@ RUN pip install \
     bioframe \
     mustache-hic \
     gensim \
-    fastdtw
+    fastdtw \
+    numba \
+    statsmodels
 
 # =========================
 # Environment variables
 # =========================
 ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
-ENV PYTHONUNBUFFERED=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_DEFAULT_TIMEOUT=120
+ENV PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org pypi.python.org download.pytorch.org pypi.nvidia.com data.pyg.org"
 ENV PYTHONPATH=/HiCInterpolate:/HiCInterpolate/src
+ENV MPLBACKEND=Agg
 
 # =========================
 # Project source
 # =========================
 COPY . /HiCInterpolate
 WORKDIR /HiCInterpolate
+
+# Verify entry-point modules import (data/weights are mounted at runtime)
+RUN python -c "import ast; ast.parse(open('hicinterpolate.py').read()); ast.parse(open('inference.py').read()); ast.parse(open('dsa.py').read()); ast.parse(open('test_hicinterpolate.py').read())" && \
+    python hicinterpolate.py -h >/dev/null && \
+    python inference.py -h >/dev/null && \
+    python dsa.py -h >/dev/null && \
+    python -c "import torch, numpy, omegaconf, cooler, cooltools, sklearn, h5py, torch_geometric; import flow_based_interpolation; import _4DMax.model; from downstream_analysis import run_compartment, run_embedtad, run_mustache, run_flamingo"
 
 CMD ["/bin/bash"]

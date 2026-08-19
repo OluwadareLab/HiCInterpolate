@@ -11,7 +11,7 @@ import math
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 from omegaconf import OmegaConf
-from src.metric import eval_metrics as eval_metric
+from src.metric import metrics as eval_metric
 from src.misc import plots as plot
 from src.inference import InfConfig, InfCustomDataset
 from src import InferenceLib

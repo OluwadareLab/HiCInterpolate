@@ -1,5 +1,9 @@
 .git
 .gitignore
+models
+*.pt
+*.pth
+*.ckpt
 **/.DS_Store
 **/__pycache__
 **/*.pyc
