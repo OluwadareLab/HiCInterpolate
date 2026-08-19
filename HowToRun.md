@@ -129,22 +129,23 @@ Inside `output` folder:
 
 Released checkpoints live in `models/` (Git LFS). Pick the resolution that matches your data:
 
-***25KB (default)***
-[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate.pt)
-**Latest Snapshot:**
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot.pt)
+**Best model:**
+
+***25KB (default)*** [HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate.pt)
+
+***Snapshot:*** [Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot.pt)
+
+**Other models:**
 
 ***10KB***
+
 [HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_10000.pt)
-**Latest Snapshot:**
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_10000.pt)
+**Snapshot:** [Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_10000.pt)
 
 ***5KB***
-[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_5000.pt)
-**Latest Snapshot:**
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_5000.pt)
 
-Copy the chosen `.pt` into `dir.model_state` (or point the config at `models/`) before inference.
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_5000.pt)
+**Snapshot:**[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_5000.pt)
 
 
 
