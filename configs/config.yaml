@@ -1,80 +1,64 @@
 device: cuda
 
 dir:
-  root: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/HiCInterpolate
-  model_state: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output
-  output: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/output/ap1_test
-  data: /home/hc0783@unt.ad.unt.edu/workspace/hicinterpolate/datasets/triplates/5000/human
-  image: ${dir.data}/${data.patch}
+  model_state: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate
+  output: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/hicinterpolate
+  data: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
+  image: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets
 
 
 file:
-  dataset_dict: ${dir.image}/dataset_dict.txt
-  vgg_model: ${dir.data}/models/imagenet-vgg-verydeep-19.mat
+  dataset_dict: /home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets/train/10000_64
   snapshot: ${dir.model_state}/${model.name}_snapshot.pt
   model: ${dir.model_state}/${model.name}.pt
-  test_hic_map: ${dir.output}/${model.name}_hic_map.jpg
+  test_hic_map: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_hic_map.jpg
   num_visualization_samples: 2
-  val_metrics: ${dir.output}/${model.name}_val_metrics.csv
-  psnr_val_plot: ${dir.output}/${model.name}_psnr_plot.png
-  ssim_val_plot: ${dir.output}/${model.name}_ssim_plot.png
-  scc_val_plot: ${dir.output}/${model.name}_scc_plot.png
-  pcc_val_plot: ${dir.output}/${model.name}_pcc_plot.png
-  genome_disco_val_plot: ${dir.output}/${model.name}_genome_disco_plot.png
-  ncc_val_plot: ${dir.output}/${model.name}_ncc_plot.png
-  lpips_val_plot: ${dir.output}/${model.name}_lpips_plot.png
-  train_val_loss_plot: ${dir.output}/${model.name}_train_val_loss_plot.png
-  grad_norm_plot: ${dir.output}/${model.name}_grad_norm_plot.png
-  hicrep_val_plot: ${dir.output}/${model.name}_hicrep_plot.png
-  ent3c_val_plot: ${dir.output}/${model.name}_ent3c_plot.png
-  lr_plot: ${dir.output}/${model.name}_lr_plot.png
-  log: ${dir.output}/${model.name}.log
+  val_metrics: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_val_metrics.csv
+  psnr_val_plot: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_psnr_plot.png
+  ssim_val_plot: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_ssim_plot.png
+  hicrep_val_plot: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_hicrep_plot.png
+  train_val_loss_plot: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_train_val_loss_plot.png
+  lr_plot: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}_lr_plot.png
+  log: ${dir.output}/${model.name}_p${data.patch}_b${data.batch_size}.log
 
 data:
-  patch: 128
+  patch: 64
+  resolution: 10000
+  batch_size: 20
   interpolator_images_map:
     frame_0: img1.npy
     frame_1: img2.npy
     frame_2: img3.npy
-  train_val_test_ratio: [0, 0, 1.0]
-  batch_size: 128
 
 training:
-  epochs: 300
-  restart_every: 100
+  epochs: 100
   save_every: 10
-  init_lr: 1e-4
-  min_lr: 1e-6
-  decay_steps: 100
-  decay_rate: 0.215
-  lr_staircase: true
+  lr: 1e-4
+  min_lr: 1e-5
+  weight_decay: 1e-3
+  warmup_epochs: 3
+  grad_clip: 1.0
+  patience: 20
+  dropout: 0.1
 
 model:
-  name: hicinterpolate_${data.patch}
-  init_in_channels: 1
-  init_out_channels: 4
-  pyramid_level: 4
-  ext_feature_level: 3
-  unique_levels: 2
-  flow:
-    num_of_convs: [7, 5, 7]
-    out_channels: [16, 32, 64]
-  fusion_pyramid_level: 4
+  name: hicinterpolate_25000_64
 
 loss:
   weight_parameters:
     - name: mse
-      boundaries: [100]
-      values: [0.9, 0.8]
+      boundaries: [0]
+      values: [1.0]
     - name: ssim
-      boundaries: [100]
-      values: [0.4, 0.6]
+      boundaries: [0]
+      values: [0.8]
     - name: symmetry
-      boundaries: [100]
-      values: [1.0, 1.0]
-    - name: vgg
-      boundaries: [100]
-      values: [0.005, 0.01]
-    - name: noise
-      boundaries: [100]
-      values: [0.5, 0.5]
+      boundaries: [0]
+      values: [0.1]
+
+evaluation:
+  monitor: loss
+  metrics:
+    psnr: true
+    ssim: true
+    hicrep: true

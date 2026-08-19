@@ -83,3 +83,11 @@ graphify-out
 *.tsv
 *.csv
 *.pdf
+!hicinterpolate.png
+AGENTS.md
+cufile.log
+cur.prompt.md
+GEMINI.md
+look.md
+NoiseBlock.md
+task.md
