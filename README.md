@@ -17,31 +17,23 @@
 
 Weights are in [`models/`](https://github.com/OluwadareLab/HiCInterpolate/tree/main/models) (Git LFS).
 
-**Best models:**
+**Best model:**
 
-***25KB (default)***
+***25KB (default)*** [HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate.pt)
 
-[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate.pt)
+***Snapshot:*** [Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot.pt)
 
-**Snapshot:**
-
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot.pt)
+**Other models:**
 
 ***10KB***
 
 [HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_10000.pt)
-
-**Latest Snapshot:**
-
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_10000.pt)
+**Snapshot:** [Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_10000.pt)
 
 ***5KB***
 
 [HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_5000.pt)
-
-**Latest Snapshot:**
-
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_5000.pt)
+**Snapshot:**[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_5000.pt)
 
 ---
 
