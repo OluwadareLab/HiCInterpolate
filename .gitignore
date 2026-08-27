@@ -112,6 +112,7 @@ graphify-out/
 .clinerules
 .windsurfrules
 copilot-instructions.md
+graphify-out
 .github/copilot-instructions.md
 .github/prompts/
 .github/agents/
