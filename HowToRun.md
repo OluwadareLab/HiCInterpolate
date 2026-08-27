@@ -117,8 +117,8 @@ torchrun --standalone --nproc_per_node=1 hicinterpolate.py --distributed --train
 **3. Output files:**
 
 Inside `model_state` folder:
-- `hicinterpolate_64.pt` — Best model weights
-- `hicinterpolate_64_snapshot.pt` — Latest weights (saved every 10 epochs)
+- `${model.name}.pt` — Best model weights (e.g. `hicinterpolate_25000_64.pt`)
+- `${model.name}_snapshot.pt` — Latest weights (saved every 10 epochs)
 
 Inside `output` folder:
 - Training metrics and logs (CSV format)
@@ -127,23 +127,25 @@ Inside `output` folder:
 
 ### Step 5: Use Pretrained Models
 
-**Best Model (25KB):**
+Released checkpoints live in `models/` (Git LFS). Pick the resolution that matches your data:
 
-[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate.pt)
-**Latest Snapshot:**
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_snapshot.pt)
+**Best model:**
 
-**Other Model:**
+***25KB (default)*** [HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate.pt)
 
-***5KB***
-[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_5.pt)
-**Latest Snapshot:**
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_snapshot_5.pt)
+***Snapshot:*** [Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot.pt)
+
+**Other models:**
 
 ***10KB***
-[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_10.pt)
-**Latest Snapshot:**
-[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/resources/hicinterpolate_64_snapshot_10.pt)
+
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_10000.pt)
+**Snapshot:** [Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_10000.pt)
+
+***5KB***
+
+[HiCInterpolate](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_5000.pt)
+**Snapshot:**[Snapshot (100 epochs)](https://github.com/OluwadareLab/HiCInterpolate/blob/main/models/hicinterpolate_snapshot_5000.pt)
 
 
 
@@ -168,7 +170,7 @@ Edit `src/inference/config.yaml`:
 ```yaml
 dir:
   root: <root_folder>
-  model_state: <path_to_pretrained_model>  # Should contain hicinterpolate_64.pt
+  model_state: <path_to_pretrained_model>  # e.g. models/ with hicinterpolate.pt (25KB), hicinterpolate_10000.pt, or hicinterpolate_5000.pt
   output: <output_folder>  # Where predicted matrices will be saved
   data: <dataset_folder>  # 64×64 patches (.npy format)
 ```
