@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # Run FLAMINGOrLite::flamingo_basic on a square IF matrix and write coords.
-
+set.seed(42)
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 2) {
   stop("Usage: flamingo_basic_run.R <matrix.txt> <output_dir> [max_iter]")

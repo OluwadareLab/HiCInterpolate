@@ -27,11 +27,11 @@ CMAP_ = mcolors.LinearSegmentedColormap.from_list(
 )
 
 ROOT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate'
-DICT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets/inference'
-IMAGE_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/new_triplets'
-OUTPUT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/new_analysis'
-LOG_FILE = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/new_analysis/inference.log'
-CSV_FILENAME_SUFFIX = "comparative_scores.csv"
+DICT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/downsampled_trplets/inference'
+IMAGE_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/downsampled_trplets'
+OUTPUT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/downsampled_analysis'
+LOG_FILE = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/output/downsampled_analysis/inference.log'
+CSV_FILENAME_SUFFIX = "downsampled_comparative_scores.csv"
 
 METHODS = ("Hicinterpolate", "4DMax", "Linear", "Optical Flow")
 METRICS = ("psnr", "ms-ssim", "hicrep")
@@ -45,8 +45,9 @@ MODEL_BATCHES = [20]
 
 CHROMOSOMES = {
     "human": ["10", "15", "20", "11", "16", "21"],
-    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"]
+    "mouse": ["10", "15", "19", "11", "16", "18"],
 }
+DOWNSAMPLE_FACTORS = [90, 80, 70]
 
 TEST_DATASET = {
     "human": {
@@ -98,42 +99,43 @@ TEST_DATASET = {
                 ]
             }
         },
-        "embryo": {
-            "development": {
-                "triplets": [
-                    ["sperm",
-                     "mii_oocyte",
-                     "zygote"],
+        # "embryo": {
+        #     "development": {
+        #         "triplets": [
+        #             ["sperm",
+        #              "mii_oocyte",
+        #              "zygote"],
 
-                    ["mii_oocyte",
-                     "zygote",
-                     "early2_cell"],
+        #             ["mii_oocyte",
+        #              "zygote",
+        #              "early2_cell"],
 
-                    ["zygote",
-                     "early2_cell",
-                     "late2_cell"],
+        #             ["zygote",
+        #              "early2_cell",
+        #              "late2_cell"],
 
-                    ["early2_cell",
-                     "late2_cell",
-                     "8cell"],
+        #             ["early2_cell",
+        #              "late2_cell",
+        #              "8cell"],
 
-                    ["late2_cell",
-                     "8cell",
-                     "icm"],
+        #             ["late2_cell",
+        #              "8cell",
+        #              "icm"],
 
-                    ["8cell",
-                     "icm",
-                     "mes_cell"]
-                ]
-            }
-        }
+        #             ["8cell",
+        #              "icm",
+        #              "mes_cell"]
+        #         ]
+        #     }
+        # }
     }
 }
 
 IMAGE_MAP = {
     'frame_0': 'img1.npy',
     'frame_1': 'img2.npy',
-    'frame_2': 'img3.npy'
+    'frame_2': 'img3.npy',
+    'frame_3': 'img4.npy'
 }
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -278,15 +280,19 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
         count += 1
         if batch is None:
             continue
-        x1, target, x2, upper_x0, upper_y, upper_x1 = batch
+        x1, target, y1, x2, upper_x0, upper_y, upper_y1, upper_x1 = batch
         upper_x0 = upper_x0.to(DEVICE)
         upper_y = upper_y.to(DEVICE)
+        upper_y1 = upper_y1.to(DEVICE)
         upper_x1 = upper_x1.to(DEVICE)
         x1 = x1.to(DEVICE)
-        target = target.to(DEVICE)*upper_y
+        # target = target.to(DEVICE)*upper_y
+        target = y1.to(DEVICE)*upper_y1
         x2 = x2.to(DEVICE)
+
         pred = model(x1, x2)
         pred = pred*upper_y
+
         _4dmax_pred = _4DMax_model.run_4dmax(
             timeframe=[x1*upper_x0, x2*upper_x1], patch_size=patch)
         linear = linear_interpolation(x1, x2, t=0.5)*upper_y
@@ -361,14 +367,14 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, heatmap_filename,
     return metrics
 
 
-COLUMN_NAMES = ["model", "resolution", "patch", "organism", "sample", "condition", "time", "chromosome",
+COLUMN_NAMES = ["model", "resolution", "patch", "organism", "sample", "condition", "time", "chromosome", "downsample_factor",
                 "psnr_ours", "psnr_4dmax", "psnr_optical_flow", "psnr_linear",
                 "ms-ssim_ours", "ms-ssim_4dmax", "ms-ssim_optical_flow", "ms-ssim_linear",
                 "hicrep_ours", "hicrep_4dmax", "hicrep_optical_flow", "hicrep_linear"
                 ]
 
 
-def write_summary(model, resolution, patch, organism, sample, condition, time, chromosome, metrics, output_file):
+def write_summary(model, resolution, patch, organism, sample, condition, time, chromosome, downsample_factor, metrics, output_file):
     row = [
         str(model),
         str(resolution),
@@ -378,6 +384,7 @@ def write_summary(model, resolution, patch, organism, sample, condition, time, c
         condition,
         str(time),
         chromosome,
+        str(downsample_factor),
         f"{metrics['psnr']['ours']:.{METRIC_PRECISION}f}",
         f"{metrics['psnr']['4dmax']:.{METRIC_PRECISION}f}",
         f"{metrics['psnr']['optical_flow']:.{METRIC_PRECISION}f}",
@@ -426,24 +433,25 @@ def run_inference():
             LOG.info(f"Running inference for model: {model_filename}")
 
             for resolution in RESOLUTIONS:
-                for organism, samples in TEST_DATASET.items():
-                    for sample, condition in samples.items():
-                        for subsample, content in condition.items():
-                            for triplet in content["triplets"]:
-                                for chromosome in CHROMOSOMES[organism]:
-                                    record_filename = os.path.join(
-                                        DICT_DIR, f'{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.inference')
-                                    print(
-                                        f"Running inference for record: {record_filename}")
-                                    LOG.info(
-                                        f"Running inference for record: {record_filename}")
+                for downsample_factor in DOWNSAMPLE_FACTORS:
+                    for organism, samples in TEST_DATASET.items():
+                        for sample, condition in samples.items():
+                            for subsample, content in condition.items():
+                                for triplet in content["triplets"]:
+                                    for chromosome in CHROMOSOMES[organism]:
+                                        record_filename = os.path.join(
+                                            DICT_DIR, f'{resolution}_{downsample_factor}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.inference')
+                                        print(
+                                            f"Running inference for record: {record_filename}")
+                                        LOG.info(
+                                            f"Running inference for record: {record_filename}")
 
-                                    plot_filename = f"{heatmap_output_dir}/plot_{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_{chromosome}"
-                                    metrics = get_prediction(batch_size=BATCH_SIZE, dataset_dict=record_filename, model=model,
-                                                             heatmap_filename=plot_filename, resol=resolution, patch=model_patch)
+                                        plot_filename = f"{heatmap_output_dir}/plot_{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_{chromosome}_{downsample_factor}"
+                                        metrics = get_prediction(batch_size=BATCH_SIZE, dataset_dict=record_filename, model=model,
+                                                                 heatmap_filename=plot_filename, resol=resolution, patch=model_patch)
 
-                                    write_summary(model=config_name, resolution=resolution, patch=model_patch, organism=organism, sample=sample,
-                                                  condition=subsample, time=triplet[1], chromosome=chromosome, metrics=metrics, output_file=csv_filename)
+                                        write_summary(model=config_name, resolution=resolution, patch=model_patch, organism=organism, sample=sample,
+                                                      condition=subsample, time=triplet[1], chromosome=chromosome, downsample_factor=downsample_factor, metrics=metrics, output_file=csv_filename)
 
 
 if __name__ == "__main__":

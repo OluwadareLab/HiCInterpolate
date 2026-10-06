@@ -30,9 +30,6 @@ HUMAN_TRIPLETS=(
 
 MOUSE_TRIPLETS=(
     "cerebellar_granule_neuron|control|cerebellar_granule_neuron_control_10080m|cerebellar_granule_neuron_control_11520m|cerebellar_granule_neuron_control_12960m"
-    "embryo|development|zygote|early2_cell|late2_cell"
-    "embryo|development|early2_cell|late2_cell|8cell"
-    "embryo|development|late2_cell|8cell|icm"
 )
 
 if (( MIN_BINS < 0 || MAX_BINS <= MIN_BINS )); then

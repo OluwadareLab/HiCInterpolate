@@ -17,10 +17,10 @@ from _4DMax import model as _4DMax_model
 
 ROOT_DIR = '/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate'
 MODEL_DIR = f'{ROOT_DIR}/datasets/final_output/triplets_dataset'
-DICT_DIR = f'{ROOT_DIR}/datasets/timeseries/full_triplets/inference_full'
-IMAGE_DIR = f'{ROOT_DIR}/datasets/timeseries/full_triplets'
+DICT_DIR = f'{ROOT_DIR}/datasets/timeseries/downsampled_full_triplets/inference_full'
+IMAGE_DIR = f'{ROOT_DIR}/datasets/timeseries/downsampled_full_triplets'
 
-OUTPUT_DIR = f'{ROOT_DIR}/datasets/timeseries/full_triplets/output'
+OUTPUT_DIR = f'{ROOT_DIR}/datasets/timeseries/downsampled_full_triplets/output'
 LOG_FILE = f'{OUTPUT_DIR}/inference_full.log'
 
 BATCH_SIZE = 1
@@ -31,7 +31,7 @@ MODEL_BATCHES = [20]
 
 CHROMOSOMES = {
     "human": ["10", "11", "15", "16", "20", "21"],
-    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"]
+    "mouse": ["10", "15", "19"]
 }
 
 CHROMOSOME_SIZES = {
@@ -83,33 +83,35 @@ TEST_DATASET = {
                      "cerebellar_granule_neuron_control_12960m"]
                 ]
             }
-        },
-        "embryo": {
-            "development": {
-                "triplets": [
-                    ["zygote",
-                     "early2_cell",
-                     "late2_cell"],
-
-                    ["early2_cell",
-                     "late2_cell",
-                     "8cell"],
-
-                    ["late2_cell",
-                     "8cell",
-                     "icm"]
-                ]
-            }
         }
+        # },
+        # "embryo": {
+        #     "development": {
+        #         "triplets": [
+        #             ["zygote",
+        #              "early2_cell",
+        #              "late2_cell"],
+
+        #             ["early2_cell",
+        #              "late2_cell",
+        #              "8cell"],
+
+        #             ["late2_cell",
+        #              "8cell",
+        #              "icm"]
+        #         ]
+        #     }
+        # }
     }
 }
 
 IMAGE_MAP = {
     'frame_0': 'img1.npy',
-    'frame_1': 'img2.npy',
-    'frame_2': 'img3.npy'
+    'frame_1': 'img4.npy',
+    'frame_2': 'img3.npy',
+    'frame_3': 'img2.npy'
 }
-
+DOWNSAMPED = [90, 80, 70]
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
@@ -217,7 +219,7 @@ def get_prediction(batch_size, dataset_dict, model: nn.Module, resol, patch, org
         count += 1
         if batch is None:
             continue
-        x1, y, x2, upper_x0, upper_y, upper_x1 = batch
+        x1, y, x2, y1, upper_x0, upper_y, upper_x1, upper_y1 = batch
         upper_x0 = upper_x0.to(DEVICE)
         upper_y = upper_y.to(DEVICE)
         upper_x1 = upper_x1.to(DEVICE)
@@ -285,31 +287,32 @@ def run_inference():
             LOG.info(f"Running inference for model: {model_filename}")
 
             for resolution in RESOLUTIONS:
-                for organism, samples in TEST_DATASET.items():
-                    for sample, condition in samples.items():
-                        for subsample, content in condition.items():
-                            for triplet in content["triplets"]:
-                                for chromosome in CHROMOSOMES[organism]:
-                                    record_filename = os.path.join(
-                                        DICT_DIR, f'{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.inference_full')
-                                    print(
-                                        f"Running inference for record: {record_filename}")
-                                    LOG.info(
-                                        f"Running inference for record: {record_filename}")
+                for downsample in DOWNSAMPED:
+                    for organism, samples in TEST_DATASET.items():
+                        for sample, condition in samples.items():
+                            for subsample, content in condition.items():
+                                for triplet in content["triplets"]:
+                                    for chromosome in CHROMOSOMES[organism]:
+                                        record_filename = os.path.join(
+                                            DICT_DIR, f'{resolution}_{downsample}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.inference_full')
+                                        print(
+                                            f"Running inference for record: {record_filename}")
+                                        LOG.info(
+                                            f"Running inference for record: {record_filename}")
 
-                                    matrix_filename_prefix = f"{heatmap_output_dir}/{resolution}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_{chromosome}"
-                                    y_matrix, pred_matrix = get_prediction(batch_size=BATCH_SIZE, dataset_dict=record_filename, model=model,
-                                                                           resol=resolution, patch=model_patch, organism=organism, chromosome=chromosome)
+                                        matrix_filename_prefix = f"{heatmap_output_dir}/{resolution}_{downsample}_{model_patch}_{organism}_{sample}_{subsample}_{triplet[1]}_{chromosome}"
+                                        y_matrix, pred_matrix = get_prediction(batch_size=BATCH_SIZE, dataset_dict=record_filename, model=model,
+                                                                               resol=resolution, patch=model_patch, organism=organism, chromosome=chromosome)
 
-                                    np.save(
-                                        f"{matrix_filename_prefix}_y.npy", y_matrix)
-                                    np.save(
-                                        f"{matrix_filename_prefix}_pred.npy", pred_matrix)
+                                        np.save(
+                                            f"{matrix_filename_prefix}_y.npy", y_matrix)
+                                        np.save(
+                                            f"{matrix_filename_prefix}_pred.npy", pred_matrix)
 
-                                    print(
-                                        f"Saving inference for record: {record_filename}")
-                                    LOG.info(
-                                        f"Saving inference for record: {record_filename}")
+                                        print(
+                                            f"Saving inference for record: {record_filename}")
+                                        LOG.info(
+                                            f"Saving inference for record: {record_filename}")
 
 
 if __name__ == "__main__":

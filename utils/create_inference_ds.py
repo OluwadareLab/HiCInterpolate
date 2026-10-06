@@ -1,16 +1,15 @@
 import os
 import re
 
-ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries"
-DATASET_DICT_PATH = f"{ROOT_PATH}/new_triplets"
-OUTPUT_PATH = f"{ROOT_PATH}/new_triplets/inference"
+ROOT_PATH = f"/home/hc0783.unt.ad.unt.edu/workspace/hicinterpolate/datasets/timeseries/"
+DATASET_DICT_PATH = f"{ROOT_PATH}/downsampled_trplets"
+OUTPUT_PATH = f"{ROOT_PATH}/downsampled_trplets/inference"
 
-RESOLUTIONS = [25000, 10000, 5000]
-PATCHES = [64, 128, 256]
-CHROMOSOMES = {
-    "human": ["10", "11", "15", "16", "20", "21"],
-    "mouse": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19"]
-}
+RESOLUTIONS = [25000]
+PATCHES = [64]
+CHROMOSOMES = {"human": ["10", "15", "20", "11", "16", "21"],
+               "mouse": ["10", "15", "19", "11", "16", "18"]}
+DOWNSAMPLE_FACTORS = [90, 80, 70]
 
 DATASET = {
     "human": {
@@ -61,35 +60,6 @@ DATASET = {
                      "cerebellar_granule_neuron_control_12960m"]
                 ]
             }
-        },
-        "embryo": {
-            "development": {
-                "triplets": [
-                    ["sperm",
-                     "mii_oocyte",
-                     "zygote"],
-
-                    ["mii_oocyte",
-                     "zygote",
-                     "early2_cell"],
-
-                    ["zygote",
-                     "early2_cell",
-                     "late2_cell"],
-
-                    ["early2_cell",
-                     "late2_cell",
-                     "8cell"],
-
-                    ["late2_cell",
-                     "8cell",
-                     "icm"],
-
-                    ["8cell",
-                     "icm",
-                     "mes_cell"]
-                ]
-            }
         }
     }
 }
@@ -112,18 +82,19 @@ def get_triplet_dict(input_file, output_file, regex_pattern):
 def prepare_triplates():
     for resolution in RESOLUTIONS:
         input_file = f"{DATASET_DICT_PATH}/dataset_dict_{resolution}.txt"
-        for patch in PATCHES:
-            for organism, samples in DATASET.items():
-                for sample, subsamples in samples.items():
-                    for subsample, content in subsamples.items():
-                        for triplet in content["triplets"]:
-                            for chromosome in CHROMOSOMES[organism]:
-                                record = f"{resolution}/{organism}/{sample}/{subsample}/{triplet[1]}/chr{chromosome}/{patch}"
-                                output_file = f"{OUTPUT_PATH}/{resolution}_{patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.inference"
-                                os.makedirs(os.path.dirname(
-                                    output_file), exist_ok=True)
-                                get_triplet_dict(
-                                    input_file, output_file, record)
+        for downsample_factor in DOWNSAMPLE_FACTORS:
+            for patch in PATCHES:
+                for organism, samples in DATASET.items():
+                    for sample, subsamples in samples.items():
+                        for subsample, content in subsamples.items():
+                            for triplet in content["triplets"]:
+                                for chromosome in CHROMOSOMES[organism]:
+                                    record = f"{resolution}/{downsample_factor}/{organism}/{sample}/{subsample}/{triplet[1]}/chr{chromosome}/{patch}"
+                                    output_file = f"{OUTPUT_PATH}/{resolution}_{downsample_factor}_{patch}_{organism}_{sample}_{subsample}_{triplet[1]}_chr{chromosome}.inference"
+                                    os.makedirs(os.path.dirname(
+                                        output_file), exist_ok=True)
+                                    get_triplet_dict(
+                                        input_file, output_file, record)
 
 
 if __name__ == "__main__":

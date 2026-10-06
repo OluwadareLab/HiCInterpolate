@@ -29,9 +29,8 @@ class TripletDataset(Dataset):
     def log1p(self, matrix):
         return np.log1p(matrix)
 
-    def normalize_triplet(self, x0, y, x1):
-        logged = [self.log1p(matrix) for matrix in (x0, y, x1)]
-
+    def normalize_triplet(self, x0, y, y1, x1):
+        logged = [self.log1p(matrix) for matrix in (x0, y, y1, x1)]
 
         upper = max(
             max(np.percentile(matrix, CLIPPING_PERCENTILE), _EPSILON)
@@ -49,7 +48,7 @@ class TripletDataset(Dataset):
         ], dim=0)
 
         max_values = torch.tensor(
-            [np.max(x0), np.max(y), np.max(x1)],
+            [np.max(x0), np.max(y), np.max(y1), np.max(x1)],
             dtype=torch.float32
         )
 
@@ -64,24 +63,28 @@ class TripletDataset(Dataset):
         key = self.triplet_dicts[idx]
         x0_raw = self._load_valid_matrix(image_file=key["frame_0"])
         y_raw = self._load_valid_matrix(image_file=key["frame_1"])
+        y1_raw = self._load_valid_matrix(image_file=key["frame_3"])
         x1_raw = self._load_valid_matrix(image_file=key["frame_2"])
-        if x0_raw is None or y_raw is None or x1_raw is None:
+
+        if x0_raw is None or y_raw is None or y1_raw is None or x1_raw is None:
             return None
 
-        normalized = self.normalize_triplet(x0_raw, y_raw, x1_raw)
+        normalized = self.normalize_triplet(x0_raw, y_raw, y1_raw, x1_raw)
         if normalized is None:
             return None
         H, W = x0_raw.shape
-        images = normalized[:-3].reshape(3, H, W)
-        upper_x0, upper_y, upper_x1 = normalized[-3:]
+        images = normalized[:-4].reshape(4, H, W)
+        upper_x0, upper_y, upper_y1, upper_x1 = normalized[-4:]
 
         upper_x0 = upper_x0.unsqueeze(0)
         upper_y = upper_y.unsqueeze(0)
+        upper_y1 = upper_y1.unsqueeze(0)
         upper_x1 = upper_x1.unsqueeze(0)
         x0_tensor = images[0].unsqueeze(0)
         y_tensor = images[1].unsqueeze(0)
-        x1_tensor = images[2].unsqueeze(0)
-        return x0_tensor, y_tensor, x1_tensor, upper_x0, upper_y, upper_x1
+        y1_tensor = images[2].unsqueeze(0)
+        x1_tensor = images[3].unsqueeze(0)
+        return x0_tensor, y_tensor, y1_tensor, x1_tensor, upper_x0, upper_y, upper_y1, upper_x1
 
 
 class CustomDataset:

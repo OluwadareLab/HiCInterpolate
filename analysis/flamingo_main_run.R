@@ -8,7 +8,7 @@
 #   large <file_format> <hic_data_low> <output_dir> <domain_res> <frag_res> <chr_size>
 #         <chr_name> <normalization> <downsampling_rates> <lambda> <max_dist> <nThread>
 #         [hic_data_high] [norm_low] [norm_high] [max_iter] [alpha]
-
+set.seed(42)
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 1) {
   stop("Usage: flamingo_main_run.R <basic|dense_large|large> ...")
